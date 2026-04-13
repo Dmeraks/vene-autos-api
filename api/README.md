@@ -1,5 +1,7 @@
 # Vene Autos — API (Fase 1)
 
+Repositorio remoto recomendado en GitHub: **`vene-autos-api`** (mismo nombre que el paquete npm `vene-autos-api`), por ejemplo `https://github.com/TU_USUARIO/vene-autos-api`.
+
 Backend NestJS + PostgreSQL + Prisma. Incluye autenticación JWT, **RBAC granular** (`recurso:acción`), **auditoría** (dominio + HTTP opcional), configuración del taller por claves JSON y CI básico.
 
 ## Requisitos
