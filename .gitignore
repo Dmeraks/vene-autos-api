@@ -1,3 +1,7 @@
+# Raíz (solo scripts; evitá `npm install` aquí salvo que agregues dependencias)
+/node_modules/
+/package-lock.json
+
 # API (Nest + Prisma)
 api/node_modules/
 api/dist/

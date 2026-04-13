@@ -30,20 +30,37 @@ CREATE DATABASE vene_autos;
 
 ## 4. Migraciones (tablas y reglas en la base)
 
-En una terminal, carpeta **`api`**:
+**Importante:** el archivo `schema.prisma` está en **`api/prisma/`**. Si ejecutás `npx prisma` desde **`G:\Vene Autos`** (solo la raíz), Prisma **no** encuentra el esquema y puede intentar instalarse solo (versión incorrecta).
+
+**Opción A — desde la carpeta `api` (recomendado):**
 
 ```bash
+cd api
 npm install
 npx prisma migrate deploy
 ```
 
-- En **desarrollo** (cuando generás migraciones nuevas) a veces se usa `npx prisma migrate dev`.
-- Si Windows devuelve **EPERM** al generar el cliente de Prisma, **pará** el servidor (`npm run start:dev`), ejecutá de nuevo `npx prisma generate` y volvé a levantar el API.
+**Opción B — desde la raíz `Vene Autos`** (usa el `package.json` de la raíz):
+
+```bash
+npm run api:install
+npm run db:migrate
+```
+
+- En **desarrollo** (cuando generás migraciones nuevas) a veces se usa `cd api && npx prisma migrate dev`.
+- Si Windows devuelve **EPERM** al generar el cliente de Prisma, **pará** el servidor (`npm run start:dev`), ejecutá `npm run db:generate` desde la raíz (o `cd api && npx prisma generate`) y volvé a levantar el API.
 
 ## 5. Datos iniciales (roles, permisos, admin, configuración)
 
 ```bash
+cd api
 npx prisma db seed
+```
+
+Desde la raíz del repo:
+
+```bash
+npm run db:seed
 ```
 
 Quedará un usuario administrador (email y contraseña según `.env` / ejemplo; cambiá la contraseña en producción).

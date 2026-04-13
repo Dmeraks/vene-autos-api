@@ -1,0 +1,17 @@
+{
+  "name": "vene-autos",
+  "private": true,
+  "description": "Raíz del repo: Prisma y Nest viven en la carpeta api/. No ejecutes npx prisma aquí sin --schema.",
+  "scripts": {
+    "db:migrate": "cd api && npx prisma migrate deploy",
+    "db:seed": "cd api && npx prisma db seed",
+    "db:studio": "cd api && npx prisma studio",
+    "db:generate": "cd api && npx prisma generate",
+    "api:install": "cd api && npm install",
+    "api:dev": "cd api && npm run start:dev",
+    "api:build": "cd api && npm run build",
+    "api:test": "cd api && npm test",
+    "api:lint": "cd api && npm run lint",
+    "backfill:legacy-vehicles": "cd api && npm run backfill:legacy-vehicles"
+  }
+}
