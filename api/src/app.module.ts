@@ -18,6 +18,8 @@ import { AuditModule } from './modules/audit/audit.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { CashModule } from './modules/cash/cash.module';
 import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
+import { CustomersModule } from './modules/customers/customers.module';
+import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { HealthController } from './health/health.controller';
 import { RootController } from './root.controller';
 
@@ -34,6 +36,8 @@ import { RootController } from './root.controller';
     SettingsModule,
     CashModule,
     WorkOrdersModule,
+    CustomersModule,
+    VehiclesModule,
   ],
   controllers: [RootController, HealthController],
   providers: [

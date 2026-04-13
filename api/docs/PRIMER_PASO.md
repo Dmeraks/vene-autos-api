@@ -2,6 +2,8 @@
 
 Guía breve para cuando tengas **PostgreSQL** y quieras dejar el API funcionando en tu PC o en un servidor.
 
+Visión de producto (cliente, vehículo, inventario futuro, fiscal): **`docs/VISION_PRODUCTO.md`**.
+
 ## 1. Requisitos
 
 - **Node.js** (LTS recomendado).
@@ -105,6 +107,22 @@ npm run lint
 En GitHub, creá el repositorio con el nombre **`vene-autos-api`** (convención clara: es solo el backend). Enlazá tu carpeta local con `git remote add origin https://github.com/TU_USUARIO/vene-autos-api.git` (o `git remote set-url` si ya existía `origin`).
 
 Si el repositorio Git incluye la raíz **`Vene Autos`** (carpeta `api` dentro), GitHub Actions ejecuta lint, build y tests al subir cambios bajo `api/` (workflow `.github/workflows/ci.yml`). Conviene Node **20 LTS** (`nvm use` / `fnm use` leyendo `api/.nvmrc`).
+
+## 11. Clientes, vehículos y OT enlazadas (fase 4)
+
+- **Clientes:** `POST/GET/PATCH /api/v1/customers` (permisos `customers:*`).
+- **Vehículos:** `POST /api/v1/vehicles` con `customerId`, `plate`, etc.; `GET/PATCH /api/v1/vehicles/:id` (`vehicles:*`).
+- **Vehículos del cliente:** `GET /api/v1/customers/:id/vehicles`.
+- **Historial por vehículo:** `GET /api/v1/vehicles/:id/work-orders` (requiere `work_orders:read`).
+- **OT:** en `POST/PATCH /work-orders` podés enviar `vehicleId` (UUID); `null` en `PATCH` quita el vínculo sin borrar textos viejos. Listado: `GET /work-orders?vehicleId=...`.
+
+**Migración de datos viejos** (OT con placa en texto, sin `vehicle_id`): con respaldo de BD,
+
+```bash
+npm run backfill:legacy-vehicles
+```
+
+Agrupa por placa normalizada, crea un cliente y un vehículo por grupo y enlaza las OT. Luego ejecutá `npx prisma db seed` si agregaste permisos nuevos en otra máquina.
 
 ---
 

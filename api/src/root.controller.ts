@@ -9,7 +9,7 @@ export class RootController {
   root() {
     return {
       service: 'vene-autos-api',
-      phase: 3,
+      phase: 4,
       links: {
         health: '/api/v1/health',
         authLogin: 'POST /api/v1/auth/login',
@@ -19,6 +19,12 @@ export class RootController {
         workOrderPayments: 'GET /api/v1/work-orders/:id/payments',
         workOrderSummary: 'GET /api/v1/work-orders/:id/summary',
         workOrderRecordPayment: 'POST /api/v1/work-orders/:id/payments',
+        customers: 'GET/POST /api/v1/customers',
+        customerById: 'GET/PATCH /api/v1/customers/:id',
+        customerVehicles: 'GET /api/v1/customers/:id/vehicles',
+        vehicles: 'POST /api/v1/vehicles',
+        vehicleById: 'GET/PATCH /api/v1/vehicles/:id',
+        vehicleWorkOrders: 'GET /api/v1/vehicles/:id/work-orders',
         cashCategories: 'GET /api/v1/cash/categories',
         cashSessionCurrent: 'GET /api/v1/cash/sessions/current',
         cashSessionOpen: 'POST /api/v1/cash/sessions/open',

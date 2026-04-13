@@ -37,6 +37,11 @@ export class CreateWorkOrderDto {
   @IsUUID()
   assignedToId?: string;
 
+  /** Si se envía, la OT queda enlazada al vehículo (cliente formal); los textos se rellenan desde el vehículo si no los mandás. */
+  @IsOptional()
+  @IsUUID()
+  vehicleId?: string;
+
   /** Tope opcional de cobros en caja para esta OT (sin tope si se omite). */
   @IsOptional()
   @IsString()

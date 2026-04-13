@@ -36,6 +36,48 @@ model User {
   @@map("users")
 }
 
+/// Cliente del taller (persona o empresa de contacto).
+model Customer {
+  id           String   @id @default(cuid())
+  displayName  String   @map("display_name") @db.VarChar(200)
+  primaryPhone String?  @map("primary_phone") @db.VarChar(40)
+  email        String?  @db.VarChar(120)
+  documentId   String?  @map("document_id") @db.VarChar(40)
+  notes        String?  @db.Text
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  vehicles Vehicle[]
+
+  @@map("customers")
+}
+
+/// Vehículo registrado a nombre de un cliente (historial de OT por `work_orders.vehicle_id`).
+model Vehicle {
+  id         String   @id @default(cuid())
+  customerId String   @map("customer_id")
+  /// Placa tal como se muestra en UI (puede tener espacios).
+  plate      String   @db.VarChar(20)
+  /// Placa normalizada (mayúsculas, sin espacios): unicidad en el taller.
+  plateNorm  String   @unique @map("plate_norm") @db.VarChar(20)
+  vin        String?  @db.VarChar(32)
+  brand      String?  @db.VarChar(80)
+  model      String?  @db.VarChar(80)
+  year       Int?     @db.SmallInt
+  color      String?  @db.VarChar(40)
+  notes      String?  @db.Text
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  workOrders WorkOrder[]
+
+  @@index([customerId])
+  @@map("vehicles")
+}
+
 /// Sesión de acceso al API: una activa por usuario al iniciar sesión; se invalida al entrar desde otro sitio o por inactividad.
 model UserAuthSession {
   id             String    @id @default(cuid())
@@ -83,12 +125,14 @@ enum WorkOrderStatus {
   CANCELLED
 }
 
-/// Orden de trabajo del taller. Cliente/vehículo en texto hasta fichas dedicadas en fases posteriores.
+/// Orden de trabajo del taller. Puede enlazar a `Vehicle` (cliente formal); los campos texto siguen por compatibilidad y búsquedas.
 model WorkOrder {
   id            String          @id @default(cuid())
   orderNumber   Int             @unique @default(autoincrement()) @map("order_number")
   status        WorkOrderStatus @default(RECEIVED)
   description   String
+  /// Vehículo registrado (historial unificado); opcional durante migración desde texto.
+  vehicleId     String?         @map("vehicle_id")
   customerName  String?         @map("customer_name")
   customerPhone String?         @map("customer_phone")
   vehiclePlate  String?         @map("vehicle_plate")
@@ -104,9 +148,11 @@ model WorkOrder {
 
   createdBy  User  @relation("WorkOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   assignedTo User? @relation("WorkOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  vehicle    Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   payments   WorkOrderPayment[]
 
   @@index([status, createdAt])
+  @@index([vehicleId])
   @@map("work_orders")
 }
 

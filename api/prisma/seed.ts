@@ -69,6 +69,12 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
     action: 'record_payment',
     description: 'Registrar cobro de orden en caja (ingreso vinculado a la OT)',
   },
+  { resource: 'customers', action: 'read', description: 'Ver clientes del taller' },
+  { resource: 'customers', action: 'create', description: 'Crear clientes' },
+  { resource: 'customers', action: 'update', description: 'Actualizar clientes' },
+  { resource: 'vehicles', action: 'read', description: 'Ver vehículos e historial por vehículo' },
+  { resource: 'vehicles', action: 'create', description: 'Registrar vehículos' },
+  { resource: 'vehicles', action: 'update', description: 'Actualizar vehículos' },
 ];
 
 const CASH_CATEGORIES: Array<{
@@ -198,6 +204,12 @@ async function main() {
     'work_orders:create',
     'work_orders:update',
     'work_orders:record_payment',
+    'customers:read',
+    'customers:create',
+    'customers:update',
+    'vehicles:read',
+    'vehicles:create',
+    'vehicles:update',
   ];
   const cajeroPerms = pick(...cajeroCodes);
   const cajeroRole = await prisma.role.upsert({

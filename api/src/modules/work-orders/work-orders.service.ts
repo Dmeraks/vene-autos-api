@@ -20,6 +20,12 @@ const LIST_TAKE = 50;
 
 const userBrief = { select: { id: true, email: true, fullName: true, isActive: true } };
 
+const vehicleWithCustomer = {
+  include: {
+    customer: { select: { id: true, displayName: true, primaryPhone: true, documentId: true } },
+  },
+};
+
 @Injectable()
 export class WorkOrdersService {
   constructor(
@@ -36,22 +42,49 @@ export class WorkOrdersService {
       await this.assertAssignableUser(dto.assignedToId);
     }
 
+    const data: Prisma.WorkOrderCreateInput = {
+      description: dto.description.trim(),
+      customerName: dto.customerName?.trim() ?? null,
+      customerPhone: dto.customerPhone?.trim() ?? null,
+      vehiclePlate: dto.vehiclePlate?.trim() ?? null,
+      vehicleNotes: dto.vehicleNotes?.trim() ?? null,
+      internalNotes: dto.internalNotes?.trim() ?? null,
+      authorizedAmount: dto.authorizedAmount
+        ? new Prisma.Decimal(dto.authorizedAmount)
+        : undefined,
+      status: WorkOrderStatus.RECEIVED,
+      createdBy: { connect: { id: actorUserId } },
+    };
+    if (dto.assignedToId) {
+      data.assignedTo = { connect: { id: dto.assignedToId } };
+    }
+
+    if (dto.vehicleId) {
+      const v = await this.prisma.vehicle.findUnique({
+        where: { id: dto.vehicleId },
+        include: { customer: true },
+      });
+      if (!v || !v.isActive) {
+        throw new NotFoundException('Vehículo no encontrado o inactivo');
+      }
+      data.vehicle = { connect: { id: v.id } };
+      data.customerName = dto.customerName?.trim() ?? v.customer.displayName;
+      data.customerPhone = dto.customerPhone?.trim() ?? v.customer.primaryPhone ?? null;
+      data.vehiclePlate = dto.vehiclePlate?.trim() ?? v.plate;
+      if (dto.vehicleNotes?.trim()) {
+        data.vehicleNotes = dto.vehicleNotes.trim();
+      } else if (v.notes) {
+        data.vehicleNotes = v.notes;
+      }
+    }
+
     const row = await this.prisma.workOrder.create({
-      data: {
-        description: dto.description.trim(),
-        customerName: dto.customerName?.trim() ?? null,
-        customerPhone: dto.customerPhone?.trim() ?? null,
-        vehiclePlate: dto.vehiclePlate?.trim() ?? null,
-        vehicleNotes: dto.vehicleNotes?.trim() ?? null,
-        internalNotes: dto.internalNotes?.trim() ?? null,
-        authorizedAmount: dto.authorizedAmount
-          ? new Prisma.Decimal(dto.authorizedAmount)
-          : undefined,
-        status: WorkOrderStatus.RECEIVED,
-        createdById: actorUserId,
-        assignedToId: dto.assignedToId ?? null,
+      data,
+      include: {
+        createdBy: userBrief,
+        assignedTo: userBrief,
+        vehicle: vehicleWithCustomer,
       },
-      include: { createdBy: userBrief, assignedTo: userBrief },
     });
 
     await this.audit.recordDomain({
@@ -65,6 +98,7 @@ export class WorkOrdersService {
         status: row.status,
         description: row.description,
         authorizedAmount: row.authorizedAmount?.toString() ?? null,
+        vehicleId: row.vehicleId,
       },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,
@@ -78,11 +112,18 @@ export class WorkOrdersService {
     if (query.status) {
       where.status = query.status;
     }
+    if (query.vehicleId) {
+      where.vehicleId = query.vehicleId;
+    }
     return this.prisma.workOrder.findMany({
       where,
       take: LIST_TAKE,
       orderBy: { createdAt: 'desc' },
-      include: { createdBy: userBrief, assignedTo: userBrief },
+      include: {
+        createdBy: userBrief,
+        assignedTo: userBrief,
+        vehicle: vehicleWithCustomer,
+      },
     });
   }
 
@@ -92,6 +133,7 @@ export class WorkOrdersService {
       include: {
         createdBy: userBrief,
         assignedTo: userBrief,
+        vehicle: vehicleWithCustomer,
         _count: { select: { payments: true } },
       },
     });
@@ -198,6 +240,30 @@ export class WorkOrdersService {
         : { disconnect: true };
     }
 
+    if (dto.vehicleId !== undefined) {
+      if (dto.vehicleId === null) {
+        data.vehicle = { disconnect: true };
+      } else {
+        const v = await this.prisma.vehicle.findUnique({
+          where: { id: dto.vehicleId },
+          include: { customer: true },
+        });
+        if (!v || !v.isActive) {
+          throw new NotFoundException('Vehículo no encontrado o inactivo');
+        }
+        data.vehicle = { connect: { id: v.id } };
+        if (dto.customerName === undefined) {
+          data.customerName = v.customer.displayName;
+        }
+        if (dto.customerPhone === undefined) {
+          data.customerPhone = v.customer.primaryPhone;
+        }
+        if (dto.vehiclePlate === undefined) {
+          data.vehiclePlate = v.plate;
+        }
+      }
+    }
+
     if (dto.status !== undefined) {
       data.status = dto.status;
       if (dto.status === WorkOrderStatus.DELIVERED) {
@@ -210,7 +276,11 @@ export class WorkOrdersService {
     const row = await this.prisma.workOrder.update({
       where: { id },
       data,
-      include: { createdBy: userBrief, assignedTo: userBrief },
+      include: {
+        createdBy: userBrief,
+        assignedTo: userBrief,
+        vehicle: vehicleWithCustomer,
+      },
     });
 
     await this.audit.recordDomain({
@@ -223,12 +293,14 @@ export class WorkOrdersService {
         orderNumber: before.orderNumber,
         assignedToId: before.assignedToId,
         authorizedAmount: before.authorizedAmount?.toString() ?? null,
+        vehicleId: before.vehicleId,
       },
       nextPayload: {
         status: row.status,
         orderNumber: row.orderNumber,
         assignedToId: row.assignedToId,
         authorizedAmount: row.authorizedAmount?.toString() ?? null,
+        vehicleId: row.vehicleId,
         fields: keys,
       },
       ipAddress: meta.ip ?? null,

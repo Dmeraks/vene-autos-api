@@ -57,6 +57,13 @@ export class UpdateWorkOrderDto {
   @IsUUID()
   assignedToId?: string | null;
 
+  /** Enlazar o desenlazar vehículo formal; `null` quita el vínculo (no borra texto legado). */
+  @IsOptional()
+  @Allow()
+  @ValidateIf((_, v) => v != null)
+  @IsUUID()
+  vehicleId?: string | null;
+
   /** Tope de cobros; `null` quita el tope. */
   @IsOptional()
   @Allow()
