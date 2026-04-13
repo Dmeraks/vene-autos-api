@@ -1,0 +1,322 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Cuenta humana del sistema. Las reglas de acceso vienen de roles → permisos.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String   @map("full_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  roles           UserRole[]
+  auditLogs       AuditLog[]        @relation("AuditActor")
+  settingsUpdated WorkshopSetting[] @relation("SettingUpdater")
+
+  cashSessionsOpened          CashSession[]         @relation("CashSessionOpenedBy")
+  cashSessionsClosed          CashSession[]         @relation("CashSessionClosedBy")
+  cashMovementsCreated        CashMovement[]        @relation("CashMovementCreatedBy")
+  cashExpenseDelegate         CashExpenseDelegate?  @relation("CashExpenseDelegateUser")
+  cashDelegatesAssigned       CashExpenseDelegate[] @relation("CashExpenseDelegateAssigner")
+  cashExpenseRequestsCreated  CashExpenseRequest[]  @relation("CashExpenseRequestRequester")
+  cashExpenseRequestsReviewed CashExpenseRequest[]  @relation("CashExpenseRequestReviewer")
+  authSessions                UserAuthSession[]
+  workOrdersCreated           WorkOrder[]           @relation("WorkOrderCreatedBy")
+  workOrdersAssigned          WorkOrder[]           @relation("WorkOrderAssignedTo")
+  workOrderPaymentsRecorded   WorkOrderPayment[]     @relation("WorkOrderPaymentRecordedBy")
+
+  @@map("users")
+}
+
+/// Sesión de acceso al API: una activa por usuario al iniciar sesión; se invalida al entrar desde otro sitio o por inactividad.
+model UserAuthSession {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  revokedAt      DateTime? @map("revoked_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  createdFromIp  String?   @map("created_from_ip")
+  userAgent      String?   @map("user_agent")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("user_auth_sessions")
+}
+
+/// Estado de una sesión de caja: solo una fila debería estar OPEN a la vez (regla en aplicación).
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+/// Dirección contable del movimiento; debe coincidir con la categoría elegida.
+enum CashMovementDirection {
+  INCOME
+  EXPENSE
+}
+
+/// Ciclo de vida de una solicitud de egreso (aprobación asíncrona por dueño/administrador).
+enum CashExpenseRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+/// Estados de la orden de trabajo (Fase 3). Transiciones válidas en servicio de aplicación.
+enum WorkOrderStatus {
+  RECEIVED
+  IN_WORKSHOP
+  WAITING_PARTS
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+/// Orden de trabajo del taller. Cliente/vehículo en texto hasta fichas dedicadas en fases posteriores.
+model WorkOrder {
+  id            String          @id @default(cuid())
+  orderNumber   Int             @unique @default(autoincrement()) @map("order_number")
+  status        WorkOrderStatus @default(RECEIVED)
+  description   String
+  customerName  String?         @map("customer_name")
+  customerPhone String?         @map("customer_phone")
+  vehiclePlate  String?         @map("vehicle_plate")
+  vehicleNotes  String?         @map("vehicle_notes")
+  internalNotes String?         @map("internal_notes")
+  /// Tope opcional de cobros en caja para esta OT; si es null, no hay tope en sistema (solo montos válidos).
+  authorizedAmount Decimal?    @map("authorized_amount") @db.Decimal(18, 2)
+  deliveredAt   DateTime?       @map("delivered_at")
+  createdById   String          @map("created_by_id")
+  assignedToId  String?         @map("assigned_to_id")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  createdBy  User  @relation("WorkOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedTo User? @relation("WorkOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  payments   WorkOrderPayment[]
+
+  @@index([status, createdAt])
+  @@map("work_orders")
+}
+
+/// Cobro registrado en caja vinculado a una OT (1:1 con el movimiento de ingreso).
+model WorkOrderPayment {
+  id               String   @id @default(cuid())
+  workOrderId      String   @map("work_order_id")
+  amount           Decimal  @db.Decimal(18, 2)
+  cashMovementId   String   @unique @map("cash_movement_id")
+  note             String?
+  recordedById     String   @map("recorded_by_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  workOrder    WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  cashMovement CashMovement @relation(fields: [cashMovementId], references: [id], onDelete: Restrict)
+  recordedBy   User         @relation("WorkOrderPaymentRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([workOrderId, createdAt])
+  @@map("work_order_payments")
+}
+
+/// Sesión de caja (apertura/cierre). Solo una sesión OPEN a la vez (regla de negocio en servicio).
+model CashSession {
+  id              String            @id @default(cuid())
+  status          CashSessionStatus @default(OPEN)
+  openedAt        DateTime          @default(now()) @map("opened_at")
+  closedAt        DateTime?         @map("closed_at")
+  openedById      String            @map("opened_by_id")
+  closedById      String?           @map("closed_by_id")
+  openingAmount   Decimal           @map("opening_amount") @db.Decimal(18, 2)
+  closingExpected Decimal?          @map("closing_expected") @db.Decimal(18, 2)
+  closingCounted  Decimal?          @map("closing_counted") @db.Decimal(18, 2)
+  differenceNote  String?           @map("difference_note")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  openedBy  User           @relation("CashSessionOpenedBy", fields: [openedById], references: [id])
+  closedBy  User?          @relation("CashSessionClosedBy", fields: [closedById], references: [id])
+  movements CashMovement[]
+
+  @@index([status])
+  @@map("cash_sessions")
+}
+
+/// Categoría de movimiento (ingreso/egreso). Catálogo estable por slug.
+model CashMovementCategory {
+  id        String                @id @default(cuid())
+  slug      String                @unique
+  name      String
+  direction CashMovementDirection
+  isSystem  Boolean               @default(true) @map("is_system")
+  sortOrder Int                   @default(0) @map("sort_order")
+
+  movements       CashMovement[]
+  expenseRequests CashExpenseRequest[]
+
+  @@map("cash_movement_categories")
+}
+
+/// Movimiento de caja (append-only). Referencia opcional a orden/compra/etc. en fases posteriores.
+model CashMovement {
+  id            String                @id @default(cuid())
+  sessionId     String                @map("session_id")
+  categoryId    String                @map("category_id")
+  direction     CashMovementDirection
+  amount        Decimal               @db.Decimal(18, 2)
+  referenceType String?               @map("reference_type")
+  referenceId   String?               @map("reference_id")
+  note          String?
+  createdById   String                @map("created_by_id")
+  createdAt     DateTime              @default(now()) @map("created_at")
+
+  session                CashSession          @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  category               CashMovementCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdBy              User                 @relation("CashMovementCreatedBy", fields: [createdById], references: [id])
+  /// Si el movimiento nació de una solicitud aprobada, enlaza 1:1 con esa solicitud.
+  approvedExpenseRequest CashExpenseRequest?  @relation("MovementFromApprovedExpenseRequest")
+  workOrderPayment       WorkOrderPayment?
+
+  @@index([sessionId, createdAt])
+  @@map("cash_movements")
+}
+
+/// Hasta 3 usuarios de confianza pueden registrar egresos operativos (además de elevados). Regla en servicio.
+model CashExpenseDelegate {
+  userId       String   @id @map("user_id")
+  assignedById String   @map("assigned_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user       User @relation("CashExpenseDelegateUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User @relation("CashExpenseDelegateAssigner", fields: [assignedById], references: [id])
+
+  @@map("cash_expense_delegates")
+}
+
+/**
+ * Solicitud de egreso cuando nadie con egreso directo está disponible.
+ * Al aprobarse, se crea un `CashMovement` EXPENSE y se enlaza por `resultMovementId` y referencia en el movimiento.
+ */
+model CashExpenseRequest {
+  id               String                   @id @default(cuid())
+  status           CashExpenseRequestStatus @default(PENDING)
+  categoryId       String                   @map("category_id")
+  amount           Decimal                  @db.Decimal(18, 2)
+  referenceType    String?                  @map("reference_type")
+  referenceId      String?                  @map("reference_id")
+  note             String?
+  requestedById    String                   @map("requested_by_id")
+  reviewedById     String?                  @map("reviewed_by_id")
+  reviewedAt       DateTime?                @map("reviewed_at")
+  rejectionReason  String?                  @map("rejection_reason")
+  approvalNote     String?                  @map("approval_note")
+  resultMovementId String?                  @unique @map("result_movement_id")
+  expiresAt        DateTime?                @map("expires_at")
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+
+  category       CashMovementCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  requestedBy    User                 @relation("CashExpenseRequestRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy     User?                @relation("CashExpenseRequestReviewer", fields: [reviewedById], references: [id])
+  resultMovement CashMovement?        @relation("MovementFromApprovedExpenseRequest", fields: [resultMovementId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([requestedById, createdAt])
+  @@map("cash_expense_requests")
+}
+
+/// Plantilla de permisos (administrador, cajero, etc.). Los permisos finales son la unión por rol.
+model Role {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+/// Permiso granular: recurso lógico + acción (ej. users:read).
+model Permission {
+  id          String  @id @default(cuid())
+  resource    String
+  action      String
+  description String?
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId String @map("user_id")
+  roleId String @map("role_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+/// Trazabilidad append-only de acciones relevantes (dominio + HTTP sensible).
+model AuditLog {
+  id              String   @id @default(cuid())
+  actorUserId     String?  @map("actor_user_id")
+  action          String
+  entityType      String   @map("entity_type")
+  entityId        String?  @map("entity_id")
+  previousPayload Json?    @map("previous_payload")
+  nextPayload     Json?    @map("next_payload")
+  reason          String?
+  requestId       String?  @map("request_id")
+  ipAddress       String?  @map("ip_address")
+  userAgent       String?  @map("user_agent")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// Configuración del taller (clave → JSON). Evoluciona sin migraciones por cada bandera nueva.
+model WorkshopSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedById String?  @map("updated_by_id")
+
+  updatedBy User? @relation("SettingUpdater", fields: [updatedById], references: [id])
+
+  @@map("workshop_settings")
+}

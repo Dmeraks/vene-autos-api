@@ -1,0 +1,13 @@
+# API (Nest + Prisma)
+api/node_modules/
+api/dist/
+api/.env
+api/.env.local
+api/coverage/
+api/*.log
+
+# Editor / SO
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini

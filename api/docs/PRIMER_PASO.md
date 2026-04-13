@@ -1,0 +1,109 @@
+# Primer paso: base de datos y API (Vene Autos)
+
+Guía breve para cuando tengas **PostgreSQL** y quieras dejar el API funcionando en tu PC o en un servidor.
+
+## 1. Requisitos
+
+- **Node.js** (LTS recomendado).
+- **PostgreSQL** 14+ (local o en la nube).
+- Opcional: **Docker** si usáis el `docker-compose` del proyecto para levantar solo la base.
+
+## 2. Variables de entorno
+
+1. Copiá `api/.env.example` a `api/.env`.
+2. Editá al menos:
+   - **`DATABASE_URL`**: cadena de conexión a tu base (usuario, contraseña, host, puerto, nombre de base).
+   - **`JWT_SECRET`**: texto largo y aleatorio en producción.
+3. El resto (CORS, `TRUST_PROXY`, etc.) lo podés afinar después; en local suele bastar lo del ejemplo.
+
+## 3. Crear la base (si no existe)
+
+En el cliente SQL de PostgreSQL o por consola:
+
+```sql
+CREATE DATABASE vene_autos;
+```
+
+(Ajustá el nombre si en `DATABASE_URL` usás otro.)
+
+## 4. Migraciones (tablas y reglas en la base)
+
+En una terminal, carpeta **`api`**:
+
+```bash
+npm install
+npx prisma migrate deploy
+```
+
+- En **desarrollo** (cuando generás migraciones nuevas) a veces se usa `npx prisma migrate dev`.
+- Si Windows devuelve **EPERM** al generar el cliente de Prisma, **pará** el servidor (`npm run start:dev`), ejecutá de nuevo `npx prisma generate` y volvé a levantar el API.
+
+## 5. Datos iniciales (roles, permisos, admin, configuración)
+
+```bash
+npx prisma db seed
+```
+
+Quedará un usuario administrador (email y contraseña según `.env` / ejemplo; cambiá la contraseña en producción).
+
+## 6. Arrancar el API
+
+```bash
+npm run start:dev
+```
+
+Por defecto escucha en **http://localhost:3000** y las rutas van bajo **`/api/v1`** (ej.: `GET /api/v1/health`).
+
+## 7. Probar login (ejemplo PowerShell)
+
+```powershell
+$body = '{"email":"admin@veneautos.local","password":"ChangeMe!123"}'
+$r = Invoke-RestMethod -Uri "http://localhost:3000/api/v1/auth/login" -Method Post -Body $body -ContentType "application/json"
+$r.accessToken
+```
+
+Luego podés llamar otros endpoints con cabecera:
+
+`Authorization: Bearer <accessToken>`
+
+## 8. Enlazar caja con una orden de trabajo
+
+Al crear un **ingreso** o **egreso** (`POST .../cash/movements/income` o `.../expense`), podés enviar en el JSON:
+
+- **`workOrderId`**: UUID de la orden (`GET /work-orders` o `GET /work-orders/:id`).
+
+El sistema guardará la referencia estándar en el movimiento de caja para trazabilidad. No mezcléis ese campo con otro `referenceType` distinto.
+
+## 9. Cobros en la orden de trabajo (recomendado)
+
+Para registrar un cobro **desde la OT** (crea el ingreso en caja y la fila de cobro en una sola operación):
+
+- **`POST /api/v1/work-orders/:id/payments`** con cuerpo JSON, por ejemplo:
+  - `amount` (obligatorio): string con monto, ej. `"50000"` o `"50000.50"`.
+  - `note` (opcional).
+  - `categorySlug` (opcional): por defecto `ingreso_cobro` (debe ser categoría de **ingreso** existente).
+
+Requisitos habituales: sesión de caja **abierta**, permisos **`work_orders:record_payment`** y **`cash_movements:create_income`**, y la OT no cancelada. Si la OT tiene **`authorizedAmount`**, el total cobrado no puede superarlo.
+
+Consultas útiles:
+
+- **`GET /api/v1/work-orders/:id`** — incluye un objeto **`paymentSummary`** (`paymentCount`, `totalPaid`, `remaining` si hay tope).
+- **`GET /api/v1/work-orders/:id/summary`** — mismo tipo de totales en un endpoint dedicado.
+- **`GET /api/v1/work-orders/:id/payments`** — listado de cobros.
+
+En alta o edición de la OT podés enviar **`authorizedAmount`** (tope opcional); en `PATCH`, `null` quita el tope.
+
+## 10. Tests y CI
+
+En la carpeta **`api`**:
+
+```bash
+npm test
+npm run lint
+```
+
+Si el repositorio Git incluye la raíz **`Vene Autos`** (carpeta `api` dentro), GitHub Actions ejecuta lint, build y tests al subir cambios bajo `api/` (workflow `.github/workflows/ci.yml`). Conviene Node **20 LTS** (`nvm use` / `fnm use` leyendo `api/.nvmrc`).
+
+---
+
+Si algo falla, anotá el mensaje de error completo y el comando que ejecutaste; con eso se puede acotar el siguiente paso.
