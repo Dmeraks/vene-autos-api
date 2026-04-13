@@ -47,6 +47,34 @@ export class CustomersService {
     });
   }
 
+  /** Búsqueda rápida para enlazar OT a cliente existente (nombre, teléfono o documento). */
+  async search(q: string) {
+    const t = q.trim();
+    if (t.length < 2) {
+      throw new BadRequestException('Escribí al menos 2 caracteres para buscar');
+    }
+    return this.prisma.customer.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { displayName: { contains: t, mode: 'insensitive' } },
+          { primaryPhone: { contains: t, mode: 'insensitive' } },
+          { documentId: { contains: t, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { displayName: 'asc' },
+      take: 30,
+      select: {
+        id: true,
+        displayName: true,
+        primaryPhone: true,
+        documentId: true,
+        email: true,
+        _count: { select: { vehicles: true } },
+      },
+    });
+  }
+
   async findOne(id: string) {
     const row = await this.prisma.customer.findUnique({
       where: { id },

@@ -163,6 +163,7 @@ describe('WorkOrdersService', () => {
         createdBy: {},
         assignedTo: null,
         vehicle: null,
+        lines: [],
         _count: { payments: 2 },
       });
       prisma.workOrderPayment.aggregate.mockResolvedValue({
@@ -176,6 +177,8 @@ describe('WorkOrdersService', () => {
         totalPaid: '40',
         remaining: '60.00',
       });
+      expect(out.linesSubtotal).toBe('0.00');
+      expect(out.lines).toEqual([]);
     });
   });
 

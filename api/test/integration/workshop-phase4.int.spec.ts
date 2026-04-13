@@ -46,6 +46,7 @@ describe('Workshop phase 4 (integración)', () => {
     }
     for (const woId of ids.workOrderIds) {
       await prisma.workOrderPayment.deleteMany({ where: { workOrderId: woId } }).catch(() => undefined);
+      await prisma.workOrderLine.deleteMany({ where: { workOrderId: woId } }).catch(() => undefined);
       await prisma.workOrder.delete({ where: { id: woId } }).catch(() => undefined);
     }
     for (const vId of ids.vehicleIds) {
@@ -97,6 +98,8 @@ describe('Workshop phase 4 (integración)', () => {
     const one = await workOrders.findOne(wo.id);
     expect(one.vehicle?.id).toBe(vehicle.id);
     expect(one.paymentSummary.paymentCount).toBe(0);
+    expect(one.linesSubtotal).toBeDefined();
+    expect(Array.isArray(one.lines)).toBe(true);
   });
 
   it('placa normalizada única: segundo vehículo mismo plateNorm falla', async () => {

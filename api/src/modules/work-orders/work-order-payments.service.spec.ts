@@ -10,6 +10,7 @@ import {
   Prisma,
   WorkOrderStatus,
 } from '@prisma/client';
+import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { WorkOrderPaymentsService } from './work-order-payments.service';
@@ -17,10 +18,13 @@ import { WorkOrderPaymentsService } from './work-order-payments.service';
 const WO_ID = 'clwo0000000000000000000001';
 const USER_ID = 'clusr000000000000000000001';
 
+const LONG_NOTE = 'Nota operativa de cobro con suficiente texto. '.repeat(2);
+
 describe('WorkOrderPaymentsService', () => {
   let service: WorkOrderPaymentsService;
   let prisma: { $transaction: jest.Mock };
   let audit: { recordDomain: jest.Mock };
+  let notes: { requireOperationalNote: jest.Mock };
 
   function makeTx(setup: {
     wo?: {
@@ -88,12 +92,25 @@ describe('WorkOrderPaymentsService', () => {
     prisma = {
       $transaction: jest.fn(),
     };
+    notes = {
+      requireOperationalNote: jest.fn(
+        async (_label: string, raw: string | null | undefined, scope?: string) => {
+          const min = scope === 'work_order_payment' ? 70 : 50;
+          const s = (raw ?? '').trim();
+          if (s.length < min) {
+            throw new BadRequestException('nota corta');
+          }
+          return s;
+        },
+      ),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         WorkOrderPaymentsService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: audit },
+        { provide: NotesPolicyService, useValue: notes },
       ],
     }).compile();
 
@@ -102,7 +119,7 @@ describe('WorkOrderPaymentsService', () => {
 
   it('rechaza monto cero sin abrir transacción', async () => {
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '0' }, { ip: undefined, userAgent: undefined }),
+      service.record(WO_ID, USER_ID, { amount: '0', note: LONG_NOTE }, { ip: undefined, userAgent: undefined }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -122,7 +139,7 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '10' }, { ip: undefined, userAgent: undefined }),
+      service.record(WO_ID, USER_ID, { amount: '10', note: LONG_NOTE }, { ip: undefined, userAgent: undefined }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -142,7 +159,7 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '30' }, { ip: undefined, userAgent: undefined }),
+      service.record(WO_ID, USER_ID, { amount: '30', note: LONG_NOTE }, { ip: undefined, userAgent: undefined }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -162,7 +179,7 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '10' }, { ip: undefined, userAgent: undefined }),
+      service.record(WO_ID, USER_ID, { amount: '10', note: LONG_NOTE }, { ip: undefined, userAgent: undefined }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -182,7 +199,7 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '10', categorySlug: 'no_existe' }, {}),
+      service.record(WO_ID, USER_ID, { amount: '10', categorySlug: 'no_existe', note: LONG_NOTE }, {}),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -202,7 +219,7 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '10' }, {}),
+      service.record(WO_ID, USER_ID, { amount: '10', note: LONG_NOTE }, {}),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -221,7 +238,7 @@ describe('WorkOrderPaymentsService', () => {
       ),
     );
 
-    const out = await service.record(WO_ID, USER_ID, { amount: '50.00', note: ' test ' }, {
+    const out = await service.record(WO_ID, USER_ID, { amount: '50.00', note: LONG_NOTE }, {
       ip: '127.0.0.1',
       userAgent: 'jest',
     });

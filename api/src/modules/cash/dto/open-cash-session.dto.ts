@@ -1,5 +1,5 @@
-/** Apertura de caja: monto inicial en caja (string decimal) y nota opcional para bitácora humana. */
-import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+/** Apertura de caja: monto inicial y nota obligatoria (bitácora; mínimo según configuración del taller). */
+import { IsString, Matches, MaxLength } from 'class-validator';
 import { MONEY_DECIMAL_REGEX } from '../cash.constants';
 
 export class OpenCashSessionDto {
@@ -9,8 +9,7 @@ export class OpenCashSessionDto {
   })
   openingAmount!: string;
 
-  @IsOptional()
   @IsString()
   @MaxLength(2000)
-  note?: string;
+  note!: string;
 }

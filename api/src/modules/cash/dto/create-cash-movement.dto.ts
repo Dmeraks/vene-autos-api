@@ -23,10 +23,9 @@ export class CreateCashMovementDto {
   @MaxLength(80)
   referenceId?: string;
 
-  @IsOptional()
   @IsString()
   @MaxLength(2000)
-  note?: string;
+  note!: string;
 
   /** Si se envía, fija `referenceType`/`referenceId` al enlace estándar con la orden (no mezclar con otro tipo). */
   @IsOptional()

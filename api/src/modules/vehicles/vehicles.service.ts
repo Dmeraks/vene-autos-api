@@ -135,6 +135,32 @@ export class VehiclesService {
     }
   }
 
+  /** Búsqueda por placa (o fragmento) para enlazar OT a vehículo/cliente existentes. */
+  async search(q: string) {
+    const raw = q.trim();
+    if (raw.length < 2) {
+      throw new BadRequestException('Escribí al menos 2 caracteres para buscar');
+    }
+    const norm = raw.toUpperCase().replace(/\s+/g, '');
+    return this.prisma.vehicle.findMany({
+      where: {
+        isActive: true,
+        OR: [{ plateNorm: { contains: norm } }, { plate: { contains: raw, mode: 'insensitive' } }],
+      },
+      orderBy: { plateNorm: 'asc' },
+      take: 25,
+      select: {
+        id: true,
+        plate: true,
+        plateNorm: true,
+        brand: true,
+        model: true,
+        year: true,
+        customer: customerBrief,
+      },
+    });
+  }
+
   /** Historial: órdenes de trabajo asociadas al vehículo (más recientes primero). */
   async listWorkOrders(vehicleId: string) {
     const v = await this.prisma.vehicle.findUnique({

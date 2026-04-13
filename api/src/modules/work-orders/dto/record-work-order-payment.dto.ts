@@ -10,10 +10,10 @@ export class RecordWorkOrderPaymentDto {
   })
   amount!: string;
 
-  @IsOptional()
+  /** Obligatoria; longitud mínima según `notes.min_length.work_order_payment` (ver `docs/NOTAS_POLITICA.md`). */
   @IsString()
   @MaxLength(2000)
-  note?: string;
+  note!: string;
 
   /** Por defecto `ingreso_cobro`; debe ser categoría de ingreso existente. */
   @IsOptional()

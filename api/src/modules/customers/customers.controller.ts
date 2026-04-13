@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -28,6 +28,12 @@ export class CustomersController {
   @RequirePermissions('customers:read')
   list() {
     return this.customers.list();
+  }
+
+  @Get('search')
+  @RequirePermissions('customers:read')
+  search(@Query('q') q: string) {
+    return this.customers.search(q ?? '');
   }
 
   @Get(':id/vehicles')

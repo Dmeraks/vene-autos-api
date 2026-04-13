@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -22,6 +22,12 @@ export class VehiclesController {
       ip: req.ip,
       userAgent: req.headers['user-agent'] as string | undefined,
     });
+  }
+
+  @Get('search')
+  @RequirePermissions('vehicles:read')
+  search(@Query('q') q: string) {
+    return this.vehicles.search(q ?? '');
   }
 
   @Get(':id/work-orders')

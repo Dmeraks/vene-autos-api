@@ -6,6 +6,6 @@ export class HealthController {
   @Public()
   @Get()
   check() {
-    return { status: 'ok', service: 'vene-autos-api', phase: 4 };
+    return { status: 'ok', service: 'vene-autos-api', phase: 5 };
   }
 }

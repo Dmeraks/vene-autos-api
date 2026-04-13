@@ -26,6 +26,12 @@ const vehicleWithCustomer = {
   },
 };
 
+const workOrderLineInclude = {
+  inventoryItem: {
+    include: { measurementUnit: { select: { id: true, slug: true, name: true } } },
+  },
+} as const;
+
 @Injectable()
 export class WorkOrdersService {
   constructor(
@@ -134,6 +140,7 @@ export class WorkOrdersService {
         createdBy: userBrief,
         assignedTo: userBrief,
         vehicle: vehicleWithCustomer,
+        lines: { orderBy: { sortOrder: 'asc' }, include: workOrderLineInclude },
         _count: { select: { payments: true } },
       },
     });
@@ -151,9 +158,17 @@ export class WorkOrdersService {
         ? row.authorizedAmount.minus(totalPaid).toFixed(2)
         : null;
 
+    let linesSubtotal = new Prisma.Decimal(0);
+    const lineRows = row.lines ?? [];
+    for (const ln of lineRows) {
+      const up = ln.unitPrice ?? new Prisma.Decimal(0);
+      linesSubtotal = linesSubtotal.plus(ln.quantity.mul(up));
+    }
+
     const { _count, ...rest } = row;
     return {
       ...rest,
+      linesSubtotal: linesSubtotal.toFixed(2),
       paymentSummary: {
         paymentCount: _count.payments,
         totalPaid: totalPaid.toString(),

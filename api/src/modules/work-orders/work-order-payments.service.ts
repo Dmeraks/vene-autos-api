@@ -8,6 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CashMovementDirection, CashSessionStatus, Prisma, WorkOrderStatus } from '@prisma/client';
+import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CASH_WORK_ORDER_REFERENCE_TYPE } from '../cash/cash.constants';
@@ -20,6 +21,7 @@ export class WorkOrderPaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notes: NotesPolicyService,
   ) {}
 
   async list(workOrderId: string) {
@@ -74,6 +76,12 @@ export class WorkOrderPaymentsService {
     if (amount.lte(0)) {
       throw new BadRequestException('El monto debe ser mayor a cero');
     }
+
+    const paymentNote = await this.notes.requireOperationalNote(
+      'Nota del cobro a la orden',
+      dto.note,
+      'work_order_payment',
+    );
 
     const slug = (dto.categorySlug?.trim() || 'ingreso_cobro').toLowerCase();
 
@@ -135,7 +143,7 @@ export class WorkOrderPaymentsService {
             amount,
             referenceType: CASH_WORK_ORDER_REFERENCE_TYPE,
             referenceId: wo.id,
-            note: dto.note?.trim() ?? null,
+            note: paymentNote,
             createdById: actorUserId,
           },
           include: { category: true, createdBy: userBrief },
@@ -146,7 +154,7 @@ export class WorkOrderPaymentsService {
             workOrderId: wo.id,
             amount,
             cashMovementId: movement.id,
-            note: dto.note?.trim() ?? null,
+            note: paymentNote,
             recordedById: actorUserId,
           },
           include: { recordedBy: userBrief, cashMovement: { include: { category: true } } },
@@ -169,6 +177,7 @@ export class WorkOrderPaymentsService {
         amount: dto.amount,
         cashMovementId: movement.id,
         categorySlug: slug,
+        note: paymentNote,
       },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,
@@ -188,6 +197,7 @@ export class WorkOrderPaymentsService {
         referenceType: CASH_WORK_ORDER_REFERENCE_TYPE,
         referenceId: wo.id,
         workOrderId: wo.id,
+        note: paymentNote,
       },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,

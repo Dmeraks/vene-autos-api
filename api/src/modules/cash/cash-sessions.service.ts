@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { CashMovementDirection, CashSessionStatus, Prisma } from '@prisma/client';
+import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import type { CloseCashSessionDto } from './dto/close-cash-session.dto';
@@ -22,11 +23,12 @@ export class CashSessionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notes: NotesPolicyService,
   ) {}
 
   /** Sesión abierta con movimientos ordenados cronológicamente, o `null` si no hay ninguna. */
   async getCurrentOpen() {
-    return this.prisma.cashSession.findFirst({
+    const row = await this.prisma.cashSession.findFirst({
       where: { status: CashSessionStatus.OPEN },
       include: {
         openedBy: { select: { id: true, email: true, fullName: true } },
@@ -39,6 +41,10 @@ export class CashSessionsService {
         },
       },
     });
+    if (!row) {
+      return null;
+    }
+    return this.withBalanceSummary(row);
   }
 
   /** Historial reciente de sesiones (abiertas y cerradas) para consulta administrativa. */
@@ -72,7 +78,49 @@ export class CashSessionsService {
     if (!s) {
       throw new NotFoundException('Sesión de caja no encontrada');
     }
-    return s;
+    return this.withBalanceSummary(s);
+  }
+
+  /**
+   * Saldo teórico = apertura + ingresos − egresos (misma fórmula que al cerrar con arqueo).
+   * Se expone en JSON para el panel sin recalcular en el cliente.
+   */
+  private computeExpectedBalance(
+    openingAmount: Prisma.Decimal,
+    movements: { direction: CashMovementDirection; amount: Prisma.Decimal }[],
+  ): { totalIncome: Prisma.Decimal; totalExpense: Prisma.Decimal; expected: Prisma.Decimal } {
+    let income = new Prisma.Decimal(0);
+    let expense = new Prisma.Decimal(0);
+    for (const m of movements) {
+      if (m.direction === CashMovementDirection.INCOME) {
+        income = income.add(m.amount);
+      } else {
+        expense = expense.add(m.amount);
+      }
+    }
+    const expected = openingAmount.add(income).sub(expense);
+    return { totalIncome: income, totalExpense: expense, expected };
+  }
+
+  private withBalanceSummary<
+    T extends {
+      openingAmount: Prisma.Decimal;
+      movements: { direction: CashMovementDirection; amount: Prisma.Decimal }[];
+    },
+  >(session: T) {
+    const { totalIncome, totalExpense, expected } = this.computeExpectedBalance(
+      session.openingAmount,
+      session.movements,
+    );
+    return {
+      ...session,
+      balanceSummary: {
+        totalIncome: totalIncome.toFixed(2),
+        totalExpense: totalExpense.toFixed(2),
+        expectedBalance: expected.toFixed(2),
+        movementCount: session.movements.length,
+      },
+    };
   }
 
   /**
@@ -91,6 +139,8 @@ export class CashSessionsService {
     if (openingAmount.lte(0)) {
       throw new BadRequestException('El monto de apertura debe ser mayor a cero');
     }
+
+    const openingNote = await this.notes.requireOperationalNote('Nota de apertura de caja', dto.note);
 
     let session;
     try {
@@ -114,7 +164,7 @@ export class CashSessionsService {
       entityType: 'CashSession',
       entityId: session.id,
       previousPayload: null,
-      nextPayload: { openingAmount: dto.openingAmount, note: dto.note ?? null },
+      nextPayload: { openingAmount: dto.openingAmount, note: openingNote },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,
     });
@@ -150,21 +200,18 @@ export class CashSessionsService {
       throw new BadRequestException('closingCounted inválido');
     }
 
-    // Saldo teórico al cierre: base de apertura más ingresos y menos egresos registrados.
-    let expected = new Prisma.Decimal(session.openingAmount);
-    for (const m of session.movements) {
-      if (m.direction === CashMovementDirection.INCOME) {
-        expected = expected.add(m.amount);
-      } else {
-        expected = expected.sub(m.amount);
-      }
-    }
+    const { expected } = this.computeExpectedBalance(session.openingAmount, session.movements);
 
     const diff = expected.sub(counted).abs();
-    if (diff.gt(0) && (!dto.differenceNote || !dto.differenceNote.trim())) {
-      throw new BadRequestException(
-        'Si hay diferencia entre lo esperado y lo contado, debe indicarse differenceNote',
+    let differenceNote: string | null = null;
+    if (diff.gt(0)) {
+      differenceNote = await this.notes.requireOperationalNote(
+        'Nota de diferencia en arqueo',
+        dto.differenceNote,
       );
+    } else {
+      const t = dto.differenceNote?.trim();
+      differenceNote = t ? t : null;
     }
 
     const updated = await this.prisma.cashSession.update({
@@ -175,7 +222,7 @@ export class CashSessionsService {
         closedById: actorUserId,
         closingExpected: expected,
         closingCounted: counted,
-        differenceNote: dto.differenceNote?.trim() ?? null,
+        differenceNote,
       },
     });
 

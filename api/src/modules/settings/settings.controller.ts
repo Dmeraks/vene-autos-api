@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Patch, Req } from '@nestjs/common';
 import type { Request } from 'express';
+import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
@@ -8,7 +9,23 @@ import { SettingsService } from './settings.service';
 
 @Controller('settings')
 export class SettingsController {
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly notes: NotesPolicyService,
+  ) {}
+
+  /**
+   * Datos mínimos para formularios (cualquier usuario autenticado). No expone el mapa completo
+   * de configuración ni requiere `settings:read`.
+   */
+  @Get('ui-context')
+  async uiContext() {
+    const [notesMinLengthChars, notesMinLengthWorkOrderPayment] = await Promise.all([
+      this.notes.getMinLength('general'),
+      this.notes.getMinLength('work_order_payment'),
+    ]);
+    return { notesMinLengthChars, notesMinLengthWorkOrderPayment };
+  }
 
   @Get()
   @RequirePermissions('settings:read')

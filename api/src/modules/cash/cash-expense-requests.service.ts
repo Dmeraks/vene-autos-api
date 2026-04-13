@@ -19,6 +19,7 @@ import {
   CashSessionStatus,
   Prisma,
 } from '@prisma/client';
+import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CashAccessService } from './cash-access.service';
@@ -36,6 +37,7 @@ export class CashExpenseRequestsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly access: CashAccessService,
+    private readonly notes: NotesPolicyService,
   ) {}
 
   /** PENDIENTE y con `expiresAt` vencido: no admite aprobación ni rechazo. */
@@ -108,6 +110,8 @@ export class CashExpenseRequestsService {
       throw new BadRequestException('El monto debe ser mayor a cero');
     }
 
+    const requestNote = await this.notes.requireOperationalNote('Nota de la solicitud de egreso', dto.note);
+
     let expiresAt: Date | null = null;
     if (dto.expiresAt) {
       expiresAt = new Date(dto.expiresAt);
@@ -126,7 +130,7 @@ export class CashExpenseRequestsService {
         amount,
         referenceType: dto.referenceType?.trim() ?? null,
         referenceId: dto.referenceId?.trim() ?? null,
-        note: dto.note?.trim() ?? null,
+        note: requestNote,
         requestedById: actorUserId,
         expiresAt,
       },
@@ -142,6 +146,7 @@ export class CashExpenseRequestsService {
       nextPayload: {
         categorySlug: category.slug,
         amount: dto.amount,
+        note: requestNote,
         referenceType: dto.referenceType ?? null,
         referenceId: dto.referenceId ?? null,
         expiresAt: dto.expiresAt ?? null,
@@ -201,10 +206,15 @@ export class CashExpenseRequestsService {
     await this.assertElevated(actorUserId);
     await this.flushExpiredPendingRequests();
 
+    const approvalNote = await this.notes.requireOperationalNote('Nota de aprobación', dto.approvalNote);
+
     const result = await this.prisma.$transaction(async (tx) => {
       const req = await tx.cashExpenseRequest.findUnique({
         where: { id },
-        include: { category: true },
+        include: {
+          category: true,
+          requestedBy: { select: { id: true, email: true, fullName: true } },
+        },
       });
       if (!req) {
         throw new NotFoundException('Solicitud no encontrada');
@@ -231,7 +241,7 @@ export class CashExpenseRequestsService {
           amount: req.amount,
           referenceType: CASH_EXPENSE_REQUEST_REFERENCE_TYPE,
           referenceId: req.id,
-          note: this.buildMovementNote(req.note, dto.approvalNote),
+          note: this.buildMovementNote(req.note, approvalNote),
           createdById: actorUserId,
         },
       });
@@ -243,7 +253,7 @@ export class CashExpenseRequestsService {
           resultMovementId: movement.id,
           reviewedById: actorUserId,
           reviewedAt: new Date(),
-          approvalNote: dto.approvalNote?.trim() ?? null,
+          approvalNote,
         },
       });
 
@@ -261,6 +271,8 @@ export class CashExpenseRequestsService {
       return { movement, full };
     });
 
+    const fullAfter = result.full;
+
     await this.audit.recordDomain({
       actorUserId,
       action: 'cash_expense_requests.approved',
@@ -270,11 +282,21 @@ export class CashExpenseRequestsService {
       nextPayload: {
         movementId: result.movement.id,
         amount: result.movement.amount.toFixed(2),
-        approvalNote: dto.approvalNote ?? null,
+        approvalNote,
+        requestNote: fullAfter.note?.trim() || null,
+        categorySlug: fullAfter.category.slug,
+        requestedBy: fullAfter.requestedBy
+          ? {
+              fullName: fullAfter.requestedBy.fullName ?? null,
+              email: fullAfter.requestedBy.email,
+            }
+          : null,
       },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,
     });
+
+    const movementNote = this.buildMovementNote(fullAfter.note, approvalNote);
 
     await this.audit.recordDomain({
       actorUserId,
@@ -287,6 +309,7 @@ export class CashExpenseRequestsService {
         fromExpenseRequestId: id,
         direction: CashMovementDirection.EXPENSE,
         amount: result.movement.amount.toFixed(2),
+        note: movementNote,
       },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,
@@ -303,6 +326,8 @@ export class CashExpenseRequestsService {
   ) {
     await this.assertElevated(actorUserId);
     await this.flushExpiredPendingRequests();
+
+    const rejectionReason = await this.notes.requireOperationalNote('Motivo del rechazo', dto.rejectionReason);
 
     const req = await this.prisma.cashExpenseRequest.findUnique({ where: { id } });
     if (!req) {
@@ -321,7 +346,7 @@ export class CashExpenseRequestsService {
         status: CashExpenseRequestStatus.REJECTED,
         reviewedById: actorUserId,
         reviewedAt: new Date(),
-        rejectionReason: dto.rejectionReason.trim(),
+        rejectionReason,
       },
     });
     if (updated.count !== 1) {
@@ -339,7 +364,7 @@ export class CashExpenseRequestsService {
       entityType: 'CashExpenseRequest',
       entityId: id,
       previousPayload: { status: CashExpenseRequestStatus.PENDING },
-      nextPayload: { rejectionReason: dto.rejectionReason.trim() },
+      nextPayload: { rejectionReason },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,
     });

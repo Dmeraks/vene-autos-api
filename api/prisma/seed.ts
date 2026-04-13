@@ -19,6 +19,11 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
   { resource: 'roles', action: 'delete', description: 'Eliminar roles no sistema' },
   { resource: 'permissions', action: 'read', description: 'Listar permisos del catálogo' },
   { resource: 'audit', action: 'read', description: 'Consultar auditoría' },
+  {
+    resource: 'reports',
+    action: 'read',
+    description: 'Ver informes económicos y operativos del taller (agregados)',
+  },
   { resource: 'settings', action: 'read', description: 'Ver configuración del taller' },
   { resource: 'settings', action: 'update', description: 'Modificar configuración del taller' },
   { resource: 'cash_sessions', action: 'read', description: 'Ver sesiones y estado de caja' },
@@ -69,12 +74,86 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
     action: 'record_payment',
     description: 'Registrar cobro de orden en caja (ingreso vinculado a la OT)',
   },
+  { resource: 'measurement_units', action: 'read', description: 'Ver unidades de medida' },
+  { resource: 'inventory_items', action: 'read', description: 'Ver ítems de inventario' },
+  { resource: 'inventory_items', action: 'create', description: 'Crear ítems de inventario' },
+  { resource: 'inventory_items', action: 'update', description: 'Actualizar ítems de inventario' },
+  { resource: 'purchase_receipts', action: 'read', description: 'Ver recepciones de compra' },
+  { resource: 'purchase_receipts', action: 'create', description: 'Registrar recepción de compra' },
+  {
+    resource: 'work_order_lines',
+    action: 'create',
+    description: 'Agregar líneas de repuesto o mano de obra a una OT abierta',
+  },
+  {
+    resource: 'work_order_lines',
+    action: 'update',
+    description: 'Editar cantidad/precio/descripción de líneas de OT abierta',
+  },
+  {
+    resource: 'work_order_lines',
+    action: 'delete',
+    description: 'Eliminar líneas de una OT abierta (repuesto devuelve stock)',
+  },
   { resource: 'customers', action: 'read', description: 'Ver clientes del taller' },
   { resource: 'customers', action: 'create', description: 'Crear clientes' },
   { resource: 'customers', action: 'update', description: 'Actualizar clientes' },
   { resource: 'vehicles', action: 'read', description: 'Ver vehículos e historial por vehículo' },
   { resource: 'vehicles', action: 'create', description: 'Registrar vehículos' },
   { resource: 'vehicles', action: 'update', description: 'Actualizar vehículos' },
+];
+
+/**
+ * Códigos que el backend exige hoy (`@RequirePermissions` o comprobaciones explícitas como
+ * `users:deactivate` en UsersController). Si falta alguno en `PERMISSIONS`, el seed falla
+ * para que administrador/dueño no queden incompletos respecto al API.
+ *
+ * Al agregar una ruta nueva con permiso, sumalo aquí y en `PERMISSIONS`.
+ */
+const BACKEND_REQUIRED_PERMISSION_CODES: readonly string[] = [
+  'audit:read',
+  'cash_delegates:manage',
+  'cash_expense_requests:approve',
+  'cash_expense_requests:cancel',
+  'cash_expense_requests:create',
+  'cash_expense_requests:read',
+  'cash_expense_requests:reject',
+  'cash_movements:create_expense',
+  'cash_movements:create_income',
+  'cash_sessions:close',
+  'cash_sessions:open',
+  'cash_sessions:read',
+  'customers:create',
+  'customers:read',
+  'customers:update',
+  'inventory_items:create',
+  'inventory_items:read',
+  'inventory_items:update',
+  'measurement_units:read',
+  'permissions:read',
+  'purchase_receipts:create',
+  'purchase_receipts:read',
+  'reports:read',
+  'roles:create',
+  'roles:delete',
+  'roles:read',
+  'roles:update',
+  'settings:read',
+  'settings:update',
+  'users:create',
+  'users:deactivate',
+  'users:read',
+  'users:update',
+  'vehicles:create',
+  'vehicles:read',
+  'vehicles:update',
+  'work_order_lines:create',
+  'work_order_lines:delete',
+  'work_order_lines:update',
+  'work_orders:create',
+  'work_orders:read',
+  'work_orders:record_payment',
+  'work_orders:update',
 ];
 
 const CASH_CATEGORIES: Array<{
@@ -116,6 +195,18 @@ const CASH_CATEGORIES: Array<{
 ];
 
 async function main() {
+  const catalogCodes = new Set(PERMISSIONS.map((p) => `${p.resource}:${p.action}`));
+  if (catalogCodes.size !== PERMISSIONS.length) {
+    throw new Error('prisma/seed: PERMISSIONS tiene resource+action duplicados');
+  }
+
+  const missingInCatalog = BACKEND_REQUIRED_PERMISSION_CODES.filter((c) => !catalogCodes.has(c));
+  if (missingInCatalog.length) {
+    throw new Error(
+      `prisma/seed: agrega a PERMISSIONS los códigos que usa el API: ${missingInCatalog.join(', ')}`,
+    );
+  }
+
   for (const p of PERMISSIONS) {
     await prisma.permission.upsert({
       where: {
@@ -146,6 +237,25 @@ async function main() {
 
   const allPermissions = await prisma.permission.findMany();
 
+  const missingInDb = BACKEND_REQUIRED_PERMISSION_CODES.filter(
+    (code) => !allPermissions.some((row) => `${row.resource}:${row.action}` === code),
+  );
+  if (missingInDb.length) {
+    throw new Error(`prisma/seed: permisos requeridos no encontrados en DB: ${missingInDb.join(', ')}`);
+  }
+
+  /** Asigna al rol todas las filas actuales de `permission` (dueño/admin = catálogo completo). */
+  async function grantAllCatalogPermissions(roleId: string) {
+    await prisma.rolePermission.deleteMany({ where: { roleId } });
+    await prisma.rolePermission.createMany({
+      data: allPermissions.map((perm) => ({
+        roleId,
+        permissionId: perm.id,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
   // --- Roles con alcance amplio: reciben la unión completa de permisos del catálogo ---
   const adminRole = await prisma.role.upsert({
     where: { slug: 'administrador' },
@@ -158,14 +268,7 @@ async function main() {
     update: { name: 'Administrador', description: 'Control total del sistema' },
   });
 
-  await prisma.rolePermission.deleteMany({ where: { roleId: adminRole.id } });
-  await prisma.rolePermission.createMany({
-    data: allPermissions.map((perm) => ({
-      roleId: adminRole.id,
-      permissionId: perm.id,
-    })),
-    skipDuplicates: true,
-  });
+  await grantAllCatalogPermissions(adminRole.id);
 
   const duenoRole = await prisma.role.upsert({
     where: { slug: 'dueno' },
@@ -177,14 +280,7 @@ async function main() {
     },
     update: { name: 'Dueño', description: 'Control total (mismo alcance que administrador)' },
   });
-  await prisma.rolePermission.deleteMany({ where: { roleId: duenoRole.id } });
-  await prisma.rolePermission.createMany({
-    data: allPermissions.map((perm) => ({
-      roleId: duenoRole.id,
-      permissionId: perm.id,
-    })),
-    skipDuplicates: true,
-  });
+  await grantAllCatalogPermissions(duenoRole.id);
 
   const pick = (...codes: string[]) =>
     allPermissions.filter((p) => codes.includes(`${p.resource}:${p.action}`));
@@ -210,6 +306,11 @@ async function main() {
     'vehicles:read',
     'vehicles:create',
     'vehicles:update',
+    'measurement_units:read',
+    'inventory_items:read',
+    'work_order_lines:create',
+    'work_order_lines:update',
+    'work_order_lines:delete',
   ];
   const cajeroPerms = pick(...cajeroCodes);
   const cajeroRole = await prisma.role.upsert({
@@ -328,6 +429,35 @@ async function main() {
     create: { key: 'users.create_requires_dueno_role', value: false },
     update: {},
   });
+
+  await prisma.workshopSetting.upsert({
+    where: { key: 'notes.min_length_chars' },
+    create: { key: 'notes.min_length_chars', value: 50 },
+    update: {},
+  });
+
+  await prisma.workshopSetting.upsert({
+    where: { key: 'notes.min_length.work_order_payment' },
+    create: { key: 'notes.min_length.work_order_payment', value: 70 },
+    update: {},
+  });
+
+  const MEASUREMENT_UNITS: Array<{ slug: string; name: string; sortOrder: number }> = [
+    { slug: 'unit', name: 'Unidad', sortOrder: 0 },
+    { slug: 'pair', name: 'Par', sortOrder: 10 },
+    { slug: 'kg', name: 'Kilogramo', sortOrder: 20 },
+    { slug: 'liter', name: 'Litro', sortOrder: 30 },
+    { slug: 'meter', name: 'Metro', sortOrder: 40 },
+    { slug: 'box', name: 'Caja', sortOrder: 50 },
+    { slug: 'set', name: 'Juego', sortOrder: 60 },
+  ];
+  for (const u of MEASUREMENT_UNITS) {
+    await prisma.measurementUnit.upsert({
+      where: { slug: u.slug },
+      create: { slug: u.slug, name: u.name, sortOrder: u.sortOrder },
+      update: { name: u.name, sortOrder: u.sortOrder },
+    });
+  }
 
   // eslint-disable-next-line no-console
   console.log('Seed OK. Admin:', adminEmail, '| Password:', adminPassword);

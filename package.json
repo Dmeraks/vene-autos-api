@@ -13,6 +13,9 @@
     "api:test": "cd api && npm test",
     "api:test:integration": "cd api && npm run test:integration",
     "api:lint": "cd api && npm run lint",
+    "web:install": "cd web && npm install",
+    "web:dev": "cd web && npm run dev",
+    "web:build": "cd web && npm run build",
     "backfill:legacy-vehicles": "cd api && npm run backfill:legacy-vehicles"
   }
 }

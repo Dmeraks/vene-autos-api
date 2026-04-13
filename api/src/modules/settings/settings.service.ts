@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NOTES_MIN_LENGTH_SETTING_KEYS } from '../../common/notes-policy/notes-policy.service';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
@@ -77,6 +78,19 @@ function assertKnownSettingValue(key: string, value: unknown): void {
   if (key === 'users.create_requires_dueno_role') {
     if (value !== true && value !== false && value !== 'true' && value !== 'false') {
       throw new BadRequestException('users.create_requires_dueno_role debe ser true o false.');
+    }
+  }
+  if ((NOTES_MIN_LENGTH_SETTING_KEYS as readonly string[]).includes(key)) {
+    const n =
+      typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+          ? parseInt(value, 10)
+          : NaN;
+    if (!Number.isFinite(n) || n < 5 || n > 500) {
+      throw new BadRequestException(
+        `${key} debe ser un entero entre 5 y 500 (caracteres mínimos de nota; ver docs/NOTAS_POLITICA.md).`,
+      );
     }
   }
 }

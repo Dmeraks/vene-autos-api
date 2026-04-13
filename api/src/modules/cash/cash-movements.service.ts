@@ -12,6 +12,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CashMovementDirection, CashSessionStatus, Prisma } from '@prisma/client';
+import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CashAccessService } from './cash-access.service';
@@ -24,6 +25,7 @@ export class CashMovementsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly access: CashAccessService,
+    private readonly notes: NotesPolicyService,
   ) {}
 
   /** Ingreso en la sesión abierta (ruta protegida con `cash_movements:create_income`). */
@@ -85,6 +87,10 @@ export class CashMovementsService {
       throw new BadRequestException('El monto debe ser mayor a cero');
     }
 
+    const noteLabel =
+      direction === CashMovementDirection.INCOME ? 'Nota del ingreso en caja' : 'Nota del egreso en caja';
+    const noteText = await this.notes.requireOperationalNote(noteLabel, dto.note);
+
     const { referenceType, referenceId } = await this.resolveMovementReferences(dto);
 
     const movement = await this.prisma.cashMovement.create({
@@ -95,7 +101,7 @@ export class CashMovementsService {
         amount,
         referenceType,
         referenceId,
-        note: dto.note?.trim() ?? null,
+        note: noteText,
         createdById: actorUserId,
       },
       include: {
@@ -118,6 +124,7 @@ export class CashMovementsService {
         referenceType,
         referenceId,
         workOrderId: dto.workOrderId ?? null,
+        note: noteText,
       },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,

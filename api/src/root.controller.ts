@@ -9,7 +9,7 @@ export class RootController {
   root() {
     return {
       service: 'vene-autos-api',
-      phase: 4,
+      phase: 5,
       links: {
         health: '/api/v1/health',
         authLogin: 'POST /api/v1/auth/login',
@@ -19,6 +19,13 @@ export class RootController {
         workOrderPayments: 'GET /api/v1/work-orders/:id/payments',
         workOrderSummary: 'GET /api/v1/work-orders/:id/summary',
         workOrderRecordPayment: 'POST /api/v1/work-orders/:id/payments',
+        workOrderLines: 'GET/POST /api/v1/work-orders/:id/lines',
+        workOrderLineSubtotal: 'GET /api/v1/work-orders/:id/lines/subtotal',
+        workOrderLineById: 'PATCH/DELETE /api/v1/work-orders/:id/lines/:lineId',
+        inventoryMeasurementUnits: 'GET /api/v1/inventory/measurement-units',
+        inventoryItems: 'GET/POST /api/v1/inventory/items',
+        inventoryItemById: 'GET/PATCH /api/v1/inventory/items/:id',
+        purchaseReceipts: 'GET/POST /api/v1/inventory/purchase-receipts',
         customers: 'GET/POST /api/v1/customers',
         customerById: 'GET/PATCH /api/v1/customers/:id',
         customerVehicles: 'GET /api/v1/customers/:id/vehicles',
@@ -35,6 +42,8 @@ export class RootController {
         cashExpenseRequestApprove: 'POST /api/v1/cash/expense-requests/:id/approve',
         cashExpenseRequestReject: 'POST /api/v1/cash/expense-requests/:id/reject',
         cashExpenseRequestCancel: 'POST /api/v1/cash/expense-requests/:id/cancel',
+        settings: 'GET/PATCH /api/v1/settings',
+        settingsUiContext: 'GET /api/v1/settings/ui-context',
       },
     };
   }

@@ -65,6 +65,8 @@ npm run db:seed
 
 Quedará un usuario administrador (email y contraseña según `.env` / ejemplo; cambiá la contraseña en producción).
 
+El seed también crea claves en **`workshop_settings`** para la política de notas: **`notes.min_length_chars`** (general: caja, solicitudes, recepción de compra, etc.; valor por defecto **50**) y **`notes.min_length.work_order_payment`** (solo nota al cobrar en una OT; por defecto **70**). Si falta alguna fila, el API usa esos respaldos. Tras actualizar el código, conviene volver a ejecutar el seed para crear la clave nueva en bases antiguas. Referencia: **`api/docs/NOTAS_POLITICA.md`**. Cualquier sesión autenticada puede leer los mínimos con **`GET /api/v1/settings/ui-context`** (`notesMinLengthChars` y `notesMinLengthWorkOrderPayment`); detalle en `api/README.md`.
+
 ## 6. Arrancar el API
 
 ```bash
@@ -87,7 +89,7 @@ Luego podés llamar otros endpoints con cabecera:
 
 ## 8. Enlazar caja con una orden de trabajo
 
-Al crear un **ingreso** o **egreso** (`POST .../cash/movements/income` o `.../expense`), podés enviar en el JSON:
+Al crear un **ingreso** o **egreso** (`POST .../cash/movements/income` o `.../expense`), el cuerpo incluye **`note`** (obligatoria, longitud mínima según `notes.min_length_chars`) además de `categorySlug` y `amount`. Opcionalmente podés enviar:
 
 - **`workOrderId`**: UUID de la orden (`GET /work-orders` o `GET /work-orders/:id`).
 
@@ -99,7 +101,7 @@ Para registrar un cobro **desde la OT** (crea el ingreso en caja y la fila de co
 
 - **`POST /api/v1/work-orders/:id/payments`** con cuerpo JSON, por ejemplo:
   - `amount` (obligatorio): string con monto, ej. `"50000"` o `"50000.50"`.
-  - `note` (opcional).
+  - `note` (obligatorio): texto con al menos **`notes.min_length_chars`** caracteres (tras quitar espacios al inicio/final); ver `GET /api/v1/settings/ui-context`.
   - `categorySlug` (opcional): por defecto `ingreso_cobro` (debe ser categoría de **ingreso** existente).
 
 Requisitos habituales: sesión de caja **abierta**, permisos **`work_orders:record_payment`** y **`cash_movements:create_income`**, y la OT no cancelada. Si la OT tiene **`authorizedAmount`**, el total cobrado no puede superarlo.

@@ -32,6 +32,8 @@ model User {
   workOrdersCreated           WorkOrder[]           @relation("WorkOrderCreatedBy")
   workOrdersAssigned          WorkOrder[]           @relation("WorkOrderAssignedTo")
   workOrderPaymentsRecorded   WorkOrderPayment[]     @relation("WorkOrderPaymentRecordedBy")
+  inventoryMovementsCreated   InventoryMovement[]    @relation("InventoryMovementCreatedBy")
+  purchaseReceiptsReceived    PurchaseReceipt[]     @relation("PurchaseReceiptReceivedBy")
 
   @@map("users")
 }
@@ -125,6 +127,20 @@ enum WorkOrderStatus {
   CANCELLED
 }
 
+/// Línea de OT: repuesto (descuenta inventario) o mano de obra (importe al cliente, sin stock).
+enum WorkOrderLineType {
+  PART
+  LABOR
+}
+
+/// Movimiento de stock (cantidad con signo: positivo entra, negativo sale).
+enum InventoryMovementType {
+  PURCHASE_IN
+  WORK_ORDER_CONSUMPTION
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+}
+
 /// Orden de trabajo del taller. Puede enlazar a `Vehicle` (cliente formal); los campos texto siguen por compatibilidad y búsquedas.
 model WorkOrder {
   id            String          @id @default(cuid())
@@ -150,6 +166,7 @@ model WorkOrder {
   assignedTo User? @relation("WorkOrderAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
   vehicle    Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   payments   WorkOrderPayment[]
+  lines      WorkOrderLine[]
 
   @@index([status, createdAt])
   @@index([vehicleId])
@@ -172,6 +189,108 @@ model WorkOrderPayment {
 
   @@index([workOrderId, createdAt])
   @@map("work_order_payments")
+}
+
+/// Unidad de medida (catálogo ampliable por migración o seed).
+model MeasurementUnit {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  sortOrder Int      @default(0) @map("sort_order")
+
+  items InventoryItem[]
+
+  @@map("measurement_units")
+}
+
+/// Ítem de inventario (repuesto/material con stock).
+model InventoryItem {
+  id                 String   @id @default(cuid())
+  sku                String   @unique @db.VarChar(80)
+  name               String   @db.VarChar(200)
+  measurementUnitId  String   @map("measurement_unit_id")
+  quantityOnHand     Decimal  @default(0) @map("quantity_on_hand") @db.Decimal(18, 4)
+  averageCost        Decimal? @map("average_cost") @db.Decimal(18, 2)
+  trackStock         Boolean  @default(true) @map("track_stock")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  measurementUnit      MeasurementUnit       @relation(fields: [measurementUnitId], references: [id], onDelete: Restrict)
+  movements            InventoryMovement[]
+  workOrderLines        WorkOrderLine[]
+  purchaseReceiptLines PurchaseReceiptLine[]
+
+  @@index([measurementUnitId])
+  @@map("inventory_items")
+}
+
+/// Recepción de compra (entrada de mercadería al taller).
+model PurchaseReceipt {
+  id             String   @id @default(cuid())
+  note           String?  @db.Text
+  supplierRef    String?  @map("supplier_ref") @db.VarChar(200)
+  receivedById   String   @map("received_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  receivedBy User                 @relation("PurchaseReceiptReceivedBy", fields: [receivedById], references: [id])
+  lines      PurchaseReceiptLine[]
+
+  @@map("purchase_receipts")
+}
+
+model PurchaseReceiptLine {
+  id                String   @id @default(cuid())
+  purchaseReceiptId String   @map("purchase_receipt_id")
+  inventoryItemId   String   @map("inventory_item_id")
+  quantity          Decimal  @db.Decimal(18, 4)
+  unitCost          Decimal? @map("unit_cost") @db.Decimal(18, 2)
+
+  purchaseReceipt PurchaseReceipt @relation(fields: [purchaseReceiptId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem   @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseReceiptId])
+  @@index([inventoryItemId])
+  @@map("purchase_receipt_lines")
+}
+
+/// Movimiento de inventario (trazabilidad; cantidad con signo).
+model InventoryMovement {
+  id                String                 @id @default(cuid())
+  inventoryItemId   String                 @map("inventory_item_id")
+  quantityChange    Decimal                @map("quantity_change") @db.Decimal(18, 4)
+  movementType      InventoryMovementType  @map("movement_type")
+  referenceType     String?                @map("reference_type") @db.VarChar(80)
+  referenceId       String?                @map("reference_id") @db.VarChar(40)
+  note                String?                @db.Text
+  createdById       String                 @map("created_by_id")
+  createdAt           DateTime               @default(now()) @map("created_at")
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("InventoryMovementCreatedBy", fields: [createdById], references: [id])
+
+  @@index([inventoryItemId, createdAt])
+  @@map("inventory_movements")
+}
+
+/// Línea de orden (repuesto con stock o mano de obra).
+model WorkOrderLine {
+  id              String            @id @default(cuid())
+  workOrderId     String            @map("work_order_id")
+  lineType        WorkOrderLineType @map("line_type")
+  sortOrder       Int               @default(0) @map("sort_order")
+  inventoryItemId String?           @map("inventory_item_id")
+  description     String?           @db.VarChar(2000)
+  quantity        Decimal           @db.Decimal(18, 4)
+  unitPrice       Decimal?          @map("unit_price") @db.Decimal(18, 2)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  workOrder       WorkOrder        @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  inventoryItem   InventoryItem?   @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@index([workOrderId, sortOrder])
+  @@map("work_order_lines")
 }
 
 /// Sesión de caja (apertura/cierre). Solo una sesión OPEN a la vez (regla de negocio en servicio).

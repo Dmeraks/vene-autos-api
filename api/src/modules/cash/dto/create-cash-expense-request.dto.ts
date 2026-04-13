@@ -25,10 +25,9 @@ export class CreateCashExpenseRequestDto {
   @MaxLength(80)
   referenceId?: string;
 
-  @IsOptional()
   @IsString()
   @MaxLength(2000)
-  note?: string;
+  note!: string;
 
   /** Si se indica, la aprobación queda bloqueada después de esta fecha/hora (ISO 8601). */
   @IsOptional()
