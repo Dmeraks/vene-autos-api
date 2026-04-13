@@ -27,6 +27,20 @@ Documento vivo: decisiones de negocio y orden de implementación acordados con e
 
 Así la transmisión cambiada en taller **descuenta** el mismo SKU que entró cuando compraste la caja al proveedor.
 
+### Unidades de medida (desde el día uno)
+
+**Decisión:** no limitarse solo a “unidad”; conviene modelar **unidad de medida** desde el inicio para lo que suele surgir en un taller (p. ej. **unidad**, **litro**, **metro**, **par**, **kg**). Puede ser un **catálogo cerrado** (enum en BD) que se **amplía por migración** cuando aparezca una nueva necesidad, o un catálogo `measurement_units` administrable; lo importante es que **ítem + línea** lleven explícita la unidad para cantidades y reportes.
+
+### Mano de obra vs repuestos (total al cliente)
+
+**Decisión:**
+
+- **Repuestos / materiales:** ítems de **inventario** con stock; líneas de OT que **descuentan** (o reservan, según regla elegida) el material usado.
+- **Mano de obra:** es un **concepto aparte** de los repuestos: no es el mismo catálogo que el repuesto físico; se factura como **línea de servicio** (horas, tarifa, descripción del trabajo, paquete de mano de obra, etc.) **sin movimiento de stock de repuesto** (salvo más adelante se vincule a “horas-hombre” internas, fuera del MVP).
+- **Total al cliente:** el importe que ve el cliente en la **factura / presupuesto / liquidación de la OT** es la **suma de líneas de repuesto + líneas de mano de obra** (más impuestos cuando exista capa fiscal). Los **cobros en caja** ya registrados contra la OT deben **alinearse** en producto con ese total (validaciones o estados “presupuestado vs cobrado” se pueden refinar en UI y API).
+
+**Implicación técnica (fase 5):** conviene un modelo de **líneas de OT** con discriminador de tipo (p. ej. `PART` | `LABOR`) o dos sub-recursos coexistentes, pero **un solo lugar** para calcular “subtotal OT al cliente” sumando ambos.
+
 ## Fiscalidad Colombia (DIAN)
 
 Queda **definido para implementación futura**: integración vía **tercero** o **directo con DIAN**. No bloquea cliente/vehículo/OT/inventario. Cuando se implemente, conviene capa de “documento electrónico” desacoplada del cobro en caja.
@@ -39,6 +53,6 @@ Queda **definido para implementación futura**: integración vía **tercero** o 
 
 1. **Cliente + vehículo + OT enlazada** — modelo formal, API CRUD, `vehicleId` en OT, migración legado (script).
 2. **Historial** — consultas por vehículo (OT + cobros); texto libre en OT queda como respaldo hasta deprecar.
-3. **Ítems de inventario + líneas en OT + movimientos de stock** — incluye entradas por compra.
+3. **Ítems de inventario + líneas en OT + movimientos de stock** — unidades de medida desde el inicio; **líneas de mano de obra** aparte de repuestos; subtotal cliente = repuestos + mano de obra; entradas por compra.
 4. **UI** — orquestación para taller.
 5. **Capa fiscal** — cuando se elija proveedor o camino DIAN.
