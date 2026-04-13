@@ -11,6 +11,7 @@
     "api:dev": "cd api && npm run start:dev",
     "api:build": "cd api && npm run build",
     "api:test": "cd api && npm test",
+    "api:test:integration": "cd api && npm run test:integration",
     "api:lint": "cd api && npm run lint",
     "backfill:legacy-vehicles": "cd api && npm run backfill:legacy-vehicles"
   }

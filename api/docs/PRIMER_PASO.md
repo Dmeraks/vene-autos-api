@@ -121,6 +121,15 @@ npm test
 npm run lint
 ```
 
+**Integración (PostgreSQL real):** tras `migrate deploy` y `db seed`, con `DATABASE_URL` válida en `api/.env`:
+
+```bash
+cd api
+npm run test:integration
+```
+
+En GitHub Actions esto corre automáticamente contra una base Postgres efímera.
+
 En GitHub, creá el repositorio con el nombre **`vene-autos-api`** (convención clara: es solo el backend). Enlazá tu carpeta local con `git remote add origin https://github.com/TU_USUARIO/vene-autos-api.git` (o `git remote set-url` si ya existía `origin`).
 
 Si el repositorio Git incluye la raíz **`Vene Autos`** (carpeta `api` dentro), GitHub Actions ejecuta lint, build y tests al subir cambios bajo `api/` (workflow `.github/workflows/ci.yml`). Conviene Node **20 LTS** (`nvm use` / `fnm use` leyendo `api/.nvmrc`).
