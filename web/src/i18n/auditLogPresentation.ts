@@ -11,6 +11,7 @@ const ACTION_TITLE: Record<string, string> = {
   'auth.logout': 'Cierre de sesión',
   'auth.register': 'Registro de cuenta',
   'users.create': 'Usuario creado',
+  'users.reset_password': 'Contraseña restablecida',
   'users.update': 'Usuario actualizado',
   'roles.create': 'Rol creado',
   'roles.update': 'Rol modificado',

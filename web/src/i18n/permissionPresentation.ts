@@ -191,6 +191,11 @@ export const PERMISSION_GUIDE_ES: Record<string, { title: string; detail: string
     detail:
       'Lista el personal y sus datos básicos. Útil para administración; combinar con criterios de privacidad interna.',
   },
+  'users:reset_password': {
+    title: 'Restablecer contraseña de usuarios',
+    detail:
+      'Asigna una contraseña nueva a otra cuenta (p. ej. si olvidó el acceso) y cierra todas sus sesiones. No habilita que cada usuario cambie la propia desde el panel; solo soporte/administración.',
+  },
   'users:update': {
     title: 'Editar usuarios',
     detail:

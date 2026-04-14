@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthSessionService } from '../auth/auth-session.service';
 import type { CreateUserDto } from './dto/create-user.dto';
+import type { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
@@ -194,6 +195,38 @@ export class UsersService {
     });
 
     return this.findOne(id);
+  }
+
+  async resetPassword(
+    userId: string,
+    dto: ResetUserPasswordDto,
+    actorUserId: string,
+    meta: { ip?: string; userAgent?: string },
+  ) {
+    const before = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+    if (!before) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+    await this.authSessions.revokeAllForUser(userId);
+
+    await this.audit.recordDomain({
+      actorUserId,
+      action: 'users.reset_password',
+      entityType: 'User',
+      entityId: userId,
+      previousPayload: null,
+      nextPayload: { email: before.email, sessionsRevoked: true },
+      ipAddress: meta.ip ?? null,
+      userAgent: meta.userAgent ?? null,
+    });
+
+    return { ok: true, userId, email: before.email };
   }
 
   /**

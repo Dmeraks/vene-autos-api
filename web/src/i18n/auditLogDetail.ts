@@ -88,6 +88,8 @@ const DOMAIN_ACTION_HELP: Record<string, string> = {
   'auth.login': 'Alguien inició sesión correctamente. El registro ayuda a saber quién estaba en el panel en ese momento.',
   'auth.logout': 'Cierre de sesión voluntario. La sesión deja de ser válida para nuevas peticiones.',
   'users.create': 'Se dio de alta un usuario nuevo con los roles que se eligieron en el formulario.',
+  'users.reset_password':
+    'Un administrador asignó una contraseña nueva a la cuenta; se cerraron todas las sesiones de ese usuario.',
   'users.update': 'Se modificaron datos del usuario (nombre, roles o estado activo/inactivo).',
   'roles.create': 'Se creó un rol nuevo con un conjunto de permisos.',
   'roles.update': 'Se cambió el nombre, la descripción o los permisos de un rol existente.',

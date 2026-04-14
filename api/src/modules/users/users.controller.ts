@@ -17,6 +17,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 
@@ -51,6 +52,24 @@ export class UsersController {
   @RequirePermissions('users:create')
   create(@Body() dto: CreateUserDto, @CurrentUser() actor: JwtUserPayload, @Req() req: Request) {
     return this.users.create(dto, actor.sub, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
+  }
+
+  /**
+   * Restablece contraseña de un usuario (solo quien tenga permiso explícito).
+   * No existe endpoint de “cambiar mi contraseña” para cuentas operativas.
+   */
+  @Patch(':id/password')
+  @RequirePermissions('users:reset_password')
+  resetPassword(
+    @Param('id') id: string,
+    @Body() dto: ResetUserPasswordDto,
+    @CurrentUser() actor: JwtUserPayload,
+    @Req() req: Request,
+  ) {
+    return this.users.resetPassword(id, dto, actor.sub, {
       ip: req.ip,
       userAgent: req.headers['user-agent'] as string | undefined,
     });

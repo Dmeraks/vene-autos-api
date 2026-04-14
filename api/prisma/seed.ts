@@ -13,6 +13,12 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
   { resource: 'users', action: 'create', description: 'Crear usuarios' },
   { resource: 'users', action: 'update', description: 'Actualizar usuarios' },
   { resource: 'users', action: 'deactivate', description: 'Desactivar usuarios' },
+  {
+    resource: 'users',
+    action: 'reset_password',
+    description:
+      'Restablecer contraseña de otro usuario (soporte). Cierra todas sus sesiones. Los usuarios operativos no pueden cambiar la propia desde el panel.',
+  },
   { resource: 'roles', action: 'read', description: 'Ver roles y permisos asignados' },
   { resource: 'roles', action: 'create', description: 'Crear roles' },
   { resource: 'roles', action: 'update', description: 'Actualizar roles y permisos' },
@@ -143,6 +149,7 @@ const BACKEND_REQUIRED_PERMISSION_CODES: readonly string[] = [
   'users:create',
   'users:deactivate',
   'users:read',
+  'users:reset_password',
   'users:update',
   'vehicles:create',
   'vehicles:read',
