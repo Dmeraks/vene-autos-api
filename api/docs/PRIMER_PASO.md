@@ -10,6 +10,17 @@ Visión de producto (cliente, vehículo, inventario futuro, fiscal): **`docs/VIS
 - **PostgreSQL** 14+ (local o en la nube).
 - Opcional: **Docker** si usáis el `docker-compose` del proyecto para levantar solo la base.
 
+### Windows (PowerShell) y carpeta con espacio (`Vene Autos`)
+
+Si la ruta tiene un **espacio**, hay que **entrecomillarla**; si no, `cd` toma solo el primer trozo y los comandos siguientes corren en la carpeta equivocada (por ejemplo `docker compose` dice *no configuration file provided*).
+
+```powershell
+cd "G:\Vene Autos\api"
+docker compose up -d
+```
+
+Luego migraciones y seed también desde `api` con la misma idea: `cd "G:\Vene Autos\api"` antes de `npx prisma …`.
+
 ## 2. Variables de entorno
 
 1. Copiá `api/.env.example` a `api/.env`.

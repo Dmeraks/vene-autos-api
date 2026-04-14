@@ -3,6 +3,7 @@
   "private": true,
   "description": "Raíz del repo: Prisma y Nest viven en la carpeta api/. No ejecutes npx prisma aquí sin --schema.",
   "scripts": {
+    "db:up": "cd api && docker compose up -d",
     "db:migrate": "cd api && npx prisma migrate deploy",
     "db:seed": "cd api && npx prisma db seed",
     "db:studio": "cd api && npx prisma studio",
