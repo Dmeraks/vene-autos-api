@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { MONEY_DECIMAL_REGEX } from '../../cash/cash.constants';
 
@@ -20,4 +21,13 @@ export class RecordWorkOrderPaymentDto {
   @IsString()
   @MaxLength(80)
   categorySlug?: string;
+
+  /** Opcional. Efectivo que entrega el cliente; debe ser ≥ `amount`. Vuelto = tender − amount. */
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
+  @IsOptional()
+  @IsString()
+  @Matches(MONEY_DECIMAL_REGEX, {
+    message: 'tenderAmount debe ser un decimal positivo con máximo 2 decimales',
+  })
+  tenderAmount?: string;
 }

@@ -12,6 +12,7 @@ import { NotesPolicyService } from '../../common/notes-policy/notes-policy.servi
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CASH_WORK_ORDER_REFERENCE_TYPE } from '../cash/cash.constants';
+import { resolveTenderAndChange } from '../cash/cash-tender.util';
 import type { RecordWorkOrderPaymentDto } from './dto/record-work-order-payment.dto';
 
 const userBrief = { select: { id: true, email: true, fullName: true } };
@@ -83,6 +84,8 @@ export class WorkOrderPaymentsService {
       'work_order_payment',
     );
 
+    const { tenderAmount, changeAmount } = resolveTenderAndChange(amount, dto.tenderAmount);
+
     const slug = (dto.categorySlug?.trim() || 'ingreso_cobro').toLowerCase();
 
     /**
@@ -141,6 +144,8 @@ export class WorkOrderPaymentsService {
             categoryId: category.id,
             direction: CashMovementDirection.INCOME,
             amount,
+            tenderAmount,
+            changeAmount,
             referenceType: CASH_WORK_ORDER_REFERENCE_TYPE,
             referenceId: wo.id,
             note: paymentNote,
@@ -175,6 +180,8 @@ export class WorkOrderPaymentsService {
         workOrderId: wo.id,
         orderNumber: wo.orderNumber,
         amount: dto.amount,
+        tenderAmount: tenderAmount?.toString() ?? null,
+        changeAmount: changeAmount?.toString() ?? null,
         cashMovementId: movement.id,
         categorySlug: slug,
         note: paymentNote,
@@ -194,6 +201,8 @@ export class WorkOrderPaymentsService {
         categorySlug: slug,
         direction: CashMovementDirection.INCOME,
         amount: dto.amount,
+        tenderAmount: tenderAmount?.toString() ?? null,
+        changeAmount: changeAmount?.toString() ?? null,
         referenceType: CASH_WORK_ORDER_REFERENCE_TYPE,
         referenceId: wo.id,
         workOrderId: wo.id,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -41,6 +41,8 @@ type SessionMovementRow = {
   id: string
   direction: string
   amount: string
+  tenderAmount?: string | null
+  changeAmount?: string | null
   referenceType: string | null
   referenceId: string | null
   note: string | null
@@ -73,6 +75,18 @@ function sessionStatusEs(status: string): string {
   if (status === 'OPEN') return 'Abierta'
   if (status === 'CLOSED') return 'Cerrada'
   return status
+}
+
+function formatCOPish(s: string): string {
+  const n = Number(s)
+  if (Number.isNaN(n)) return s
+  return n.toLocaleString('es-CO', { maximumFractionDigits: 2 })
+}
+
+/** Línea de ayuda para listados: efectivo entregado y vuelto. */
+function tenderVueltoLine(m: SessionMovementRow): string | null {
+  if (m.tenderAmount == null || m.changeAmount == null) return null
+  return `Efectivo ${formatCOPish(m.tenderAmount)} → vuelto ${formatCOPish(m.changeAmount)}`
 }
 
 function movementRefLabel(m: SessionMovementRow): { text: string; to?: string } {
@@ -119,8 +133,22 @@ export function CashPage() {
 
   const [movCat, setMovCat] = useState('')
   const [movAmt, setMovAmt] = useState('')
+  const [movTender, setMovTender] = useState('')
   const [movNote, setMovNote] = useState('')
   const [movAck, setMovAck] = useState(false)
+
+  const movVueltoHint = useMemo(() => {
+    if (tab !== 'ingreso' && tab !== 'egreso') return null
+    const a = Number(movAmt.trim())
+    const t = Number(movTender.trim())
+    if (!movTender.trim()) return null
+    if (Number.isNaN(a) || Number.isNaN(t) || a <= 0) return 'Completá el importe del movimiento.'
+    if (t < a) return 'El efectivo indicado debe ser mayor o igual al importe del movimiento.'
+    const ch = t - a
+    if (ch === 0) return 'Sin vuelto ($0): importe y efectivo coinciden.'
+    const amt = `$${formatCOPish(String(ch))}`
+    return tab === 'ingreso' ? `Vuelto a entregar al cliente: ${amt}.` : `Vuelto que vuelve a caja: ${amt}.`
+  }, [movAmt, movTender, tab])
 
   const [delSel, setDelSel] = useState<Set<string>>(new Set())
 
@@ -190,6 +218,7 @@ export function CashPage() {
 
   useEffect(() => {
     setMovAck(false)
+    setMovTender('')
   }, [tab, movCat])
 
   function assertOperationalNote(label: string, raw: string): boolean {
@@ -269,7 +298,7 @@ export function CashPage() {
   async function movement(dir: 'income' | 'expense') {
     setMsg(null)
     if (!movAck) {
-      setMsg('Marcá la casilla de confirmación abajo: revisaste categoría, monto y nota.')
+      setMsg('Marcá la casilla de confirmación abajo: revisaste categoría, importe, efectivo (si aplica) y nota.')
       return
     }
     if (!assertOperationalNote(dir === 'income' ? 'Nota del ingreso' : 'Nota del egreso', movNote)) return
@@ -279,9 +308,18 @@ export function CashPage() {
     const parts = [
       dir === 'income' ? '¿Registrar INGRESO en caja?' : '¿Registrar EGRESO de caja?',
       '',
-      `Monto: $${amt}`,
+      `Importe del movimiento (en caja): $${amt}`,
       `Categoría: ${catName}`,
     ]
+    const ten = movTender.trim()
+    if (ten) {
+      parts.push(`Efectivo en mano: $${ten}`)
+      const a = Number(amt)
+      const t = Number(ten)
+      if (!Number.isNaN(a) && !Number.isNaN(t) && t >= a) {
+        parts.push(`Vuelto: $${formatCOPish(String(t - a))}`)
+      }
+    }
     parts.push(`Nota: ${movNote.trim()}`)
     if (dir === 'expense') parts.push('', '⚠ El egreso sale del efectivo de la sesión abierta.')
     parts.push('', 'Quedará registrado en el movimiento de la sesión.')
@@ -298,11 +336,13 @@ export function CashPage() {
         body: JSON.stringify({
           categorySlug: movCat,
           amount: movAmt.trim(),
+          ...(movTender.trim() ? { tenderAmount: movTender.trim() } : {}),
           note: movNote.trim(),
         }),
       })
       setMsg(dir === 'income' ? 'Ingreso registrado' : 'Egreso registrado')
       setMovAmt('')
+      setMovTender('')
       setMovNote('')
       setMovAck(false)
       await loadCore()
@@ -522,13 +562,14 @@ export function CashPage() {
                   </p>
                   {current.movements && current.movements.length > 0 ? (
                     <div className="mt-3 overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
-                      <table className="w-full min-w-[520px] text-left text-sm">
+                      <table className="w-full min-w-[640px] text-left text-sm">
                         <thead>
                           <tr className="border-b border-slate-100 bg-slate-50/90 text-xs uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400">
                             <th className="px-3 py-2">Fecha</th>
                             <th className="px-3 py-2">Tipo</th>
                             <th className="px-3 py-2">Categoría</th>
-                            <th className="px-3 py-2">Monto</th>
+                            <th className="px-3 py-2">Importe</th>
+                            <th className="px-3 py-2">Efectivo / vuelto</th>
                             <th className="px-3 py-2">Vínculo</th>
                             <th className="px-3 py-2">Registró</th>
                           </tr>
@@ -556,6 +597,9 @@ export function CashPage() {
                                 <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{m.category.name}</td>
                                 <td className="px-3 py-2 font-medium tabular-nums text-slate-900 dark:text-slate-50">
                                   ${m.amount}
+                                </td>
+                                <td className="max-w-[12rem] px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                                  {tenderVueltoLine(m) ?? '—'}
                                 </td>
                                 <td className="max-w-[14rem] px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
                                   {ref.to ? (
@@ -679,8 +723,28 @@ export function CashPage() {
             </select>
           </label>
           <label className="block">
-            <span className="va-label">Monto</span>
+            <span className="va-label">Importe que queda registrado en caja</span>
             <input required value={movAmt} onChange={(e) => setMovAmt(e.target.value)} className="va-field" />
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+              Ej. monto del cobro o ingreso real (lo que suma al saldo del sistema).
+            </span>
+          </label>
+          <label className="block">
+            <span className="va-label">Efectivo que te entregan (opcional)</span>
+            <input
+              value={movTender}
+              onChange={(e) => setMovTender(e.target.value)}
+              className="va-field"
+              placeholder="Ej. billete de 100000 si el importe arriba es menor"
+            />
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+              Para billete grande: el vuelto se calcula solo. Dejá vacío si coincide con el importe o es transferencia.
+            </span>
+            {movVueltoHint && (
+              <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-900 dark:bg-brand-950/50 dark:text-brand-100">
+                {movVueltoHint}
+              </p>
+            )}
           </label>
           <label className="block">
             <span className="va-label">Nota del ingreso</span>
@@ -702,7 +766,7 @@ export function CashPage() {
               checked={movAck}
               onChange={(e) => setMovAck(e.target.checked)}
             />
-            <span>Confirmo categoría, monto y nota antes de registrar el ingreso.</span>
+            <span>Confirmo categoría, importe, efectivo recibido (si aplica) y nota.</span>
           </label>
           <button type="submit" className={btnPrimary}>
             Registrar ingreso
@@ -734,8 +798,28 @@ export function CashPage() {
             </select>
           </label>
           <label className="block">
-            <span className="va-label">Monto</span>
+            <span className="va-label">Importe del egreso (en caja)</span>
             <input required value={movAmt} onChange={(e) => setMovAmt(e.target.value)} className="va-field" />
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+              Lo que sale del efectivo según el comprobante (neto del movimiento).
+            </span>
+          </label>
+          <label className="block">
+            <span className="va-label">Efectivo que das / billete usado (opcional)</span>
+            <input
+              value={movTender}
+              onChange={(e) => setMovTender(e.target.value)}
+              className="va-field"
+              placeholder="Si pagás con billete mayor al importe, indicá cuánto entregás"
+            />
+            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+              Vuelto que vuelve a caja = efectivo indicado − importe del egreso.
+            </span>
+            {movVueltoHint && (
+              <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-medium text-brand-900 dark:bg-brand-950/50 dark:text-brand-100">
+                {movVueltoHint}
+              </p>
+            )}
           </label>
           <label className="block">
             <span className="va-label">Nota del egreso</span>
@@ -757,7 +841,7 @@ export function CashPage() {
               checked={movAck}
               onChange={(e) => setMovAck(e.target.checked)}
             />
-            <span>Confirmo categoría, monto y nota antes de registrar el egreso.</span>
+            <span>Confirmo categoría, importe, efectivo usado (si aplica) y nota.</span>
           </label>
           <button type="submit" className={btnDark}>
             Registrar egreso

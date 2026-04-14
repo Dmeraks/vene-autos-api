@@ -24,7 +24,11 @@ type PaymentRow = {
   createdAt: string
   note: string | null
   recordedBy: { fullName: string }
-  cashMovement: { category: { slug: string; name: string } }
+  cashMovement: {
+    category: { slug: string; name: string }
+    tenderAmount?: string | null
+    changeAmount?: string | null
+  }
 }
 
 type CashCat = { slug: string; name: string; direction: string }
@@ -72,6 +76,7 @@ export function WorkOrderDetailPage() {
 
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [payAmt, setPayAmt] = useState('')
+  const [payTender, setPayTender] = useState('')
   const [payNote, setPayNote] = useState('')
   const [payCat, setPayCat] = useState('ingreso_cobro')
   const [payAck, setPayAck] = useState(false)
@@ -159,6 +164,23 @@ export function WorkOrderDetailPage() {
     can('work_orders:record_payment') &&
     can('cash_movements:create_income')
   const canPatchWo = wo && can('work_orders:update')
+
+  function formatCOPish(s: string): string {
+    const n = Number(s)
+    if (Number.isNaN(n)) return s
+    return n.toLocaleString('es-CO', { maximumFractionDigits: 2 })
+  }
+
+  const payVueltoHint = useMemo(() => {
+    const a = Number(payAmt.trim())
+    const t = Number(payTender.trim())
+    if (!payTender.trim()) return null
+    if (Number.isNaN(a) || Number.isNaN(t) || a <= 0) return 'Completá el monto del cobro.'
+    if (t < a) return 'El efectivo recibido debe ser mayor o igual al monto del cobro.'
+    const ch = t - a
+    if (ch === 0) return 'Vuelto: $0 (pago exacto).'
+    return `Vuelto a entregar: $${formatCOPish(String(ch))}.`
+  }, [payAmt, payTender])
 
   const partOptions = useMemo(
     () =>
@@ -260,7 +282,9 @@ export function WorkOrderDetailPage() {
     e.preventDefault()
     if (!id || !canPay || !wo) return
     if (!payAck) {
-      setMsg('Marcá la casilla de confirmación: revisaste categoría, monto, nota y tope antes de registrar el cobro.')
+      setMsg(
+        'Marcá la casilla de confirmación: revisaste categoría, monto, efectivo recibido (si aplica), nota y tope antes de registrar el cobro.',
+      )
       return
     }
     const pn = payNote.trim()
@@ -281,6 +305,15 @@ export function WorkOrderDetailPage() {
       `Tope autorizado: ${authLine}`,
     ]
     if (remain != null) parts.push(`Saldo bajo tope (si aplica): $${remain}`)
+    const ten = payTender.trim()
+    if (ten) {
+      parts.push(`Efectivo que entrega el cliente: $${ten}`)
+      const a = Number(payAmt.trim())
+      const t = Number(ten)
+      if (!Number.isNaN(a) && !Number.isNaN(t) && t >= a) {
+        parts.push(`Vuelto: $${formatCOPish(String(t - a))}`)
+      }
+    }
     parts.push('', 'Se generará un ingreso en caja vinculado a esta orden.')
     const okPay = await confirm({
       title: 'Registrar cobro',
@@ -295,9 +328,11 @@ export function WorkOrderDetailPage() {
           amount: payAmt.trim(),
           note: pn,
           categorySlug: payCat,
+          ...(payTender.trim() ? { tenderAmount: payTender.trim() } : {}),
         }),
       })
       setPayAmt('')
+      setPayTender('')
       setPayNote('')
       setPayAck(false)
       setMsg('Cobro registrado')
@@ -512,6 +547,7 @@ export function WorkOrderDetailPage() {
               <tr className="border-b border-slate-100 text-xs uppercase text-slate-400 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-500">
                 <th className="px-4 py-2 sm:px-6">Fecha</th>
                 <th className="px-4 py-2 sm:px-6">Monto</th>
+                <th className="px-4 py-2 sm:px-6">Efectivo / vuelto</th>
                 <th className="px-4 py-2 sm:px-6">Categoría</th>
                 <th className="px-4 py-2 sm:px-6">Registró</th>
               </tr>
@@ -519,7 +555,7 @@ export function WorkOrderDetailPage() {
             <tbody>
               {payments.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-2.5 text-center text-sm text-slate-500 sm:px-6 dark:text-slate-400">
+                  <td colSpan={5} className="px-4 py-2.5 text-center text-sm text-slate-500 sm:px-6 dark:text-slate-400">
                     Sin cobros registrados.
                   </td>
                 </tr>
@@ -530,6 +566,11 @@ export function WorkOrderDetailPage() {
                     {new Date(p.createdAt).toLocaleString()}
                   </td>
                   <td className="px-4 py-2 font-medium tabular-nums text-slate-900 sm:px-6 dark:text-slate-50">${p.amount}</td>
+                  <td className="px-4 py-2 text-xs text-slate-600 sm:px-6 dark:text-slate-300">
+                    {p.cashMovement.tenderAmount != null && p.cashMovement.changeAmount != null
+                      ? `Efectivo ${formatCOPish(p.cashMovement.tenderAmount)} → vuelto ${formatCOPish(p.cashMovement.changeAmount)}`
+                      : '—'}
+                  </td>
                   <td className="px-4 py-2 text-slate-600 sm:px-6 dark:text-slate-300">{p.cashMovement.category.name}</td>
                   <td className="px-4 py-2 text-slate-600 sm:px-6 dark:text-slate-300">{p.recordedBy.fullName}</td>
                 </tr>
@@ -542,13 +583,27 @@ export function WorkOrderDetailPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-12 sm:items-start sm:gap-x-4 sm:gap-y-0">
               <div className="flex flex-col gap-3 sm:col-span-4">
                 <label className="block text-sm">
-                  <span className="va-label">Monto</span>
+                  <span className="va-label">Monto del cobro (en caja)</span>
                   <input
                     required
                     value={payAmt}
                     onChange={(e) => setPayAmt(e.target.value)}
                     className="va-field mt-1 w-full"
                   />
+                </label>
+                <label className="block text-sm">
+                  <span className="va-label">Efectivo que entrega el cliente (opcional)</span>
+                  <input
+                    value={payTender}
+                    onChange={(e) => setPayTender(e.target.value)}
+                    className="va-field mt-1 w-full"
+                    placeholder="Ej. 100000 si paga con billete mayor"
+                  />
+                  {payVueltoHint && (
+                    <p className="mt-2 rounded-lg bg-brand-50 px-2.5 py-2 text-xs font-medium text-brand-900 dark:bg-brand-950/50 dark:text-brand-100">
+                      {payVueltoHint}
+                    </p>
+                  )}
                 </label>
                 <label className="block text-sm">
                   <span className="va-label">Categoría</span>
@@ -586,7 +641,8 @@ export function WorkOrderDetailPage() {
                   onChange={(e) => setPayAck(e.target.checked)}
                 />
                 <span className="leading-snug">
-                  Confirmo que revisé monto, categoría, nota y tope antes de registrar el cobro.
+                  Confirmo que revisé monto, efectivo recibido (si aplica), categoría, nota y tope antes de registrar el
+                  cobro.
                 </span>
               </label>
               <button

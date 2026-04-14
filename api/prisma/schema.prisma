@@ -338,6 +338,10 @@ model CashMovement {
   categoryId    String                @map("category_id")
   direction     CashMovementDirection
   amount        Decimal               @db.Decimal(18, 2)
+  /// Efectivo entregado (ingreso) o total en mano para cubrir el egreso; opcional.
+  tenderAmount  Decimal?              @map("tender_amount") @db.Decimal(18, 2)
+  /// Vuelto: tender − amount (calculado en servidor).
+  changeAmount  Decimal?              @map("change_amount") @db.Decimal(18, 2)
   referenceType String?               @map("reference_type")
   referenceId   String?               @map("reference_id")
   note          String?

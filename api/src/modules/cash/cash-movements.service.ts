@@ -16,6 +16,7 @@ import { NotesPolicyService } from '../../common/notes-policy/notes-policy.servi
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CashAccessService } from './cash-access.service';
+import { resolveTenderAndChange } from './cash-tender.util';
 import { CASH_WORK_ORDER_REFERENCE_TYPE } from './cash.constants';
 import type { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 
@@ -92,6 +93,7 @@ export class CashMovementsService {
     const noteText = await this.notes.requireOperationalNote(noteLabel, dto.note);
 
     const { referenceType, referenceId } = await this.resolveMovementReferences(dto);
+    const { tenderAmount, changeAmount } = resolveTenderAndChange(amount, dto.tenderAmount);
 
     const movement = await this.prisma.cashMovement.create({
       data: {
@@ -99,6 +101,8 @@ export class CashMovementsService {
         categoryId: category.id,
         direction,
         amount,
+        tenderAmount,
+        changeAmount,
         referenceType,
         referenceId,
         note: noteText,
@@ -121,6 +125,8 @@ export class CashMovementsService {
         categorySlug: category.slug,
         direction,
         amount: dto.amount,
+        tenderAmount: tenderAmount?.toString() ?? null,
+        changeAmount: changeAmount?.toString() ?? null,
         referenceType,
         referenceId,
         workOrderId: dto.workOrderId ?? null,
