@@ -41,7 +41,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set('Content-Type', 'application/json')
   }
 
-  const res = await fetch(`${API_PREFIX}${path}`, { ...init, headers })
+  let res: Response
+  try {
+    res = await fetch(`${API_PREFIX}${path}`, { ...init, headers })
+  } catch {
+    throw new ApiError(
+      'No se pudo contactar al servidor. En desarrollo: levantá PostgreSQL, iniciá la API en el puerto 3000 (por ejemplo npm run api:dev desde la raíz del proyecto) y recargá esta página.',
+      0,
+      null,
+    )
+  }
 
   if (res.status === 401) {
     setToken(null)
@@ -52,10 +61,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await parseBody(res)
-    const msg =
+    let msg =
       typeof body === 'object' && body !== null && 'message' in body
         ? String((body as { message: unknown }).message)
         : res.statusText
+
+    if (res.status === 502 || res.status === 503 || res.status === 504) {
+      msg =
+        'La API no respondió (Bad Gateway / servicio no disponible). Suele pasar si el backend no está en marcha o PostgreSQL no está accesible: iniciá Docker/Postgres, npm run api:dev, y esperá a ver “Vene Autos API” en la consola del servidor.'
+    }
+
     throw new ApiError(msg || 'Error de API', res.status, body)
   }
 
