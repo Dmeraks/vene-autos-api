@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -305,27 +305,66 @@ export function CashPage() {
     const amt = movAmt.trim()
     const cat = categories.find((c) => c.slug === movCat)
     const catName = cat?.name ?? movCat
-    const parts = [
-      dir === 'income' ? '¿Registrar INGRESO en caja?' : '¿Registrar EGRESO de caja?',
-      '',
-      `Importe del movimiento (en caja): $${amt}`,
-      `Categoría: ${catName}`,
-    ]
     const ten = movTender.trim()
-    if (ten) {
-      parts.push(`Efectivo en mano: $${ten}`)
-      const a = Number(amt)
-      const t = Number(ten)
-      if (!Number.isNaN(a) && !Number.isNaN(t) && t >= a) {
-        parts.push(`Vuelto: $${formatCOPish(String(t - a))}`)
-      }
-    }
-    parts.push(`Nota: ${movNote.trim()}`)
-    if (dir === 'expense') parts.push('', '⚠ El egreso sale del efectivo de la sesión abierta.')
-    parts.push('', 'Quedará registrado en el movimiento de la sesión.')
+    const aNum = Number(amt)
+    const tNum = Number(ten)
+    const vueltoStr =
+      ten && !Number.isNaN(aNum) && !Number.isNaN(tNum) && tNum >= aNum ? formatCOPish(String(tNum - aNum)) : null
+
+    const importeClass =
+      dir === 'income'
+        ? 'text-emerald-600 dark:text-emerald-400'
+        : 'text-rose-600 dark:text-rose-400'
+
     const okMov = await confirm({
       title: dir === 'income' ? 'Registrar ingreso' : 'Registrar egreso',
-      message: parts.join('\n'),
+      message: (
+        <div className="space-y-3 text-left">
+          <p className="font-medium text-slate-800 dark:text-slate-100">
+            {dir === 'income' ? '¿Registrar INGRESO en caja?' : '¿Registrar EGRESO de caja?'}
+          </p>
+          <dl className="space-y-2.5 rounded-xl border border-slate-200/90 bg-slate-50/90 p-3.5 dark:border-slate-600 dark:bg-slate-800/60">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Importe en caja
+              </dt>
+              <dd className={`text-lg font-bold tabular-nums ${importeClass}`}>${formatCOPish(amt)}</dd>
+            </div>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-slate-200/80 pt-2.5 dark:border-slate-600/80">
+              <dt className="text-xs text-slate-500 dark:text-slate-400">Categoría</dt>
+              <dd className="text-sm font-medium text-slate-800 dark:text-slate-100">{catName}</dd>
+            </div>
+            {ten ? (
+              <Fragment>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-slate-200/80 pt-2.5 dark:border-slate-600/80">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-sky-700/90 dark:text-sky-300/90">
+                    Efectivo en mano
+                  </dt>
+                  <dd className="text-lg font-bold tabular-nums text-sky-600 dark:text-sky-400">${formatCOPish(ten)}</dd>
+                </div>
+                {vueltoStr != null && (
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-amber-200/80 pt-2.5 dark:border-amber-900/50">
+                    <dt className="text-xs font-medium uppercase tracking-wide text-amber-800 dark:text-amber-200/90">
+                      {dir === 'income' ? 'Vuelto a entregar' : 'Vuelto a caja'}
+                    </dt>
+                    <dd className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">${vueltoStr}</dd>
+                  </div>
+                )}
+              </Fragment>
+            ) : null}
+          </dl>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            <span className="font-medium text-slate-500 dark:text-slate-400">Nota: </span>
+            {movNote.trim()}
+          </p>
+          {dir === 'expense' && (
+            <p className="rounded-lg border border-rose-200/80 bg-rose-50/90 px-3 py-2 text-sm text-rose-900 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100">
+              El egreso sale del efectivo de la sesión abierta.
+            </p>
+          )}
+          <p className="text-xs text-slate-500 dark:text-slate-400">Quedará registrado en el movimiento de la sesión.</p>
+        </div>
+      ),
       confirmLabel: dir === 'income' ? 'Registrar ingreso' : 'Registrar egreso',
       variant: dir === 'expense' ? 'danger' : 'default',
     })

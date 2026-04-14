@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -296,28 +296,72 @@ export function WorkOrderDetailPage() {
     const catName = incomeCats.find((c) => c.slug === payCat)?.name ?? payCat
     const remain = wo.paymentSummary.remaining
     const authLine = wo.authorizedAmount != null ? String(wo.authorizedAmount) : 'sin tope'
-    const parts = [
-      `¿Registrar cobro de $${payAmt.trim()}?`,
-      `Categoría: ${catName}`,
-      `Orden #${wo.orderNumber}`,
-      `Subtotal líneas: $${wo.linesSubtotal}`,
-      `Ya cobrado en OT: $${wo.paymentSummary.totalPaid}`,
-      `Tope autorizado: ${authLine}`,
-    ]
-    if (remain != null) parts.push(`Saldo bajo tope (si aplica): $${remain}`)
+    const payAmtTrim = payAmt.trim()
     const ten = payTender.trim()
-    if (ten) {
-      parts.push(`Efectivo que entrega el cliente: $${ten}`)
-      const a = Number(payAmt.trim())
-      const t = Number(ten)
-      if (!Number.isNaN(a) && !Number.isNaN(t) && t >= a) {
-        parts.push(`Vuelto: $${formatCOPish(String(t - a))}`)
-      }
-    }
-    parts.push('', 'Se generará un ingreso en caja vinculado a esta orden.')
+    const aNum = Number(payAmtTrim)
+    const tNum = Number(ten)
+    const vueltoStr =
+      ten && !Number.isNaN(aNum) && !Number.isNaN(tNum) && tNum >= aNum ? formatCOPish(String(tNum - aNum)) : null
+
     const okPay = await confirm({
       title: 'Registrar cobro',
-      message: parts.join('\n'),
+      message: (
+        <div className="space-y-3 text-left">
+          <p className="font-medium text-slate-800 dark:text-slate-100">¿Registrar cobro en caja vinculado a esta orden?</p>
+          <dl className="space-y-2.5 rounded-xl border border-slate-200/90 bg-slate-50/90 p-3.5 dark:border-slate-600 dark:bg-slate-800/60">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Monto del cobro
+              </dt>
+              <dd className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                ${formatCOPish(payAmtTrim)}
+              </dd>
+            </div>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-slate-200/80 pt-2.5 text-sm dark:border-slate-600/80">
+              <dt className="text-xs text-slate-500 dark:text-slate-400">Categoría</dt>
+              <dd className="font-medium text-slate-800 dark:text-slate-100">{catName}</dd>
+            </div>
+            <div className="space-y-1 border-t border-slate-200/80 pt-2.5 text-xs text-slate-600 dark:border-slate-600/80 dark:text-slate-300">
+              <p>
+                <span className="text-slate-500 dark:text-slate-400">Orden #{wo.orderNumber}</span>
+              </p>
+              <p>
+                Subtotal líneas: <span className="font-mono font-medium">${wo.linesSubtotal}</span>
+              </p>
+              <p>
+                Ya cobrado en OT: <span className="font-mono font-medium">${wo.paymentSummary.totalPaid}</span>
+              </p>
+              <p>
+                Tope autorizado: <span className="font-mono font-medium">{authLine}</span>
+              </p>
+              {remain != null && (
+                <p>
+                  Saldo bajo tope: <span className="font-mono font-medium">${remain}</span>
+                </p>
+              )}
+            </div>
+            {ten ? (
+              <Fragment>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-slate-200/80 pt-2.5 dark:border-slate-600/80">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-sky-700/90 dark:text-sky-300/90">
+                    Efectivo del cliente
+                  </dt>
+                  <dd className="text-lg font-bold tabular-nums text-sky-600 dark:text-sky-400">${formatCOPish(ten)}</dd>
+                </div>
+                {vueltoStr != null && (
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-amber-200/80 pt-2.5 dark:border-amber-900/50">
+                    <dt className="text-xs font-medium uppercase tracking-wide text-amber-800 dark:text-amber-200/90">
+                      Vuelto a entregar
+                    </dt>
+                    <dd className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">${vueltoStr}</dd>
+                  </div>
+                )}
+              </Fragment>
+            ) : null}
+          </dl>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Se generará un ingreso en caja vinculado a esta orden.</p>
+        </div>
+      ),
       confirmLabel: 'Registrar cobro',
     })
     if (!okPay) return

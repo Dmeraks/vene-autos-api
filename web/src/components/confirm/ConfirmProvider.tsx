@@ -89,7 +89,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             <h2 id={titleId} className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">
               {options.title}
             </h2>
-            <div className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300 [&_strong]:font-semibold [&_strong]:text-slate-800 dark:[&_strong]:text-slate-100">
+            <div className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300 [&_strong]:font-semibold [&_strong]:text-slate-800 dark:[&_strong]:text-slate-100 [&_.tabular-nums]:tracking-tight">
               {typeof options.message === 'string' ? (
                 <div className="whitespace-pre-wrap break-words">{options.message}</div>
               ) : (
