@@ -6,6 +6,8 @@ import type { PermissionRow } from '../../api/types'
 import { CopyRolePermissionsBar } from '../../components/CopyRolePermissionsBar'
 import { PermissionPicker } from '../../components/PermissionPicker'
 import { RoleProfileTemplatesPanel } from '../../components/RoleProfileTemplatesPanel'
+import { PageHeader } from '../../components/layout/PageHeader'
+import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
 type RoleRow = {
   id: string
@@ -17,6 +19,8 @@ type RoleRow = {
 }
 
 export function RolesPage() {
+  const panelTheme = usePanelTheme()
+  const isSaas = panelTheme === 'saas_light'
   const { can } = useAuth()
   const [rows, setRows] = useState<RoleRow[] | null>(null)
   const [perms, setPerms] = useState<PermissionRow[]>([])
@@ -28,6 +32,10 @@ export function RolesPage() {
   const [sel, setSel] = useState<Set<string>>(new Set())
   /** Perfiles marcados en el modal (multi-perfil: se unen al aplicar). */
   const [checkedTemplateIds, setCheckedTemplateIds] = useState<Set<string>>(new Set())
+  const createBtnClass = 'va-btn-primary'
+  const roleCardClass = isSaas
+    ? 'va-saas-link-card'
+    : 'rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm transition hover:border-brand-200 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-brand-600'
 
   useEffect(() => {
     if (!open) setCheckedTemplateIds(new Set())
@@ -78,36 +86,29 @@ export function RolesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">Roles</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Cada rol junta permisos que definen qué puede hacer una persona. Los textos están en
-            español; el código técnico solo se muestra para soporte.
-          </p>
-        </div>
-        {can('roles:create') && can('permissions:read') && (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
-          >
-            Nuevo rol
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Roles"
+        description="Cada rol junta permisos que definen qué puede hacer una persona. Los textos están en español; el código técnico solo se muestra para soporte."
+        actions={
+          can('roles:create') && can('permissions:read') ? (
+            <button type="button" onClick={() => setOpen(true)} className={createBtnClass}>
+              Nuevo rol
+            </button>
+          ) : null
+        }
+      />
       {msg && (
         <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
           {msg}
         </p>
       )}
-      {!rows && <p className="text-slate-500 dark:text-slate-400">Cargando…</p>}
+      {!rows && <p className="text-slate-500 dark:text-slate-300">Cargando…</p>}
       {rows && (
         <ul className="grid gap-3 sm:grid-cols-2">
           {rows.map((r) => (
             <li
               key={r.id}
-              className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-sm transition hover:border-brand-200 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-brand-600"
+              className={roleCardClass}
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -140,16 +141,18 @@ export function RolesPage() {
       )}
 
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center dark:bg-black/60"
-          role="presentation"
-        >
+        <div className="va-modal-overlay" role="presentation">
           <div
-            className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-600 dark:bg-slate-900 dark:shadow-black/40"
+            className="va-modal-panel-wide"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-role-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Nuevo rol</h2>
-            <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            <h2 id="new-role-title" className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+              Nuevo rol
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-300">
               El nombre se muestra al personal. El identificador interno (slug) no debe cambiarse
               después si ya hay integraciones; use minúsculas y guiones, sin espacios.
             </p>
@@ -168,7 +171,7 @@ export function RolesPage() {
                     className="va-field mt-1 font-mono"
                     placeholder="ej. mecanico-senior"
                   />
-                  <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                  <span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">
                     Solo letras minúsculas, números y guiones. No uses datos personales.
                   </span>
                 </label>
@@ -191,12 +194,12 @@ export function RolesPage() {
               />
               <PermissionPicker permissions={perms} selectedIds={sel} onChange={setSel} />
               <div className="flex gap-2">
-                <button type="submit" className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white">
+                <button type="submit" className="va-btn-primary">
                   Crear rol
                 </button>
                 <button
                   type="button"
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  className="va-btn-secondary"
                   onClick={() => setOpen(false)}
                 >
                   Cancelar

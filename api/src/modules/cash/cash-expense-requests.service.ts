@@ -1,9 +1,8 @@
 /**
  * Solicitudes de egreso con aprobación asíncrona (dueño / administrador).
  *
- * No sustituye el flujo directo `POST /cash/movements/expense` para delegados o elevados.
- * Al aprobar, se crea un `CashMovement` EXPENSE en la sesión OPEN actual, con referencia establecida
- * en constantes, y se enlaza 1:1 desde la solicitud (`resultMovementId`).
+ * `approve` solo marca la solicitud como APPROVED (sin movimiento de caja). El cajero registra el egreso
+ * físico con `payOut` cuando haya sesión abierta; entonces se crea el `CashMovement` y `resultMovementId`.
  */
 import {
   BadRequestException,
@@ -19,6 +18,7 @@ import {
   CashSessionStatus,
   Prisma,
 } from '@prisma/client';
+import { ceilWholeCop, decimalFromMoneyApiString } from '../../common/money/cop-money';
 import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -105,7 +105,7 @@ export class CashExpenseRequestsService {
       throw new BadRequestException('La categoría debe ser de egreso');
     }
 
-    const amount = new Prisma.Decimal(dto.amount);
+    const amount = decimalFromMoneyApiString(dto.amount);
     if (amount.lte(0)) {
       throw new BadRequestException('El monto debe ser mayor a cero');
     }
@@ -194,8 +194,7 @@ export class CashExpenseRequestsService {
   }
 
   /**
-   * Aprueba y genera el movimiento de caja. El `createdById` del movimiento es el aprobador
-   * (responsabilidad contable de quien libera el egreso).
+   * Aprueba la solicitud (solo decisión administrativa). No crea movimiento de caja; el cajero usa `payOut`.
    */
   async approve(
     actorUserId: string,
@@ -208,6 +207,90 @@ export class CashExpenseRequestsService {
 
     const approvalNote = await this.notes.requireOperationalNote('Nota de aprobación', dto.approvalNote);
 
+    const req = await this.prisma.cashExpenseRequest.findUnique({
+      where: { id },
+      include: {
+        category: true,
+        requestedBy: { select: { id: true, email: true, fullName: true } },
+      },
+    });
+    if (!req) {
+      throw new NotFoundException('Solicitud no encontrada');
+    }
+    if (req.status !== CashExpenseRequestStatus.PENDING) {
+      throw new ConflictException('La solicitud ya no está pendiente');
+    }
+    if (this.isPendingExpired(req)) {
+      throw new GoneException('La solicitud expiró antes de poder aprobarse');
+    }
+
+    const updated = await this.prisma.cashExpenseRequest.updateMany({
+      where: { id, status: CashExpenseRequestStatus.PENDING },
+      data: {
+        status: CashExpenseRequestStatus.APPROVED,
+        reviewedById: actorUserId,
+        reviewedAt: new Date(),
+        approvalNote,
+      },
+    });
+
+    if (updated.count !== 1) {
+      throw new ConflictException('La solicitud ya no está pendiente');
+    }
+
+    const full = await this.prisma.cashExpenseRequest.findUnique({
+      where: { id },
+      include: this.defaultInclude(),
+    });
+    if (!full) {
+      throw new ConflictException('No se pudo cargar la solicitud tras aprobar');
+    }
+
+    await this.audit.recordDomain({
+      actorUserId,
+      action: 'cash_expense_requests.approved',
+      entityType: 'CashExpenseRequest',
+      entityId: id,
+      previousPayload: { status: CashExpenseRequestStatus.PENDING },
+      nextPayload: {
+        approvalNote,
+        requestNote: full.note?.trim() || null,
+        categorySlug: full.category.slug,
+        requestedBy: full.requestedBy
+          ? {
+              fullName: full.requestedBy.fullName ?? null,
+              email: full.requestedBy.email,
+            }
+          : null,
+        pendingCashRegister: true,
+      },
+      ipAddress: meta.ip ?? null,
+      userAgent: meta.userAgent ?? null,
+    });
+
+    return this.enrich(full as never);
+  }
+
+  /**
+   * Registra el egreso en caja para una solicitud ya APPROVED (cajero / delegado con permiso de egreso).
+   */
+  async payOut(
+    actorUserId: string,
+    id: string,
+    meta: { ip?: string; userAgent?: string },
+  ) {
+    const slugs = await this.access.getRoleSlugsForUser(actorUserId);
+    if (!this.access.isElevated(slugs)) {
+      const ok = await this.access.isExpenseDelegate(actorUserId);
+      if (!ok) {
+        throw new ForbiddenException(
+          'Solo dueño/administrador o delegados autorizados (máx. 3) pueden registrar el egreso en caja',
+        );
+      }
+    }
+
+    await this.flushExpiredPendingRequests();
+
     const result = await this.prisma.$transaction(async (tx) => {
       const req = await tx.cashExpenseRequest.findUnique({
         where: { id },
@@ -219,19 +302,21 @@ export class CashExpenseRequestsService {
       if (!req) {
         throw new NotFoundException('Solicitud no encontrada');
       }
-      if (req.status !== CashExpenseRequestStatus.PENDING) {
-        throw new ConflictException('La solicitud ya no está pendiente');
+      if (req.status !== CashExpenseRequestStatus.APPROVED) {
+        throw new ConflictException('La solicitud no está aprobada o ya fue procesada');
       }
-      if (this.isPendingExpired(req)) {
-        throw new GoneException('La solicitud expiró antes de poder aprobarse');
+      if (req.resultMovementId) {
+        throw new ConflictException('El egreso ya fue registrado en caja');
       }
 
       const session = await tx.cashSession.findFirst({
         where: { status: CashSessionStatus.OPEN },
       });
       if (!session) {
-        throw new ConflictException('No hay sesión de caja abierta; no se puede aprobar ahora');
+        throw new ConflictException('No hay sesión de caja abierta');
       }
+
+      const movementNote = this.buildMovementNote(req.note, req.approvalNote ?? undefined);
 
       const movement = await tx.cashMovement.create({
         data: {
@@ -241,62 +326,39 @@ export class CashExpenseRequestsService {
           amount: req.amount,
           referenceType: CASH_EXPENSE_REQUEST_REFERENCE_TYPE,
           referenceId: req.id,
-          note: this.buildMovementNote(req.note, approvalNote),
+          note: movementNote,
           createdById: actorUserId,
         },
       });
 
-      const updated = await tx.cashExpenseRequest.updateMany({
-        where: { id, status: CashExpenseRequestStatus.PENDING },
-        data: {
-          status: CashExpenseRequestStatus.APPROVED,
-          resultMovementId: movement.id,
-          reviewedById: actorUserId,
-          reviewedAt: new Date(),
-          approvalNote,
-        },
+      await tx.cashExpenseRequest.update({
+        where: { id },
+        data: { resultMovementId: movement.id },
       });
-
-      if (updated.count !== 1) {
-        throw new ConflictException('La solicitud ya no está pendiente');
-      }
 
       const full = await tx.cashExpenseRequest.findUnique({
         where: { id },
         include: this.defaultInclude(),
       });
       if (!full) {
-        throw new ConflictException('No se pudo cargar la solicitud tras aprobar');
+        throw new ConflictException('No se pudo cargar la solicitud tras registrar el egreso');
       }
       return { movement, full };
     });
 
-    const fullAfter = result.full;
-
     await this.audit.recordDomain({
       actorUserId,
-      action: 'cash_expense_requests.approved',
+      action: 'cash_expense_requests.paid_out',
       entityType: 'CashExpenseRequest',
       entityId: id,
-      previousPayload: { status: CashExpenseRequestStatus.PENDING },
+      previousPayload: { status: CashExpenseRequestStatus.APPROVED, resultMovementId: null },
       nextPayload: {
         movementId: result.movement.id,
-        amount: result.movement.amount.toFixed(2),
-        approvalNote,
-        requestNote: fullAfter.note?.trim() || null,
-        categorySlug: fullAfter.category.slug,
-        requestedBy: fullAfter.requestedBy
-          ? {
-              fullName: fullAfter.requestedBy.fullName ?? null,
-              email: fullAfter.requestedBy.email,
-            }
-          : null,
+        amount: ceilWholeCop(result.movement.amount).toString(),
       },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,
     });
-
-    const movementNote = this.buildMovementNote(fullAfter.note, approvalNote);
 
     await this.audit.recordDomain({
       actorUserId,
@@ -308,8 +370,8 @@ export class CashExpenseRequestsService {
         sessionId: result.movement.sessionId,
         fromExpenseRequestId: id,
         direction: CashMovementDirection.EXPENSE,
-        amount: result.movement.amount.toFixed(2),
-        note: movementNote,
+        amount: ceilWholeCop(result.movement.amount).toString(),
+        note: result.movement.note,
       },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,

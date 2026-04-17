@@ -24,6 +24,7 @@ const ACTION_TITLE: Record<string, string> = {
   'cash_delegates.set': 'Lista de delegados de egreso actualizada',
   'cash_expense_requests.created': 'Solicitud de egreso creada',
   'cash_expense_requests.approved': 'Solicitud de egreso aprobada',
+  'cash_expense_requests.paid_out': 'Egreso registrado en caja (solicitud aprobada)',
   'cash_expense_requests.rejected': 'Solicitud de egreso rechazada',
   'cash_expense_requests.cancelled': 'Solicitud de egreso cancelada',
   'work_orders.created': 'Orden de trabajo creada',
@@ -91,14 +92,14 @@ export function auditActionTone(action: string): AuditTone {
 }
 
 const TONE_CLASS: Record<AuditTone, string> = {
-  neutral: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
-  auth: 'bg-violet-100 text-violet-900 dark:bg-violet-950/60 dark:text-violet-200',
-  cash: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200',
-  orders: 'bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200',
-  inventory: 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200',
-  people: 'bg-blue-100 text-blue-900 dark:bg-blue-950/50 dark:text-blue-200',
-  security: 'bg-rose-100 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200',
-  http: 'bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200',
+  neutral: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100',
+  auth: 'bg-violet-100 text-violet-900 dark:bg-violet-900/80 dark:text-violet-50',
+  cash: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/80 dark:text-emerald-50',
+  orders: 'bg-sky-100 text-sky-900 dark:bg-sky-900/80 dark:text-sky-50',
+  inventory: 'bg-amber-100 text-amber-900 dark:bg-amber-900/80 dark:text-amber-50',
+  people: 'bg-blue-100 text-blue-900 dark:bg-blue-900/80 dark:text-blue-50',
+  security: 'bg-rose-100 text-rose-900 dark:bg-rose-900/80 dark:text-rose-50',
+  http: 'bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100',
 }
 
 export function auditToneBadgeClass(tone: AuditTone): string {

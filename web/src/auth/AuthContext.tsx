@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { api, setToken, getToken } from '../api/client'
 import type { AuthUser, LoginResponse } from '../api/types'
+import { getStoredLastModulePath } from '../utils/lastModule'
 import { mapMeToAuthUser, type MeApiUser } from './mapMeUser'
 
 type AuthState = {
@@ -17,6 +18,8 @@ type AuthState = {
   ready: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  /** Aplica token + usuario (login o cambio de vista por rol) y actualiza el estado. */
+  applyAuthResponse: (res: LoginResponse) => void
   can: (code: string) => boolean
 }
 
@@ -54,15 +57,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })()
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await api<LoginResponse>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    })
+  const applyAuthResponse = useCallback((res: LoginResponse) => {
     setToken(res.accessToken)
-    setUser(res.user)
-    navigate('/', { replace: true })
-  }, [navigate])
+    setUser({
+      id: res.user.id,
+      email: res.user.email,
+      fullName: res.user.fullName,
+      permissions: [...res.user.permissions],
+      roleSlugs: res.user.roleSlugs,
+      previewRole: res.user.previewRole,
+      portalCustomerId: res.user.portalCustomerId ?? null,
+    })
+  }, [])
+
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const res = await api<LoginResponse>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      })
+      applyAuthResponse(res)
+      navigate(getStoredLastModulePath() ?? '/', { replace: true })
+    },
+    [applyAuthResponse, navigate],
+  )
 
   const logout = useCallback(async () => {
     try {
@@ -84,8 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const value = useMemo(
-    () => ({ user, ready, login, logout, can }),
-    [user, ready, login, logout, can],
+    () => ({ user, ready, login, logout, applyAuthResponse, can }),
+    [user, ready, login, logout, applyAuthResponse, can],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -3,6 +3,8 @@ import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
+import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { VehiclesService } from './vehicles.service';
 
 describe('VehiclesService', () => {
@@ -13,9 +15,19 @@ describe('VehiclesService', () => {
     workOrder: { findMany: jest.Mock };
   };
   let audit: { recordDomain: jest.Mock };
+  let workOrders: { workOrderVisibilityWhere: jest.Mock };
+
+  const jwtActor = (sub: string): JwtUserPayload => ({
+    sub,
+    sid: 's',
+    email: 't@t.c',
+    fullName: 'T',
+    permissions: [],
+  });
 
   beforeEach(async () => {
     audit = { recordDomain: jest.fn().mockResolvedValue(undefined) };
+    workOrders = { workOrderVisibilityWhere: jest.fn().mockReturnValue({ createdById: 'u1' }) };
     prisma = {
       customer: { findUnique: jest.fn() },
       vehicle: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
@@ -27,6 +39,7 @@ describe('VehiclesService', () => {
         VehiclesService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: audit },
+        { provide: WorkOrdersService, useValue: workOrders },
       ],
     }).compile();
 
@@ -69,11 +82,12 @@ describe('VehiclesService', () => {
     prisma.vehicle.findUnique.mockResolvedValue({ id: 'v1' });
     prisma.workOrder.findMany.mockResolvedValue([]);
 
-    await service.listWorkOrders('v1');
+    await service.listWorkOrders('v1', jwtActor('u1'));
 
+    expect(workOrders.workOrderVisibilityWhere).toHaveBeenCalledWith(jwtActor('u1'));
     expect(prisma.workOrder.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { vehicleId: 'v1' },
+        where: { vehicleId: 'v1', createdById: 'u1' },
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),

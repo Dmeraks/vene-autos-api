@@ -34,12 +34,34 @@ const DIAN_ENUM_OPTIONS = {
     { value: 'async', label: 'Asíncrono (recomendado)' },
     { value: 'sync', label: 'Síncrono (solo si el proveedor responde rápido)' },
   ],
+  'workshop.regime': [
+    { value: 'natural_no_obligado', label: 'Persona natural — No obligada a facturar' },
+    { value: 'natural_obligado', label: 'Persona natural — Obligada a facturar' },
+    { value: 'juridica_responsable_iva', label: 'Persona jurídica — Responsable de IVA' },
+    { value: 'juridica_no_responsable', label: 'Persona jurídica — No responsable de IVA' },
+  ],
+  'workshop.document_kind': [
+    { value: 'CC', label: 'Cédula de ciudadanía (CC)' },
+    { value: 'CE', label: 'Cédula de extranjería (CE)' },
+    { value: 'NIT', label: 'NIT' },
+    { value: 'PASAPORTE', label: 'Pasaporte' },
+  ],
 } as const satisfies Record<string, ReadonlyArray<{ value: string; label: string }>>
 
 type DianEnumKey = keyof typeof DIAN_ENUM_OPTIONS
 
 function isDianBooleanKey(key: string): boolean {
-  return key === 'dian.enabled'
+  return key === 'dian.enabled' || key === 'billing.electronic_invoice_enabled'
+}
+
+/** Fase 7.6 · Booleano de caja (auto-impresión del arqueo). */
+function isCashBooleanKey(key: string): boolean {
+  return key === 'cash.arqueo_autoprint_enabled'
+}
+
+/** Fase 8 · Entero no negativo (umbral de stock crítico). */
+function isInventoryIntKey(key: string): boolean {
+  return key === 'inventory.stock_critical_threshold'
 }
 
 function isDianEnumKey(key: string): key is DianEnumKey {
@@ -55,6 +77,8 @@ function settingFieldWidthClass(key: string): string {
   if (key === PANEL_THEME_KEY) return 'w-full max-w-md'
   if (isUserCreatePolicyKey(key)) return 'w-full max-w-[12rem]'
   if (isDianBooleanKey(key)) return 'w-full max-w-[12rem]'
+  if (isCashBooleanKey(key)) return 'w-full max-w-[12rem]'
+  if (isInventoryIntKey(key)) return 'w-full max-w-[9rem] font-mono tabular-nums'
   if (isDianEnumKey(key)) return 'w-full max-w-md'
   if (key === 'dian.api_base_url' || key === 'dian.api_token') return 'w-full max-w-2xl font-mono'
   if (
@@ -73,6 +97,19 @@ function settingFieldWidthClass(key: string): string {
   if (key === 'workshop.name' || key === 'workshop.timezone' || key === 'workshop.currency') {
     return 'w-full max-w-xl'
   }
+  if (
+    key === 'workshop.legal_name' ||
+    key === 'workshop.address' ||
+    key === 'workshop.city' ||
+    key === 'workshop.phone' ||
+    key === 'workshop.email' ||
+    key === 'workshop.document_id'
+  ) {
+    return 'w-full max-w-xl'
+  }
+  if (key === 'workshop.receipt_footer') {
+    return 'w-full max-w-2xl'
+  }
   if (key.startsWith('notes.')) {
     return 'w-full max-w-[9rem] font-mono tabular-nums sm:max-w-[10rem]'
   }
@@ -89,6 +126,19 @@ function mergeSettingsFromServer(m: Record<string, unknown>): Record<string, unk
   const out = { ...m }
   if (!(WORK_ORDER_PAYMENT_NOTE_KEY in out)) out[WORK_ORDER_PAYMENT_NOTE_KEY] = DEFAULT_WORK_ORDER_PAYMENT_MIN
   if (!(PANEL_THEME_KEY in out)) out[PANEL_THEME_KEY] = 'standard'
+  // Fase 7.5: valores por defecto para facturación e identidad del taller.
+  if (!('billing.electronic_invoice_enabled' in out)) out['billing.electronic_invoice_enabled'] = false
+  if (!('workshop.legal_name' in out)) out['workshop.legal_name'] = ''
+  if (!('workshop.document_kind' in out)) out['workshop.document_kind'] = 'CC'
+  if (!('workshop.document_id' in out)) out['workshop.document_id'] = ''
+  if (!('workshop.address' in out)) out['workshop.address'] = ''
+  if (!('workshop.city' in out)) out['workshop.city'] = ''
+  if (!('workshop.phone' in out)) out['workshop.phone'] = ''
+  if (!('workshop.email' in out)) out['workshop.email'] = ''
+  if (!('workshop.regime' in out)) out['workshop.regime'] = 'natural_no_obligado'
+  if (!('workshop.receipt_footer' in out)) out['workshop.receipt_footer'] = ''
+  if (!('cash.arqueo_autoprint_enabled' in out)) out['cash.arqueo_autoprint_enabled'] = false
+  if (!('inventory.stock_critical_threshold' in out)) out['inventory.stock_critical_threshold'] = 3
   return out
 }
 
@@ -107,6 +157,13 @@ function parseValue(key: string, raw: string): unknown {
   if (isDianBooleanKey(key)) {
     return t === 'true' || t === '1' || t === 'sí'
   }
+  if (isCashBooleanKey(key)) {
+    return t === 'true' || t === '1' || t === 'sí'
+  }
+  if (isInventoryIntKey(key)) {
+    const n = parseInt(t, 10)
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  }
   if (isDianEnumKey(key)) {
     return t
   }
@@ -115,6 +172,12 @@ function parseValue(key: string, raw: string): unknown {
     return Number.isFinite(n) ? n : t
   }
   if (key.startsWith('dian.')) {
+    return t
+  }
+  // Campos de texto libre del taller (razón social, NIT/CC, dirección, teléfono, etc.).
+  // Sin esta rama, un NIT como "900123456" entraría al fallback y `JSON.parse` lo convertiría
+  // en número, y el backend rechazaría con "… debe ser texto (puede quedar vacío)".
+  if (key.startsWith('workshop.')) {
     return t
   }
   try {
@@ -155,6 +218,27 @@ const SETTING_SECTIONS: Array<{
     title: 'Notas operativas',
     description: 'Mínimos de caracteres en notas.',
     match: (key) => key.startsWith('notes.'),
+  },
+  {
+    id: 'billing',
+    title: 'Facturación',
+    description:
+      'Interruptor maestro del módulo fiscal. Apagado (por defecto): se entrega comprobante interno (OT o venta) como constancia al cliente. Encendido: se habilita el módulo «Facturación» y la emisión DIAN.',
+    match: (key) => key.startsWith('billing.'),
+  },
+  {
+    id: 'cash',
+    title: 'Caja',
+    description:
+      'Preferencias operativas de la caja (auto-impresión de arqueo al cerrar la sesión, etc.). No afecta permisos ni montos.',
+    match: (key) => key.startsWith('cash.'),
+  },
+  {
+    id: 'inventory',
+    title: 'Inventario',
+    description:
+      'Parámetros operativos del inventario. El umbral de stock crítico decide qué ítems aparecen en el informe «Stock crítico» (los que tienen cantidad en mano ≤ umbral).',
+    match: (key) => key.startsWith('inventory.'),
   },
   {
     id: 'dian',
@@ -531,9 +615,40 @@ export function SettingsPage() {
                                   onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
                                   className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
                                 >
-                                  <option value="false">No (sin emisión)</option>
-                                  <option value="true">Sí (emitir a DIAN)</option>
+                                  <option value="false">
+                                    {key === 'billing.electronic_invoice_enabled'
+                                      ? 'No (solo comprobantes internos)'
+                                      : 'No (sin emisión)'}
+                                  </option>
+                                  <option value="true">
+                                    {key === 'billing.electronic_invoice_enabled'
+                                      ? 'Sí (habilitar módulo fiscal)'
+                                      : 'Sí (emitir a DIAN)'}
+                                  </option>
                                 </select>
+                              ) : isCashBooleanKey(key) ? (
+                                <select
+                                  id={fieldId}
+                                  value={draft[key] === 'true' ? 'true' : 'false'}
+                                  disabled={!canSaveSettings}
+                                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                                  className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
+                                >
+                                  <option value="false">No (imprimo manualmente)</option>
+                                  <option value="true">Sí (abre solito el ticket al cerrar)</option>
+                                </select>
+                              ) : isInventoryIntKey(key) ? (
+                                <input
+                                  id={fieldId}
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  value={draft[key] ?? ''}
+                                  disabled={!canSaveSettings}
+                                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                                  className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
+                                  placeholder="3"
+                                />
                               ) : isDianEnumKey(key) ? (
                                 <select
                                   id={fieldId}

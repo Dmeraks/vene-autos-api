@@ -2,11 +2,13 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { MONEY_DECIMAL_REGEX } from '../../cash/cash.constants';
@@ -24,10 +26,23 @@ export class PurchaseReceiptLineInputDto {
   })
   quantity!: string;
 
+  /** Costo por unidad de inventario (cantidad ya en esa unidad). No combinar con `lineTotalCost`. */
+  @ValidateIf((o: PurchaseReceiptLineInputDto) => !o.lineTotalCost?.trim())
   @IsOptional()
   @IsString()
-  @Matches(MONEY_DECIMAL_REGEX, { message: 'Costo unitario inválido' })
+  @Matches(MONEY_DECIMAL_REGEX, {
+    message: 'Costo unitario: solo pesos enteros en dígitos, sin decimales',
+  })
   unitCost?: string;
+
+  /** Total pagado por la cantidad de la línea (ej. caneca completa). No combinar con `unitCost`. */
+  @ValidateIf((o: PurchaseReceiptLineInputDto) => !o.unitCost?.trim())
+  @IsOptional()
+  @IsString()
+  @Matches(MONEY_DECIMAL_REGEX, {
+    message: 'Costo total de línea: solo pesos enteros en dígitos, sin decimales',
+  })
+  lineTotalCost?: string;
 }
 
 export class CreatePurchaseReceiptDto {
@@ -39,6 +54,11 @@ export class CreatePurchaseReceiptDto {
   @IsString()
   @MaxLength(200)
   supplierReference?: string;
+
+  /** `CASH_REGISTER`: egreso en caja física (sesión abierta). `BANK_TRANSFER`: no mueve caja. */
+  @IsOptional()
+  @IsIn(['CASH_REGISTER', 'BANK_TRANSFER'])
+  paymentSource?: 'CASH_REGISTER' | 'BANK_TRANSFER';
 
   @IsArray()
   @ArrayMinSize(1)

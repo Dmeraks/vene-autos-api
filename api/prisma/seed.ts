@@ -285,6 +285,40 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
     description: 'Emitir nota crédito contra una factura aceptada por DIAN',
   },
   {
+    resource: 'credit_notes',
+    action: 'issue',
+    description:
+      'Enviar la nota crédito al proveedor DIAN (DRAFT → ISSUED). Al aceptarse, reduce el saldo cobrable de la factura',
+  },
+  {
+    resource: 'credit_notes',
+    action: 'void',
+    description:
+      'Anular una nota crédito local (DRAFT o aceptada pero no utilizada). Queda en auditoría',
+  },
+  {
+    resource: 'debit_notes',
+    action: 'read',
+    description: 'Ver notas débito emitidas',
+  },
+  {
+    resource: 'debit_notes',
+    action: 'create',
+    description:
+      'Emitir nota débito contra una factura para cargos adicionales (corrección de precio, interés, recargos)',
+  },
+  {
+    resource: 'debit_notes',
+    action: 'issue',
+    description:
+      'Enviar la nota débito al proveedor DIAN (DRAFT → ISSUED). Al aceptarse, incrementa el saldo cobrable y reabre cobro si la factura estaba saldada',
+  },
+  {
+    resource: 'debit_notes',
+    action: 'void',
+    description: 'Anular una nota débito local (DRAFT o aceptada pero no cobrada). Queda en auditoría',
+  },
+  {
     resource: 'dian',
     action: 'manage_dispatch',
     description: 'Administrar la cola de envío a DIAN (reintentos, revisión manual)',
@@ -375,6 +409,12 @@ const BACKEND_REQUIRED_PERMISSION_CODES: readonly string[] = [
   'invoices:record_payment',
   'credit_notes:read',
   'credit_notes:create',
+  'credit_notes:issue',
+  'credit_notes:void',
+  'debit_notes:read',
+  'debit_notes:create',
+  'debit_notes:issue',
+  'debit_notes:void',
   'dian:manage_dispatch',
 ];
 
@@ -402,11 +442,41 @@ const CASH_CATEGORIES: Array<{
     direction: CashMovementDirection.EXPENSE,
     sortOrder: 30,
   },
+  /**
+   * Medios de pago operativos (Fase 8). `ingreso_cobro` queda como la categoría histórica /
+   * efectivo genérico para compatibilidad con movimientos anteriores; las categorías por
+   * medio de pago específico (transferencia, tarjeta, Nequi, Daviplata) permiten reportar
+   * «Ventas por medio de pago» sin cambiar el modelo de Payment.
+   */
   {
     slug: 'ingreso_cobro',
-    name: 'Cobro / ingreso operativo',
+    name: 'Cobro en efectivo',
     direction: CashMovementDirection.INCOME,
     sortOrder: 40,
+  },
+  {
+    slug: 'ingreso_transferencia',
+    name: 'Cobro por transferencia bancaria',
+    direction: CashMovementDirection.INCOME,
+    sortOrder: 41,
+  },
+  {
+    slug: 'ingreso_tarjeta',
+    name: 'Cobro con tarjeta débito/crédito',
+    direction: CashMovementDirection.INCOME,
+    sortOrder: 42,
+  },
+  {
+    slug: 'ingreso_nequi',
+    name: 'Cobro por Nequi',
+    direction: CashMovementDirection.INCOME,
+    sortOrder: 43,
+  },
+  {
+    slug: 'ingreso_daviplata',
+    name: 'Cobro por Daviplata',
+    direction: CashMovementDirection.INCOME,
+    sortOrder: 44,
   },
   {
     slug: 'ingreso_otro',
@@ -554,6 +624,7 @@ async function main() {
     'invoices:create',
     'invoices:record_payment',
     'credit_notes:read',
+    'debit_notes:read',
   ];
   const cajeroPerms = pick(...cajeroCodes);
   const cajeroRole = await prisma.role.upsert({
@@ -845,6 +916,44 @@ async function main() {
     { key: 'dian.test_set_id', value: '' },
   ];
   for (const s of DIAN_SETTINGS) {
+    await prisma.workshopSetting.upsert({
+      where: { key: s.key },
+      create: { key: s.key, value: s.value as Prisma.InputJsonValue },
+      update: {},
+    });
+  }
+
+  /**
+   * Fase 7.5 — Datos del taller para el encabezado de comprobantes imprimibles (OT y venta)
+   * y el interruptor maestro de facturación electrónica. Mientras `billing.electronic_invoice_enabled`
+   * sea `false`, la app opera en modo "persona natural": se entregan recibos internos al cliente
+   * con la leyenda fiscal que corresponda según `workshop.regime`.
+   */
+  const BILLING_AND_WORKSHOP_SETTINGS: Array<{ key: string; value: unknown }> = [
+    { key: 'billing.electronic_invoice_enabled', value: false },
+    { key: 'workshop.legal_name', value: '' },
+    { key: 'workshop.document_kind', value: 'CC' },
+    { key: 'workshop.document_id', value: '' },
+    { key: 'workshop.address', value: '' },
+    { key: 'workshop.city', value: '' },
+    { key: 'workshop.phone', value: '' },
+    { key: 'workshop.email', value: '' },
+    { key: 'workshop.regime', value: 'natural_no_obligado' },
+    { key: 'workshop.receipt_footer', value: '' },
+    /**
+     * Fase 7.6 — Al cerrar sesión de caja, si `cash.arqueo_autoprint_enabled=true` el panel
+     * abre solito la ventana del ticket de arqueo con `?autoprint=1`. Por defecto queda
+     * en `false` para que el cajero decida cuándo imprimir.
+     */
+    { key: 'cash.arqueo_autoprint_enabled', value: false },
+    /**
+     * Fase 8 — Informe «Stock crítico»: un ítem activo con `trackStock=true` aparece en
+     * el reporte cuando `quantityOnHand ≤ inventory.stock_critical_threshold`. Se expresa
+     * en unidades enteras (ej. 3); se almacena como número para simplificar comparaciones.
+     */
+    { key: 'inventory.stock_critical_threshold', value: 3 },
+  ];
+  for (const s of BILLING_AND_WORKSHOP_SETTINGS) {
     await prisma.workshopSetting.upsert({
       where: { key: s.key },
       create: { key: s.key, value: s.value as Prisma.InputJsonValue },

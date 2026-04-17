@@ -13,26 +13,40 @@ import {
 import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { formatWorkOrderPublicCode } from './work-order-public-code';
 import { WorkOrderPaymentsService } from './work-order-payments.service';
+import { WorkOrdersService } from './work-orders.service';
+import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
 
 const WO_ID = 'clwo0000000000000000000001';
 const USER_ID = 'clusr000000000000000000001';
 
 const LONG_NOTE = 'Nota operativa de cobro con suficiente texto. '.repeat(2);
 
+const payActor = (sub: string): JwtUserPayload => ({
+  sub,
+  sid: 's',
+  email: 'p@p.c',
+  fullName: 'Pay',
+  permissions: [],
+});
+
 describe('WorkOrderPaymentsService', () => {
   let service: WorkOrderPaymentsService;
   let prisma: { $transaction: jest.Mock };
   let audit: { recordDomain: jest.Mock };
   let notes: { requireOperationalNote: jest.Mock };
+  let workOrders: { assertWorkOrderVisible: jest.Mock };
 
   function makeTx(setup: {
     wo?: {
       id: string;
       orderNumber: number;
+      publicCode?: string;
       status: WorkOrderStatus;
       authorizedAmount: Prisma.Decimal | null;
     } | null;
+    lines?: Array<{ quantity: Prisma.Decimal; unitPrice: Prisma.Decimal | null }>;
     paidSum?: Prisma.Decimal | null;
     session?: { id: string } | null;
     category?: { id: string; slug: string; direction: CashMovementDirection } | null;
@@ -52,7 +66,18 @@ describe('WorkOrderPaymentsService', () => {
     return {
       $executeRaw: jest.fn().mockResolvedValue(1),
       workOrder: {
-        findUnique: jest.fn().mockResolvedValue(setup.wo ?? null),
+        findUnique: jest.fn().mockResolvedValue(
+          setup.wo
+            ? {
+                ...setup.wo,
+                publicCode: setup.wo.publicCode ?? formatWorkOrderPublicCode(setup.wo.orderNumber),
+              }
+            : null,
+        ),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      workOrderLine: {
+        findMany: jest.fn().mockResolvedValue(setup.lines ?? []),
       },
       workOrderPayment: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: setup.paidSum ?? null } }),
@@ -104,6 +129,7 @@ describe('WorkOrderPaymentsService', () => {
         },
       ),
     };
+    workOrders = { assertWorkOrderVisible: jest.fn().mockResolvedValue(undefined) };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -111,6 +137,7 @@ describe('WorkOrderPaymentsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: audit },
         { provide: NotesPolicyService, useValue: notes },
+        { provide: WorkOrdersService, useValue: workOrders },
       ],
     }).compile();
 
@@ -119,7 +146,12 @@ describe('WorkOrderPaymentsService', () => {
 
   it('rechaza monto cero sin abrir transacción', async () => {
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '0', note: LONG_NOTE }, { ip: undefined, userAgent: undefined }),
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'partial', amount: '0', note: LONG_NOTE },
+        { ip: undefined, userAgent: undefined },
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -139,7 +171,60 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '10', note: LONG_NOTE }, { ip: undefined, userAgent: undefined }),
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'partial', amount: '10', note: LONG_NOTE },
+        { ip: undefined, userAgent: undefined },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rechaza OT sin asignar (cola)', async () => {
+    prisma.$transaction.mockImplementation(async (fn: (tx: ReturnType<typeof makeTx>) => Promise<unknown>) =>
+      fn(
+        makeTx({
+          wo: {
+            id: WO_ID,
+            orderNumber: 1,
+            status: WorkOrderStatus.UNASSIGNED,
+            authorizedAmount: null,
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'partial', amount: '10', note: LONG_NOTE },
+        { ip: undefined, userAgent: undefined },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rechaza OT entregada', async () => {
+    prisma.$transaction.mockImplementation(async (fn: (tx: ReturnType<typeof makeTx>) => Promise<unknown>) =>
+      fn(
+        makeTx({
+          wo: {
+            id: WO_ID,
+            orderNumber: 1,
+            status: WorkOrderStatus.DELIVERED,
+            authorizedAmount: null,
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'partial', amount: '10', note: LONG_NOTE },
+        { ip: undefined, userAgent: undefined },
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -159,7 +244,12 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '30', note: LONG_NOTE }, { ip: undefined, userAgent: undefined }),
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'partial', amount: '30', note: LONG_NOTE },
+        { ip: undefined, userAgent: undefined },
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -171,7 +261,7 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: null,
+            authorizedAmount: new Prisma.Decimal('500'),
           },
           session: null,
         }),
@@ -179,7 +269,12 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '10', note: LONG_NOTE }, { ip: undefined, userAgent: undefined }),
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'partial', amount: '10', note: LONG_NOTE },
+        { ip: undefined, userAgent: undefined },
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -191,7 +286,7 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: null,
+            authorizedAmount: new Prisma.Decimal('500'),
           },
           category: null,
         }),
@@ -199,7 +294,12 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '10', categorySlug: 'no_existe', note: LONG_NOTE }, {}),
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'partial', amount: '10', categorySlug: 'no_existe', note: LONG_NOTE },
+        {},
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -211,7 +311,7 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: null,
+            authorizedAmount: new Prisma.Decimal('500'),
           },
           categoryDirection: CashMovementDirection.EXPENSE,
         }),
@@ -219,7 +319,62 @@ describe('WorkOrderPaymentsService', () => {
     );
 
     await expect(
-      service.record(WO_ID, USER_ID, { amount: '10', note: LONG_NOTE }, {}),
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'partial', amount: '10', note: LONG_NOTE },
+        {},
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rechaza abono que liquida el total (debe usar pago total)', async () => {
+    prisma.$transaction.mockImplementation(async (fn: (tx: ReturnType<typeof makeTx>) => Promise<unknown>) =>
+      fn(
+        makeTx({
+          wo: {
+            id: WO_ID,
+            orderNumber: 1,
+            status: WorkOrderStatus.RECEIVED,
+            authorizedAmount: new Prisma.Decimal('100'),
+          },
+          paidSum: new Prisma.Decimal('80'),
+        }),
+      ),
+    );
+
+    await expect(
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'partial', amount: '20', note: LONG_NOTE },
+        {},
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rechaza pago total si el monto no iguala el saldo', async () => {
+    prisma.$transaction.mockImplementation(async (fn: (tx: ReturnType<typeof makeTx>) => Promise<unknown>) =>
+      fn(
+        makeTx({
+          wo: {
+            id: WO_ID,
+            orderNumber: 1,
+            status: WorkOrderStatus.RECEIVED,
+            authorizedAmount: new Prisma.Decimal('100'),
+          },
+          paidSum: new Prisma.Decimal('0'),
+        }),
+      ),
+    );
+
+    await expect(
+      service.record(
+        WO_ID,
+        payActor(USER_ID),
+        { paymentKind: 'full', amount: '50', note: LONG_NOTE },
+        {},
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -238,14 +393,51 @@ describe('WorkOrderPaymentsService', () => {
       ),
     );
 
-    const out = await service.record(WO_ID, USER_ID, { amount: '50.00', note: LONG_NOTE }, {
-      ip: '127.0.0.1',
-      userAgent: 'jest',
-    });
+    const out = await service.record(
+      WO_ID,
+      payActor(USER_ID),
+      { paymentKind: 'partial', amount: '50', note: LONG_NOTE },
+      {
+        ip: '127.0.0.1',
+        userAgent: 'jest',
+      },
+    );
 
     expect(out.id).toBe('pay-1');
     expect(audit.recordDomain).toHaveBeenCalledTimes(2);
     expect(audit.recordDomain.mock.calls[0][0].action).toBe('work_orders.payment_recorded');
     expect(audit.recordDomain.mock.calls[1][0].action).toBe('cash_movements.income');
+  });
+
+  it('pago total marca entregada y audita tres eventos', async () => {
+    const txHolder: { tx?: ReturnType<typeof makeTx> } = {};
+    prisma.$transaction.mockImplementation(async (fn: (tx: ReturnType<typeof makeTx>) => Promise<unknown>) => {
+      txHolder.tx = makeTx({
+        wo: {
+          id: WO_ID,
+          orderNumber: 7,
+          status: WorkOrderStatus.READY,
+          authorizedAmount: new Prisma.Decimal('150'),
+        },
+        paidSum: new Prisma.Decimal('50'),
+      });
+      return fn(txHolder.tx);
+    });
+
+    await service.record(
+      WO_ID,
+      payActor(USER_ID),
+      { paymentKind: 'full', amount: '100', note: LONG_NOTE },
+      {},
+    );
+
+    expect(txHolder.tx!.workOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: WO_ID },
+        data: expect.objectContaining({ status: WorkOrderStatus.DELIVERED }),
+      }),
+    );
+    expect(audit.recordDomain).toHaveBeenCalledTimes(3);
+    expect(audit.recordDomain.mock.calls[2][0].action).toBe('work_orders.delivered_by_full_payment');
   });
 });

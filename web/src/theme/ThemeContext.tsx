@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 
-export type ThemePreference = 'light' | 'dark' | 'system'
+export type ThemePreference = 'light' | 'dark'
 
 const STORAGE_KEY = 'vene-theme-preference'
 
@@ -20,24 +20,19 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
-function readStored(): ThemePreference {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY)
-    if (v === 'light' || v === 'dark' || v === 'system') return v
-  } catch {
-    /* private mode */
-  }
-  return 'system'
-}
-
 function systemIsDark(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
-function resolve(pref: ThemePreference): 'light' | 'dark' {
-  if (pref === 'dark') return 'dark'
-  if (pref === 'light') return 'light'
-  return systemIsDark() ? 'dark' : 'light'
+function readStored(): ThemePreference {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY)
+    if (v === 'light' || v === 'dark') return v
+    if (v === 'system') return systemIsDark() ? 'dark' : 'light'
+  } catch {
+    /* private mode */
+  }
+  return 'light'
 }
 
 function applyDom(isDark: boolean) {
@@ -48,16 +43,20 @@ function applyDom(isDark: boolean) {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>(readStored)
 
+  /** Migra valor legacy `system` en localStorage a claro u oscuro (una sola vez). */
   useLayoutEffect(() => {
-    applyDom(resolve(preference) === 'dark')
-  }, [preference])
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw === 'system') {
+        localStorage.setItem(STORAGE_KEY, systemIsDark() ? 'dark' : 'light')
+      }
+    } catch {
+      /* */
+    }
+  }, [])
 
   useLayoutEffect(() => {
-    if (preference !== 'system') return
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => applyDom(resolve('system') === 'dark')
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
+    applyDom(preference === 'dark')
   }, [preference])
 
   const setPreference = useCallback((p: ThemePreference) => {

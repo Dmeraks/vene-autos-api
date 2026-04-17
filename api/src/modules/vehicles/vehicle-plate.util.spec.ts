@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { normalizeVehiclePlate } from './vehicle-plate.util';
+import { comparableVehiclePlate, normalizeVehiclePlate } from './vehicle-plate.util';
 
 describe('normalizeVehiclePlate', () => {
   it('mayúsculas y quita espacios internos', () => {
@@ -20,5 +20,17 @@ describe('normalizeVehiclePlate', () => {
 
   it('acepta exactamente 20 caracteres', () => {
     expect(normalizeVehiclePlate('A'.repeat(20))).toBe('A'.repeat(20));
+  });
+});
+
+describe('comparableVehiclePlate', () => {
+  it('unifica guiones y espacios para la misma placa', () => {
+    expect(comparableVehiclePlate('ekp-112')).toBe('EKP112');
+    expect(comparableVehiclePlate('EKP 112')).toBe('EKP112');
+    expect(comparableVehiclePlate('EKP112')).toBe('EKP112');
+  });
+
+  it('rechaza vacío', () => {
+    expect(() => comparableVehiclePlate('  -  ')).toThrow(BadRequestException);
   });
 });

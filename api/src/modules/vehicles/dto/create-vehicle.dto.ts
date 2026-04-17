@@ -1,8 +1,9 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsPrismaCuid } from '../../../common/decorators/is-prisma-cuid.decorator';
 
 export class CreateVehicleDto {
-  @IsUUID()
+  @IsPrismaCuid()
   customerId!: string;
 
   @IsString()

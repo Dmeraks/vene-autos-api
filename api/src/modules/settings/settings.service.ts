@@ -100,7 +100,123 @@ function assertKnownSettingValue(key: string, value: unknown): void {
       );
     }
   }
+  assertWorkshopSettingValue(key, value);
+  assertBillingSettingValue(key, value);
+  assertCashSettingValue(key, value);
+  assertInventorySettingValue(key, value);
   assertDianSettingValue(key, value);
+}
+
+/**
+ * Parámetros de inventario (Fase 8). `inventory.stock_critical_threshold` define el umbral
+ * global por debajo del cual un ítem activo con `trackStock=true` aparece en el informe
+ * «Stock crítico». Entero ≥ 0 (ej. 3 unidades). Valores no numéricos o negativos se rechazan.
+ */
+function assertInventorySettingValue(key: string, value: unknown): void {
+  if (!key.startsWith('inventory.')) return;
+  if (key === 'inventory.stock_critical_threshold') {
+    const num =
+      typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+        ? Number.parseInt(value, 10)
+        : Number.NaN;
+    if (!Number.isFinite(num) || num < 0 || !Number.isInteger(num)) {
+      throw new BadRequestException(
+        'inventory.stock_critical_threshold debe ser un entero ≥ 0 (por ejemplo 3).',
+      );
+    }
+    return;
+  }
+}
+
+/**
+ * Parámetros de caja (Fase 7.6). `cash.arqueo_autoprint_enabled` abre automáticamente el
+ * ticket de arqueo tras cerrar la sesión; por defecto queda en `false` para que el cajero
+ * elija cuándo imprimir.
+ */
+function assertCashSettingValue(key: string, value: unknown): void {
+  if (!key.startsWith('cash.')) return;
+  if (key === 'cash.arqueo_autoprint_enabled') {
+    if (value !== true && value !== false && value !== 'true' && value !== 'false') {
+      throw new BadRequestException('cash.arqueo_autoprint_enabled debe ser true o false.');
+    }
+    return;
+  }
+}
+
+/**
+ * Datos del taller (Fase 7.5). Se muestran en el encabezado de comprobantes
+ * imprimibles y en pantallas administrativas. El régimen fiscal gobierna qué
+ * leyenda lleva el pie del recibo ("Documento no fiscal — persona natural no
+ * obligada a facturar", etc.).
+ */
+const WORKSHOP_REGIMES = new Set([
+  'natural_no_obligado',
+  'natural_obligado',
+  'juridica_responsable_iva',
+  'juridica_no_responsable',
+]);
+
+const WORKSHOP_DOCUMENT_KINDS = new Set(['NIT', 'CC', 'CE', 'PASAPORTE']);
+
+function assertWorkshopSettingValue(key: string, value: unknown): void {
+  if (!key.startsWith('workshop.')) return;
+
+  if (key === 'workshop.regime') {
+    if (typeof value !== 'string' || !WORKSHOP_REGIMES.has(value)) {
+      throw new BadRequestException(
+        `workshop.regime debe ser uno de: ${[...WORKSHOP_REGIMES].join(', ')}.`,
+      );
+    }
+    return;
+  }
+  if (key === 'workshop.document_kind') {
+    if (typeof value !== 'string' || !WORKSHOP_DOCUMENT_KINDS.has(value)) {
+      throw new BadRequestException(
+        `workshop.document_kind debe ser uno de: ${[...WORKSHOP_DOCUMENT_KINDS].join(', ')}.`,
+      );
+    }
+    return;
+  }
+  if (
+    key === 'workshop.legal_name' ||
+    key === 'workshop.document_id' ||
+    key === 'workshop.address' ||
+    key === 'workshop.city' ||
+    key === 'workshop.phone' ||
+    key === 'workshop.email' ||
+    key === 'workshop.receipt_footer' ||
+    key === 'workshop.name' ||
+    key === 'workshop.currency' ||
+    key === 'workshop.timezone'
+  ) {
+    if (value === null || value === undefined) return;
+    if (typeof value !== 'string') {
+      throw new BadRequestException(`${key} debe ser texto (puede quedar vacío).`);
+    }
+    if (value.length > 500) {
+      throw new BadRequestException(`${key} no puede superar 500 caracteres.`);
+    }
+    return;
+  }
+}
+
+/**
+ * Parámetros transversales de facturación (Fase 7.5). `billing.electronic_invoice_enabled`
+ * funciona como interruptor maestro del módulo fiscal: mientras sea `false`, el sistema
+ * opera con comprobantes internos (OT/Venta) sin exigir resolución DIAN.
+ */
+function assertBillingSettingValue(key: string, value: unknown): void {
+  if (!key.startsWith('billing.')) return;
+  if (key === 'billing.electronic_invoice_enabled') {
+    if (value !== true && value !== false && value !== 'true' && value !== 'false') {
+      throw new BadRequestException(
+        'billing.electronic_invoice_enabled debe ser true o false.',
+      );
+    }
+    return;
+  }
 }
 
 /**

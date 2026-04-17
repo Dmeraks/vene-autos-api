@@ -32,8 +32,8 @@ export class VehiclesController {
 
   @Get(':id/work-orders')
   @RequirePermissions('work_orders:read')
-  listWorkOrders(@Param('id') id: string) {
-    return this.vehicles.listWorkOrders(id);
+  listWorkOrders(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload) {
+    return this.vehicles.listWorkOrders(id, actor);
   }
 
   @Get(':id')

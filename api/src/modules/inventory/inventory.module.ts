@@ -3,6 +3,7 @@
  */
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { CashModule } from '../cash/cash.module';
 import { InventoryItemsController } from './inventory-items.controller';
 import { InventoryItemsService } from './inventory-items.service';
 import { MeasurementUnitsController } from './measurement-units.controller';
@@ -11,7 +12,7 @@ import { PurchaseReceiptsController } from './purchase-receipts.controller';
 import { PurchaseReceiptsService } from './purchase-receipts.service';
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, CashModule],
   controllers: [MeasurementUnitsController, InventoryItemsController, PurchaseReceiptsController],
   providers: [MeasurementUnitsService, InventoryItemsService, PurchaseReceiptsService],
   exports: [InventoryItemsService, PurchaseReceiptsService, MeasurementUnitsService],

@@ -14,7 +14,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
     id: 'mecanico',
     label: 'Mecánico / taller',
     description:
-      'Órdenes de trabajo, líneas, clientes y vehículos; inventario solo consulta. Sin caja ni cobros en OT.',
+      'Órdenes de trabajo, líneas (agregar repuesto con ítem y cantidad sin precio; precios y quitar repuestos ya cargados: cajero/admin/dueño), clientes y vehículos; inventario solo consulta. Sin caja ni cobros en OT.',
     permissionCodes: [
       'permissions:read',
       'work_orders:read',
@@ -51,10 +51,9 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
     id: 'recepcion_caja',
     label: 'Recepción y caja (tipo cajero)',
     description:
-      'Caja (apertura, ingresos, solicitudes de egreso), OT con cobro en caja, clientes y vehículos.',
+      'Caja (apertura, ingresos, solicitudes de egreso), OT con cobro en caja, clientes y vehículos. Sin inventario ni configuración.',
     permissionCodes: [
       'permissions:read',
-      'settings:read',
       'cash_sessions:read',
       'cash_sessions:open',
       'cash_movements:read',
@@ -63,6 +62,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'cash_expense_requests:read',
       'cash_expense_requests:cancel',
       'work_orders:read',
+      'work_orders:read_all',
       'work_orders:create',
       'work_orders:update',
       'work_orders:record_payment',
@@ -73,10 +73,11 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'vehicles:create',
       'vehicles:update',
       'measurement_units:read',
-      'inventory_items:read',
       'work_order_lines:create',
       'work_order_lines:update',
       'work_order_lines:delete',
+      'work_order_lines:set_unit_price',
+      'work_orders:view_financials',
     ],
   },
   {
@@ -93,6 +94,7 @@ export const ROLE_TEMPLATES: readonly RoleTemplate[] = [
       'cash_movements:read',
       'cash_expense_requests:read',
       'work_orders:read',
+      'work_orders:read_all',
       'measurement_units:read',
       'inventory_items:read',
       'purchase_receipts:read',

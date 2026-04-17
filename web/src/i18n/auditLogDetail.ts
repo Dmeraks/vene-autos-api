@@ -239,7 +239,10 @@ function enrichDomainSections(row: AuditRowForDetail, sections: AuditDetailSecti
   if (row.action === 'work_orders.payment_recorded') {
     const lines: string[] = []
     if (typeof p.amount === 'string' && p.amount) lines.push(`Monto cobrado: ${p.amount}.`)
-    if (typeof p.orderNumber === 'number') lines.push(`Número de orden: ${p.orderNumber}.`)
+    if (typeof p.publicCode === 'string' && p.publicCode.trim()) {
+      lines.push(`Código de orden (cliente): ${p.publicCode.trim()}.`)
+    }
+    if (typeof p.orderNumber === 'number') lines.push(`Número interno: ${p.orderNumber}.`)
     if (typeof p.note === 'string' && p.note.trim()) {
       lines.push(`Nota del cobro:\n${p.note.trim()}`)
     }

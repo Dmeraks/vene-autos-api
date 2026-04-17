@@ -27,7 +27,7 @@ import { api } from '../api/client'
 import type { LoginResponse } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { CashSessionOpenProvider, useCashSessionOpen } from '../context/CashSessionOpenContext'
-import { usePanelTheme } from '../theme/PanelThemeProvider'
+import { usePanelTheme, useUiSettings } from '../theme/PanelThemeProvider'
 import { setStoredLastModulePath } from '../utils/lastModule'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -159,6 +159,7 @@ function saasIconButtonClass() {
 
 function AppShellInner() {
   const panelTheme = usePanelTheme()
+  const { electronicInvoiceEnabled } = useUiSettings()
   const isSaas = panelTheme === 'saas_light'
   const shellMaxClass = isSaas
     ? 'max-w-[min(88rem,calc(100vw-1rem))] 2xl:max-w-[min(96rem,calc(100vw-1.5rem))]'
@@ -237,7 +238,14 @@ function AppShellInner() {
       { to: '/caja', label: 'Caja', Icon: Wallet, show: can('cash_sessions:read') },
       { to: '/ordenes', label: 'Órdenes', Icon: ClipboardList, show: can('work_orders:read') || can('work_orders:read_portal') },
       { to: '/ventas', label: 'Ventas', Icon: Receipt, show: can('sales:read') },
-      { to: '/facturacion', label: 'Facturación', Icon: FileText, show: can('invoices:read') },
+      {
+        to: '/facturacion',
+        label: 'Facturación',
+        Icon: FileText,
+        // Fase 7.5: facturación electrónica desactivada por defecto mientras el taller opere
+        // como persona natural. Se emite sólo cuando se activa el switch + hay resolución DIAN.
+        show: can('invoices:read') && electronicInvoiceEnabled,
+      },
       { to: '/clientes', label: 'Clientes', Icon: Users, show: can('customers:read') },
       { to: '/recepcion', label: 'Recepción', Icon: Inbox, show: recepcionVisible },
       { to: '/inventario', label: 'Repuestos', Icon: Package, show: can('inventory_items:read') },
@@ -251,7 +259,7 @@ function AppShellInner() {
       { to: '/admin/configuracion', label: 'Configuración', Icon: Settings, show: can('settings:read') },
     ]
     return all.filter((l) => l.show)
-  }, [can, cashSessionOpen])
+  }, [can, cashSessionOpen, electronicInvoiceEnabled])
 
   const linkTos = useMemo(() => links.map((l) => l.to), [links])
   const relatedTaskLinks = useMemo(() => {

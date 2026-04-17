@@ -12,12 +12,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CashMovementDirection, CashSessionStatus, Prisma } from '@prisma/client';
+import { decimalFromMoneyApiString } from '../../common/money/cop-money';
 import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CashAccessService } from './cash-access.service';
 import { resolveTenderAndChange } from './cash-tender.util';
-import { CASH_WORK_ORDER_REFERENCE_TYPE } from './cash.constants';
+import {
+  CASH_PURCHASE_RECEIPT_EXPENSE_CATEGORY_SLUG,
+  CASH_PURCHASE_RECEIPT_REFERENCE_TYPE,
+  CASH_WORK_ORDER_REFERENCE_TYPE,
+} from './cash.constants';
 import type { CreateCashMovementDto } from './dto/create-cash-movement.dto';
 
 @Injectable()
@@ -28,6 +33,48 @@ export class CashMovementsService {
     private readonly access: CashAccessService,
     private readonly notes: NotesPolicyService,
   ) {}
+
+  /**
+   * Egreso por recepción de compra con costo, dentro de la misma transacción Prisma que crea la recepción.
+   * No aplica la regla de delegado (el flujo ya exige `purchase_receipts:create`).
+   */
+  async recordPurchaseReceiptExpenseInTx(
+    tx: Prisma.TransactionClient,
+    actorUserId: string,
+    input: { amount: Prisma.Decimal; purchaseReceiptId: string; note: string },
+  ) {
+    const session = await tx.cashSession.findFirst({
+      where: { status: CashSessionStatus.OPEN },
+    });
+    if (!session) {
+      throw new ConflictException(
+        'No hay sesión de caja abierta: no se puede registrar una compra con costo sin caja abierta.',
+      );
+    }
+    const category = await tx.cashMovementCategory.findUnique({
+      where: { slug: CASH_PURCHASE_RECEIPT_EXPENSE_CATEGORY_SLUG },
+    });
+    if (!category || category.direction !== CashMovementDirection.EXPENSE) {
+      throw new BadRequestException('Categoría de egreso para compra de repuestos no disponible');
+    }
+    if (input.amount.lte(0)) {
+      throw new BadRequestException('El monto del egreso por compra debe ser mayor a cero');
+    }
+    return tx.cashMovement.create({
+      data: {
+        sessionId: session.id,
+        categoryId: category.id,
+        direction: CashMovementDirection.EXPENSE,
+        amount: input.amount,
+        tenderAmount: null,
+        changeAmount: null,
+        referenceType: CASH_PURCHASE_RECEIPT_REFERENCE_TYPE,
+        referenceId: input.purchaseReceiptId,
+        note: input.note,
+        createdById: actorUserId,
+      },
+    });
+  }
 
   /** Ingreso en la sesión abierta (ruta protegida con `cash_movements:create_income`). */
   async createIncome(
@@ -83,7 +130,7 @@ export class CashMovementsService {
       throw new BadRequestException('La categoría no corresponde al tipo de movimiento');
     }
 
-    const amount = new Prisma.Decimal(dto.amount);
+    const amount = decimalFromMoneyApiString(dto.amount);
     if (amount.lte(0)) {
       throw new BadRequestException('El monto debe ser mayor a cero');
     }

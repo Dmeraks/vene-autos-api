@@ -88,3 +88,97 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
 }
+
+/**
+ * Descarga un archivo binario con autenticación Bearer y dispara el diálogo
+ * "Guardar como" del navegador. Útil para endpoints que devuelven XLSX/PDF.
+ * El nombre de archivo sugerido sale del header `Content-Disposition`; si el
+ * servidor no lo envía, se usa `fallbackFilename`.
+ */
+export async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
+  const headers = new Headers()
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const res = await fetch(`${API_PREFIX}${path}`, { headers, cache: 'no-store' })
+  if (!res.ok) {
+    const body = await parseBody(res)
+    const rawMsg =
+      typeof body === 'object' && body !== null && 'message' in body
+        ? (body as { message: unknown }).message
+        : res.statusText
+    const msg = Array.isArray(rawMsg) ? rawMsg.map(String).join(' ') : String(rawMsg ?? res.statusText)
+    throw new ApiError(msg || 'Error al descargar archivo', res.status, body)
+  }
+
+  const cd = res.headers.get('Content-Disposition') ?? ''
+  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)
+  const filename = m?.[1] ? decodeURIComponent(m[1]) : fallbackFilename
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * Abre un recurso HTML autenticado (p. ej. comprobante imprimible de Fase 7.5) en una pestaña
+ * nueva. El JWT no viaja por URL: se hace `fetch` con Authorization y luego se abre el HTML
+ * usando un Blob URL. El usuario decide imprimir desde la barra del recibo.
+ *
+ * Usamos Blob URL en vez de `document.write` + `window.open('', ...)` porque los navegadores
+ * modernos (Chromium con `noopener` o sin él) dejan la ventana huérfana y la pestaña queda
+ * en blanco. El Blob URL es un recurso navegable real y se revoca luego para no filtrar memoria.
+ */
+export async function openAuthenticatedHtml(
+  path: string,
+  fallbackTitle = 'Comprobante',
+): Promise<void> {
+  const headers = new Headers()
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const res = await fetch(`${API_PREFIX}${path}`, { headers, cache: 'no-store' })
+  if (!res.ok) {
+    const body = await parseBody(res)
+    const rawMsg =
+      typeof body === 'object' && body !== null && 'message' in body
+        ? (body as { message: unknown }).message
+        : res.statusText
+    const msg = Array.isArray(rawMsg) ? rawMsg.map(String).join(' ') : String(rawMsg ?? res.statusText)
+    throw new ApiError(msg || 'No se pudo obtener el comprobante', res.status, body)
+  }
+  const html = await res.text()
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank')
+  if (!win) {
+    URL.revokeObjectURL(url)
+    throw new ApiError(
+      'El navegador bloqueó la ventana emergente. Permití ventanas emergentes para este sitio y volvé a intentar.',
+      0,
+      null,
+    )
+  }
+  try {
+    win.focus()
+  } catch {
+    /* algunos navegadores bloquean focus() sobre ventanas hijas. */
+  }
+  /**
+   * Revocamos el blob después de un rato para no mantenerlo indefinidamente en memoria.
+   * 60 s es suficiente para que el navegador haya terminado de cargar todos los recursos del
+   * recibo (sólo CSS inline). Si el usuario imprime o cierra antes, no importa: ya se navegó.
+   */
+  setTimeout(() => {
+    try {
+      URL.revokeObjectURL(url)
+    } catch {
+      /* no-op */
+    }
+  }, 60_000)
+  void fallbackTitle
+}

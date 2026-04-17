@@ -461,6 +461,8 @@ export type InvoiceDispatchStatus =
   | 'NOT_CONFIGURED'
 export type CreditNoteStatus = 'DRAFT' | 'ISSUED' | 'VOIDED'
 export type CreditNoteReason = 'VOID' | 'ADJUSTMENT' | 'RETURN' | 'DISCOUNT'
+export type DebitNoteStatus = 'DRAFT' | 'ISSUED' | 'VOIDED'
+export type DebitNoteReason = 'PRICE_CORRECTION' | 'ADDITIONAL_CHARGE' | 'INTEREST' | 'OTHER'
 
 export type FiscalResolution = {
   id: string
@@ -615,11 +617,25 @@ export type InvoiceDetail = {
     documentNumber: string
     status: CreditNoteStatus
     reason: CreditNoteReason
+    grandTotal: string
     createdAt: string
+    issuedAt: string | null
+  }>
+  debitNotes: Array<{
+    id: string
+    documentNumber: string
+    status: DebitNoteStatus
+    reason: DebitNoteReason
+    grandTotal: string
+    createdAt: string
+    issuedAt: string | null
   }>
   payments: InvoicePayment[]
   amountPaid: string
   amountDue: string
+  totalCreditNotes: string
+  totalDebitNotes: string
+  effectiveAmount: string
 }
 
 export type InvoicePaymentKind = 'PARTIAL' | 'FULL_SETTLEMENT'
@@ -711,11 +727,82 @@ export type CreditNoteDetail = {
   dianProvider: string | null
   dianEnvironment: string | null
   issuedAt: string | null
+  issuedBy: { id: string; email: string; fullName: string } | null
+  voidedAt: string | null
+  voidedReason: string | null
+  voidedBy: { id: string; email: string; fullName: string } | null
   createdBy: { id: string; email: string; fullName: string }
   createdAt: string
   fiscalResolution: { id: string; kind: FiscalResolutionKind; prefix: string; resolutionNumber: string } | null
   invoice: { id: string; documentNumber: string; cufe: string | null; status: InvoiceStatus; customerName: string } | null
   lines: CreditNoteLine[]
+}
+
+export type VoidCreditNotePayload = {
+  reason: string
+}
+
+export type CreateDebitNoteLinePayload = {
+  lineType: InvoiceLineType
+  sortOrder?: number
+  description: string
+  quantity: string
+  unitPrice: string
+  discountAmount?: string
+  taxRatePercent?: string
+  taxKind?: TaxRateKind
+}
+
+export type CreateDebitNotePayload = {
+  reason: DebitNoteReason
+  reasonDescription: string
+  fiscalResolutionId?: string
+  lines: CreateDebitNoteLinePayload[]
+}
+
+export type VoidDebitNotePayload = {
+  reason: string
+}
+
+export type DebitNoteLine = {
+  id: string
+  debitNoteId: string
+  lineType: InvoiceLineType
+  sortOrder: number
+  description: string
+  quantity: string
+  unitPrice: string
+  discountAmount: string
+  taxRatePercentSnapshot: string
+  taxRateKindSnapshot: TaxRateKind | null
+  lineTotal: string
+  taxAmount: string
+}
+
+export type DebitNoteDetail = {
+  id: string
+  documentNumber: string
+  debitNoteNumber: number
+  status: DebitNoteStatus
+  reason: DebitNoteReason
+  reasonDescription: string
+  subtotal: string
+  totalDiscount: string
+  totalTax: string
+  grandTotal: string
+  cufe: string | null
+  dianProvider: string | null
+  dianEnvironment: string | null
+  issuedAt: string | null
+  issuedBy: { id: string; email: string; fullName: string } | null
+  voidedAt: string | null
+  voidedReason: string | null
+  voidedBy: { id: string; email: string; fullName: string } | null
+  createdBy: { id: string; email: string; fullName: string }
+  createdAt: string
+  fiscalResolution: { id: string; kind: FiscalResolutionKind; prefix: string; resolutionNumber: string } | null
+  invoice: { id: string; documentNumber: string; cufe: string | null; status: InvoiceStatus; customerName: string } | null
+  lines: DebitNoteLine[]
 }
 
 /** Cuerpo de POST `/work-orders` (CreateWorkOrderDto). */

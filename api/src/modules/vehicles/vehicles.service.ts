@@ -7,6 +7,8 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
+import { WorkOrdersService } from '../work-orders/work-orders.service';
 import type { CreateVehicleDto } from './dto/create-vehicle.dto';
 import type { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { normalizeVehiclePlate } from './vehicle-plate.util';
@@ -19,6 +21,7 @@ export class VehiclesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly workOrders: WorkOrdersService,
   ) {}
 
   async create(
@@ -162,7 +165,7 @@ export class VehiclesService {
   }
 
   /** Historial: órdenes de trabajo asociadas al vehículo (más recientes primero). */
-  async listWorkOrders(vehicleId: string) {
+  async listWorkOrders(vehicleId: string, actor: JwtUserPayload) {
     const v = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
       select: { id: true },
@@ -171,7 +174,7 @@ export class VehiclesService {
       throw new NotFoundException('Vehículo no encontrado');
     }
     return this.prisma.workOrder.findMany({
-      where: { vehicleId },
+      where: { vehicleId, ...this.workOrders.workOrderVisibilityWhere(actor) },
       orderBy: { createdAt: 'desc' },
       take: 100,
       include: {

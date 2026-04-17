@@ -7,6 +7,8 @@ export const SETTINGS_UI_CONTEXT_PATH = '/settings/ui-context'
 const FALLBACK_GENERAL = 50
 const FALLBACK_WORK_ORDER_PAYMENT = 70
 
+export type PanelThemeMode = 'standard' | 'commercial' | 'saas_light'
+
 export type SettingsNotesUiContext = {
   notesMinLengthChars: number
   notesMinLengthWorkOrderPayment: number
@@ -35,6 +37,32 @@ export function parseNotesUiContext(raw: SettingsUiContextResponse): SettingsNot
       FALLBACK_WORK_ORDER_PAYMENT,
     ),
   }
+}
+
+/** Tema visual del panel (solo desde configuración del taller). */
+export function parsePanelTheme(raw: SettingsUiContextResponse): PanelThemeMode {
+  const v = raw.panelTheme
+  if (v === 'commercial') return 'commercial'
+  if (v === 'saas_light') return 'saas_light'
+  return 'standard'
+}
+
+/**
+ * Fase 7.5: interruptor maestro del módulo de facturación electrónica DIAN. Cuando está
+ * apagado (por defecto), el sistema opera sólo con comprobantes imprimibles de OT/Venta y
+ * se oculta el módulo «Facturación» en el menú. Activarlo exige resolución DIAN + proveedor.
+ */
+export function parseElectronicInvoiceEnabled(raw: SettingsUiContextResponse): boolean {
+  return raw.electronicInvoiceEnabled === true || raw.electronicInvoiceEnabled === 'true'
+}
+
+/**
+ * Fase 7.6: cuando está en `true`, al cerrar la sesión de caja el panel abre solito el ticket
+ * de arqueo (`?autoprint=1`) en una nueva pestaña. Por defecto `false` para respetar el flujo
+ * actual del cajero (un botón explícito "Imprimir arqueo" siempre está disponible).
+ */
+export function parseArqueoAutoprintEnabled(raw: SettingsUiContextResponse): boolean {
+  return raw.arqueoAutoprintEnabled === true || raw.arqueoAutoprintEnabled === 'true'
 }
 
 export function notesMinHint(min: number): string {

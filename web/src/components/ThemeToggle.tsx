@@ -1,76 +1,64 @@
-import { useId, useState } from 'react'
-import type { ThemePreference } from '../theme/ThemeContext'
+import { Moon, Sun } from 'lucide-react'
 import { useTheme } from '../theme/ThemeContext'
 
-const OPTIONS: { value: ThemePreference; label: string; hint: string }[] = [
-  { value: 'system', label: 'Sistema', hint: 'Igual que en el dispositivo' },
-  { value: 'light', label: 'Claro', hint: 'Fondo claro, texto oscuro' },
-  { value: 'dark', label: 'Oscuro', hint: 'Fondo oscuro, texto claro' },
-]
+type ThemeToggleProps = {
+  /** Etiquetas legibles sobre fondo oscuro (p. ej. carril de acceso en login). */
+  labelsOnDark?: boolean
+  /** Solo icono (barra superior estilo SaaS). */
+  variant?: 'full' | 'icon'
+}
 
-export function ThemeToggle() {
+/** Interruptor claro / oscuro (sin opción “sistema”). */
+export function ThemeToggle({ labelsOnDark = false, variant = 'full' }: ThemeToggleProps) {
   const { preference, setPreference } = useTheme()
-  const [open, setOpen] = useState(false)
-  const rootId = useId()
+  const isDark = preference === 'dark'
 
-  const current = OPTIONS.find((o) => o.value === preference) ?? OPTIONS[0]
+  const labelMuted = labelsOnDark ? 'text-zinc-400' : 'text-slate-500 dark:text-slate-300'
+  const labelStrong = labelsOnDark ? 'text-zinc-200' : 'text-slate-800 dark:text-slate-100'
 
-  return (
-    <div className="relative">
+  if (variant === 'icon') {
+    return (
       <button
         type="button"
-        id={`${rootId}-theme-btn`}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls={`${rootId}-theme-list`}
-        onClick={() => setOpen((o) => !o)}
-        title="Tema de la interfaz"
+        title={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+        aria-label={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+        onClick={() => setPreference(isDark ? 'light' : 'dark')}
+        className="rounded-lg border border-slate-200/90 bg-white p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100 dark:focus-visible:ring-offset-slate-900"
       >
-        <span aria-hidden>◐</span>
-        <span className="hidden sm:inline">{current.label}</span>
+        {isDark ? <Sun className="size-[1.125rem]" strokeWidth={1.75} aria-hidden /> : <Moon className="size-[1.125rem]" strokeWidth={1.75} aria-hidden />}
       </button>
-      {open && (
-        <>
-          <ul
-            id={`${rootId}-theme-list`}
-            role="listbox"
-            aria-labelledby={`${rootId}-theme-btn`}
-            className="absolute right-0 z-50 mt-1 w-52 rounded-xl border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 dark:border-slate-700 dark:bg-slate-900 dark:shadow-xl dark:ring-slate-600/60"
-          >
-            {OPTIONS.map((o) => (
-              <li key={o.value} role="option" aria-selected={preference === o.value}>
-                <button
-                  type="button"
-                  className={`w-full px-3 py-2 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-slate-700/80 ${
-                    preference === o.value
-                      ? 'bg-brand-50 font-medium text-brand-900 dark:bg-brand-900 dark:text-white'
-                      : 'text-slate-800 dark:text-slate-100'
-                  }`}
-                  onClick={() => {
-                    setPreference(o.value)
-                    setOpen(false)
-                  }}
-                >
-                  <span className="block">{o.label}</span>
-                  <span className="mt-0.5 block text-xs font-normal text-slate-500 dark:text-slate-400">
-                    {o.hint}
-                  </span>
-                </button>
-              </li>
-            ))}
-            <li className="border-t border-slate-100 dark:border-slate-700">
-              <button
-                type="button"
-                className="w-full px-3 py-2 text-center text-sm font-medium text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/80"
-                onClick={() => setOpen(false)}
-              >
-                Cancelar
-              </button>
-            </li>
-          </ul>
-        </>
-      )}
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5" title="Tema de la interfaz">
+      <span
+        className={`hidden text-[11px] font-medium sm:inline ${!isDark ? labelStrong : labelMuted}`}
+      >
+        Claro
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={isDark}
+        aria-label={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+        onClick={() => setPreference(isDark ? 'light' : 'dark')}
+        className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900 ${
+          isDark
+            ? 'border-slate-500 bg-slate-600'
+            : 'border-slate-300 bg-slate-200 dark:border-slate-500 dark:bg-slate-700'
+        }`}
+      >
+        <span
+          aria-hidden
+          className={`pointer-events-none absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform dark:bg-slate-100 ${
+            isDark ? 'translate-x-[1.25rem]' : 'translate-x-0'
+          }`}
+        />
+      </button>
+      <span className={`hidden text-[11px] font-medium sm:inline ${isDark ? labelStrong : labelMuted}`}>
+        Oscuro
+      </span>
     </div>
   )
 }

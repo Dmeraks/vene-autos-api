@@ -1,7 +1,25 @@
-import { IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  Allow,
+  IsBoolean,
+  IsEmail,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
+import { IsPrismaCuid } from '../../../common/decorators/is-prisma-cuid.decorator';
 import { MONEY_DECIMAL_REGEX } from '../../cash/cash.constants';
 
-/** Alta de orden: siempre nace en RECEIVED en servicio; cliente/vehículo opcional en texto. */
+/**
+ * Alta de orden: nace en UNASSIGNED sin técnico asignado.
+ * Sin `parentWorkOrderId`, debe enviarse `vehicleId` (vehículo activo en maestro). Con garantía, el vehículo puede heredarse de la OT origen.
+ */
 export class CreateWorkOrderDto {
   @IsString()
   @MinLength(3)
@@ -19,9 +37,52 @@ export class CreateWorkOrderDto {
   customerPhone?: string;
 
   @IsOptional()
+  @Allow()
+  @ValidateIf((_, v) => v != null && String(v).trim() !== '')
+  @IsEmail()
+  @MaxLength(120)
+  customerEmail?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(40)
   vehiclePlate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  vehicleBrand?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  vehicleModel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  vehicleLine?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  vehicleCylinderCc?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  vehicleColor?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsInt()
+  @Min(0)
+  @Max(9_999_999)
+  intakeOdometerKm?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  inspectionOnly?: boolean;
 
   @IsOptional()
   @IsString()
@@ -33,20 +94,22 @@ export class CreateWorkOrderDto {
   @MaxLength(4000)
   internalNotes?: string;
 
-  @IsOptional()
-  @IsUUID()
-  assignedToId?: string;
-
-  /** Si se envía, la OT queda enlazada al vehículo (cliente formal); los textos se rellenan desde el vehículo si no los mandás. */
-  @IsOptional()
-  @IsUUID()
+  /** Vehículo del maestro (obligatorio salvo alta de garantía con `parentWorkOrderId`, donde puede heredarse de la origen). */
+  @ValidateIf((o: CreateWorkOrderDto) => !(o.parentWorkOrderId ?? '').trim())
+  @IsNotEmpty({ message: 'Debés vincular la orden a un vehículo registrado (vehicleId).' })
+  @IsPrismaCuid()
   vehicleId?: string;
+
+  /** OT origen (debe estar **Entregada**). Crea una orden de garantía o seguimiento vinculada. */
+  @IsOptional()
+  @IsPrismaCuid()
+  parentWorkOrderId?: string;
 
   /** Tope opcional de cobros en caja para esta OT (sin tope si se omite). */
   @IsOptional()
   @IsString()
   @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'Monto inválido: use entero o hasta 2 decimales (ej. "150000" o "150000.50")',
+    message: 'Monto inválido: solo pesos enteros en dígitos, sin decimales (ej. "150000")',
   })
   authorizedAmount?: string;
 }

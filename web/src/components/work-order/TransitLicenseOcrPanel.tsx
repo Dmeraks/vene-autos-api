@@ -98,9 +98,9 @@ export function TransitLicenseOcrPanel({ disabled, onApply }: Props) {
   }, [lastParsed, onApply])
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-slate-200/90 bg-white/60 p-4 shadow-sm dark:border-slate-600/50 dark:bg-slate-900/35">
+    <div className="flex h-full min-h-0 min-w-0 flex-col rounded-2xl border border-slate-200/90 bg-white/60 p-4 shadow-sm dark:border-slate-600/50 dark:bg-slate-900/35">
       <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Licencia de tránsito (OCR)</h3>
-      <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+      <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-300">
         Subí una foto clara de la tarjeta. Se usan las posiciones del texto en la imagen (debajo de cada título) y un
         respaldo por líneas de texto. Completá patente, marca, modelo, línea, cilindraje y color; guardá la orden para
         persistir.
@@ -121,7 +121,7 @@ export function TransitLicenseOcrPanel({ disabled, onApply }: Props) {
           type="button"
           disabled={disabled || busy}
           onClick={() => void runOcr()}
-          className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+          className="va-btn-primary disabled:opacity-50"
         >
           {busy ? 'Procesando…' : 'Escanear'}
         </button>

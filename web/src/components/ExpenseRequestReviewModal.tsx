@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { useConfirm } from './confirm/ConfirmProvider'
 import { NotesMinCharCounter } from './NotesMinCharCounter'
+import { formatCopFromString } from '../utils/copFormat'
+import { successMessageWithDrawerPulse } from '../utils/cashDrawerBridge'
 
 export type ExpenseRequestDetail = {
   id: string
@@ -33,6 +35,8 @@ type Props = {
   canApprove: boolean
   canReject: boolean
   canCancel: boolean
+  /** Cajero / delegado: registrar egreso físico cuando la solicitud ya está APPROVED y sin movimiento. */
+  canPayOut: boolean
   onClose: () => void
   onDone: () => void
   setBanner: (msg: string | null) => void
@@ -46,6 +50,7 @@ export function ExpenseRequestReviewModal({
   canApprove,
   canReject,
   canCancel,
+  canPayOut,
   onClose,
   onDone,
   setBanner,
@@ -99,11 +104,11 @@ export function ExpenseRequestReviewModal({
       setBanner(`Nota de aprobación: al menos ${notesMinLength} caracteres (política del taller).`)
       return
     }
-    const msg = `¿Aprobar egreso por $${detail.amount} (${detail.category.name}) solicitado por ${detail.requestedBy.fullName}?`
+    const msg = `¿Aprobar egreso por $${formatCopFromString(detail.amount)} (${detail.category.name}) solicitado por ${detail.requestedBy.fullName}?`
     const ok = await confirm({
       title: 'Aprobar solicitud',
       message: msg,
-      confirmLabel: 'Aprobar y registrar egreso',
+      confirmLabel: 'Aprobar',
     })
     if (!ok) return
     setActing(true)
@@ -113,7 +118,9 @@ export function ExpenseRequestReviewModal({
         method: 'POST',
         body: JSON.stringify({ approvalNote: ap }),
       })
-      setBanner('Solicitud aprobada y egreso registrado en caja.')
+      setBanner(
+        'Solicitud aprobada. El egreso se registra en caja cuando el cajero abre el detalle y confirma el egreso (con sesión abierta).',
+      )
       onDone()
       onClose()
     } catch (e) {
@@ -132,7 +139,7 @@ export function ExpenseRequestReviewModal({
     }
     const okRej = await confirm({
       title: 'Rechazar solicitud',
-      message: `¿Rechazar la solicitud de ${detail.requestedBy.fullName} por $${detail.amount}?`,
+      message: `¿Rechazar la solicitud de ${detail.requestedBy.fullName} por $${formatCopFromString(detail.amount)}?`,
       confirmLabel: 'Rechazar',
       variant: 'danger',
     })
@@ -149,6 +156,38 @@ export function ExpenseRequestReviewModal({
       onClose()
     } catch (e) {
       setBanner(e instanceof Error ? e.message : 'No se pudo rechazar')
+    } finally {
+      setActing(false)
+    }
+  }
+
+  async function reloadDetail() {
+    if (!requestId) return
+    try {
+      const d = await api<ExpenseRequestDetail>(`/cash/expense-requests/${requestId}`)
+      setDetail(d)
+    } catch {
+      setLoadErr('No se pudo actualizar el detalle.')
+    }
+  }
+
+  async function registerPayOut() {
+    if (!detail || detail.status !== 'APPROVED' || detail.resultMovement) return
+    const okPay = await confirm({
+      title: 'Registrar egreso en caja',
+      message: `¿Registrar egreso por $${formatCopFromString(detail.amount)} en la sesión de caja abierta? Si el cajón está enlazado, se enviará el pulso al confirmar.`,
+      confirmLabel: 'Registrar egreso',
+    })
+    if (!okPay) return
+    setActing(true)
+    setBanner(null)
+    try {
+      await api(`/cash/expense-requests/${detail.id}/pay-out`, { method: 'POST' })
+      setBanner(await successMessageWithDrawerPulse('Egreso registrado en caja.'))
+      await reloadDetail()
+      onDone()
+    } catch (e) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo registrar el egreso')
     } finally {
       setActing(false)
     }
@@ -178,42 +217,41 @@ export function ExpenseRequestReviewModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-0 sm:items-center sm:p-4 dark:bg-black/60"
-      role="presentation"
-    >
+    <div className="va-modal-overlay" role="presentation">
       <div
-        className="flex max-h-[92dvh] w-full max-w-lg flex-col rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[85dvh] sm:rounded-2xl dark:border-slate-600 dark:bg-slate-900"
+        className="va-modal-panel-stack"
         role="dialog"
         aria-modal="true"
         aria-labelledby="exp-req-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+        <div className="border-b border-slate-100 px-4 py-3 sm:px-6 dark:border-slate-800">
           <h2 id="exp-req-title" className="text-lg font-semibold text-slate-900 dark:text-slate-50">
             Revisar solicitud de egreso
           </h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
             Los botones de decisión están aquí adentro: en la lista solo aparece «Revisar» para evitar toques
             accidentales.
           </p>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {loading && <p className="text-sm text-slate-600 dark:text-slate-400">Cargando detalle…</p>}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6">
+          {loading && <p className="text-sm text-slate-600 dark:text-slate-300">Cargando detalle…</p>}
           {loadErr && <p className="text-sm text-red-700 dark:text-red-300">{loadErr}</p>}
           {detail && (
             <div className="space-y-4 text-sm">
               {blocked && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
                   Esta solicitud está vencida y ya no se puede aprobar ni rechazar desde el panel.
                 </p>
               )}
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-300">
                   Monto solicitado
                 </p>
-                <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">${detail.amount}</p>
+                <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">
+                  ${formatCopFromString(detail.amount)}
+                </p>
                 <p className="mt-2 text-slate-700 dark:text-slate-300">
                   <span className="font-medium">Categoría:</span> {detail.category.name}
                 </p>
@@ -222,26 +260,26 @@ export function ExpenseRequestReviewModal({
                   {new Date(detail.createdAt).toLocaleString()}
                 </p>
                 {detail.expiresAt && (
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
                     Vencimiento: {new Date(detail.expiresAt).toLocaleString()}
                   </p>
                 )}
               </div>
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-300">
                   Solicita
                 </p>
                 <p className="font-semibold text-slate-900 dark:text-slate-100">{detail.requestedBy.fullName}</p>
-                <p className="text-xs text-slate-600 dark:text-slate-400">{detail.requestedBy.email}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">{detail.requestedBy.email}</p>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-300">
                   Nota del solicitante
                 </p>
                 <p className="text-slate-800 dark:text-slate-200">{detail.note?.trim() || '— (sin nota)'}</p>
               </div>
               {!pending && detail.reviewedBy && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-300">
                   Revisado por {detail.reviewedBy.fullName}
                   {detail.rejectionReason && (
                     <span className="mt-1 block text-slate-700 dark:text-slate-300">
@@ -254,6 +292,37 @@ export function ExpenseRequestReviewModal({
                     </span>
                   )}
                 </p>
+              )}
+
+              {detail.status === 'APPROVED' && detail.resultMovement && (
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
+                  Egreso registrado en caja: {new Date(detail.resultMovement.createdAt).toLocaleString()}.
+                </p>
+              )}
+
+              {detail.status === 'APPROVED' && !detail.resultMovement && (
+                <div
+                  className={`rounded-xl border px-3 py-2 text-sm ${
+                    canPayOut
+                      ? 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100'
+                      : 'border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200'
+                  }`}
+                >
+                  {canPayOut ? (
+                    <>
+                      <p className="font-medium">Aprobada — falta registrar el egreso en caja</p>
+                      <p className="mt-1 text-xs leading-relaxed opacity-95">
+                        Con la sesión de caja abierta, usá «Registrar egreso en caja» abajo para entregar el
+                        efectivo y dejar constancia; ahí se envía el pulso al cajón si corresponde.
+                      </p>
+                    </>
+                  ) : (
+                    <p>
+                      Aprobada; el cajero registrará el egreso cuando abra este detalle con sesión de caja
+                      abierta.
+                    </p>
+                  )}
+                </div>
               )}
 
               {pending && !blocked && (canApprove || canReject) && (
@@ -279,7 +348,7 @@ export function ExpenseRequestReviewModal({
                         className="va-field resize-y"
                         placeholder="Ej. autorizado según factura n.º… entregada en recepción; monto verificado con el solicitante."
                       />
-                      <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                      <span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">
                         Mínimo {notesMinLength} caracteres (configuración del taller).
                       </span>
                       <NotesMinCharCounter value={approvalNote} minLength={notesMinLength} />
@@ -295,7 +364,7 @@ export function ExpenseRequestReviewModal({
                         className="va-field resize-y"
                         placeholder="Explicá con claridad por qué no se autoriza el egreso; lo verá el solicitante."
                       />
-                      <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                      <span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">
                         Mínimo {notesMinLength} caracteres.
                       </span>
                       <NotesMinCharCounter value={rejectReason} minLength={notesMinLength} />
@@ -307,7 +376,7 @@ export function ExpenseRequestReviewModal({
           )}
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-slate-100 p-4 dark:border-slate-800 sm:flex-row sm:flex-wrap sm:justify-end">
+        <div className="flex flex-col gap-2 border-t border-slate-100 px-4 py-3 sm:flex-row sm:flex-wrap sm:justify-end sm:px-6 dark:border-slate-800">
           <button
             type="button"
             onClick={onClose}
@@ -330,7 +399,7 @@ export function ExpenseRequestReviewModal({
               type="button"
               disabled={acting || !confirmRead}
               onClick={() => void reject()}
-              className="min-h-[44px] rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-800 disabled:opacity-40 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+              className="min-h-[44px] rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-800 disabled:opacity-40 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100"
             >
               Rechazar
             </button>
@@ -340,9 +409,19 @@ export function ExpenseRequestReviewModal({
               type="button"
               disabled={acting || !confirmRead}
               onClick={() => void approve()}
-              className="min-h-[44px] rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
+              className="min-h-[44px] rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm ring-1 ring-black/10 hover:bg-emerald-800 disabled:opacity-40"
             >
               Aprobar
+            </button>
+          )}
+          {detail && detail.status === 'APPROVED' && !detail.resultMovement && canPayOut && (
+            <button
+              type="button"
+              disabled={acting}
+              onClick={() => void registerPayOut()}
+              className="va-btn-primary disabled:opacity-40"
+            >
+              Registrar egreso en caja
             </button>
           )}
         </div>

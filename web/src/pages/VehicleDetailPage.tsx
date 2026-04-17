@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { PageHeader } from '../components/layout/PageHeader'
+import { usePanelTheme } from '../theme/PanelThemeProvider'
 
 type Vehicle = {
   id: string
@@ -17,10 +19,12 @@ type Vehicle = {
   customer: { id: string; displayName: string }
 }
 
-type WoBrief = { id: string; orderNumber: number; status: string; description: string }
+type WoBrief = { id: string; orderNumber: number; publicCode: string; status: string; description: string }
 
 export function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const panelTheme = usePanelTheme()
+  const isSaas = panelTheme === 'saas_light'
   const { can } = useAuth()
   const [v, setV] = useState<Vehicle | null>(null)
   const [orders, setOrders] = useState<WoBrief[]>([])
@@ -32,6 +36,11 @@ export function VehicleDetailPage() {
   const [year, setYear] = useState('')
   const [notes, setNotes] = useState('')
   const [active, setActive] = useState(true)
+  const pageClass = isSaas ? 'space-y-7' : 'space-y-8'
+  const sectionCardClass = isSaas ? 'va-saas-page-section' : 'va-card'
+  const backLinkClass = isSaas
+    ? 'text-sm font-medium text-brand-700 underline-offset-2 hover:underline dark:text-brand-300'
+    : 'text-sm font-medium text-brand-700 hover:underline dark:text-brand-300'
 
   async function load() {
     if (!id) return
@@ -78,7 +87,7 @@ export function VehicleDetailPage() {
 
   if (!v && msg) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+      <div className="va-alert-error-block">
         {msg}
         <Link to="/clientes" className="mt-4 block text-sm underline dark:text-brand-300">
           ← Clientes
@@ -87,24 +96,23 @@ export function VehicleDetailPage() {
     )
   }
 
-  if (!v) return <p className="text-slate-500 dark:text-slate-400">Cargando…</p>
+  if (!v) return <p className="text-slate-500 dark:text-slate-300">Cargando…</p>
 
   return (
-    <div className="space-y-8">
-      <Link
-        to={`/clientes/${v.customerId}`}
-        className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-300"
-      >
-        ← {v.customer.displayName}
-      </Link>
-      <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
-        <span className="font-mono">{v.plate}</span>
-      </h1>
+    <div className={pageClass}>
+      <PageHeader
+        beforeTitle={
+          <Link to={`/clientes/${v.customerId}`} className={backLinkClass}>
+            ← {v.customer.displayName}
+          </Link>
+        }
+        title={<span className="font-mono">{v.plate}</span>}
+      />
       {msg && msg !== 'Vehículo no encontrado' && <p className="va-card-muted">{msg}</p>}
 
       {can('vehicles:update') && (
-        <form onSubmit={save} className="va-card space-y-3">
-          <h2 className="font-semibold text-slate-800 dark:text-slate-100">Datos del vehículo</h2>
+        <form onSubmit={save} className={`${sectionCardClass} space-y-3`}>
+          <h2 className="va-section-title">Datos del vehículo</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="va-label">Placa</span>
@@ -131,14 +139,14 @@ export function VehicleDetailPage() {
               Activo
             </label>
           </div>
-          <button type="submit" className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">
+          <button type="submit" className="va-btn-primary">
             Guardar
           </button>
         </form>
       )}
 
       {can('work_orders:read') && (
-        <section className="va-card">
+        <section className={sectionCardClass}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <h2 className="font-semibold text-slate-800 dark:text-slate-100">Órdenes de este vehículo</h2>
             <Link
@@ -153,14 +161,14 @@ export function VehicleDetailPage() {
               {orders.map((o) => (
                 <li key={o.id}>
                   <Link to={`/ordenes/${o.id}`} className="text-sm text-brand-700 hover:underline dark:text-brand-300">
-                    #{o.orderNumber} — {o.description.slice(0, 60)}
+                    {o.publicCode} — {o.description.slice(0, 60)}
                     {o.description.length > 60 ? '…' : ''}
                   </Link>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
               No hay órdenes registradas aún; podés filtrar la lista general por este vehículo con el enlace de arriba.
             </p>
           )}

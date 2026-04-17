@@ -16,14 +16,21 @@ export class InventoryItemsController {
 
   @Get()
   @RequirePermissions('inventory_items:read')
-  list() {
-    return this.items.list();
+  list(@CurrentUser() actor: JwtUserPayload) {
+    return this.items.list(actor);
+  }
+
+  /** Resumen económico caneca (última compra, stock a costo, OT aprox.) para la pantalla Aceite. */
+  @Get('oil-drum-economics')
+  @RequirePermissions('inventory_items:read')
+  oilDrumEconomics(@CurrentUser() actor: JwtUserPayload) {
+    return this.items.oilDrumEconomics(actor);
   }
 
   @Get(':id')
   @RequirePermissions('inventory_items:read')
-  findOne(@Param('id') id: string) {
-    return this.items.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload) {
+    return this.items.findOne(id, actor);
   }
 
   @Post()

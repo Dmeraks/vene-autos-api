@@ -1,5 +1,6 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
@@ -28,7 +29,12 @@ function resolveCorsOrigin(): boolean | string[] {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
+    bodyParser: false,
   });
+
+  /** Firmas PNG en base64 superan el límite por defecto (~100kb) de Express. */
+  app.use(json({ limit: '6mb' }));
+  app.use(urlencoded({ extended: true, limit: '1mb' }));
 
   if (process.env.TRUST_PROXY === 'true') {
     app.getHttpAdapter().getInstance().set('trust proxy', 1);

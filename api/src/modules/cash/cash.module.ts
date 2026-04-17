@@ -4,6 +4,7 @@
  */
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { ReceiptsModule } from '../receipts/receipts.module';
 import { CashAccessService } from './cash-access.service';
 import { CashCategoriesController } from './cash-categories.controller';
 import { CashDelegatesController } from './cash-delegates.controller';
@@ -17,7 +18,7 @@ import { CashSessionsController } from './cash-sessions.controller';
 import { CashSessionsService } from './cash-sessions.service';
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, ReceiptsModule],
   controllers: [
     CashCategoriesController,
     CashSessionsController,

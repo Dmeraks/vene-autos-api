@@ -126,6 +126,11 @@ export const PERMISSION_GUIDE_ES: Record<string, { title: string; detail: string
     detail:
       'Lista unidades (unidad, kg, litro, etc.) para asociar ítems. Solo lectura del catálogo maestro.',
   },
+  'auth:assume_role_preview': {
+    title: 'Vista por rol (probar permisos)',
+    detail:
+      'Permite a administrador o dueño emitir un token que ve la app con los permisos de otro rol, y volver a los propios. Útil para revisar UX y restricciones sin cambiar de usuario.',
+  },
   'permissions:read': {
     title: 'Listar permisos del catálogo',
     detail:
@@ -231,6 +236,16 @@ export const PERMISSION_GUIDE_ES: Record<string, { title: string; detail: string
     detail:
       'Cambia cantidades, precios o descripciones de líneas. Impacta subtotales y cobros posteriores.',
   },
+  'work_order_lines:set_unit_price': {
+    title: 'Fijar precio unitario en líneas (legado)',
+    detail:
+      'Permiso histórico equivalente a cargar precio en líneas de OT. En catálogo nuevo convive con «ver importes en la orden»; el sistema acepta cualquiera de los dos para ver montos y cobrar, salvo el perfil técnico.',
+  },
+  'work_orders:view_financials': {
+    title: 'Ver importes en la orden y fijar precios en líneas',
+    detail:
+      'Muestra subtotales, saldo, tope autorizado y cobros; permite cargar precio unitario en líneas. Los técnicos operan sin ver montos ni costos de ítems en la OT.',
+  },
   'work_orders:create': {
     title: 'Crear órdenes de trabajo',
     detail:
@@ -239,12 +254,22 @@ export const PERMISSION_GUIDE_ES: Record<string, { title: string; detail: string
   'work_orders:read': {
     title: 'Ver órdenes de trabajo',
     detail:
-      'Lista y detalle de OT, líneas y totales según reglas. Lectura operativa diaria del taller.',
+      'Lista y detalle de OT, líneas y totales según reglas. Sin “ver todas” solo se muestran las OT que abriste vos.',
+  },
+  'work_orders:read_all': {
+    title: 'Ver todas las órdenes de trabajo',
+    detail:
+      'Lista y abre cualquier OT del taller (recepción, caja, supervisión). Sin este permiso cada usuario solo ve las que creó.',
   },
   'work_orders:record_payment': {
     title: 'Registrar cobro de orden en caja',
     detail:
       'Registra un ingreso vinculado a una OT concreta (además suele exigirse permiso de ingreso en caja). Afecta saldo de la orden y arqueo.',
+  },
+  'work_orders:reopen_delivered': {
+    title: 'Reabrir orden entregada',
+    detail:
+      'Permite volver una OT de Entregada a Lista para corregir montos o líneas; exige nota y justificación y queda registrado en auditoría e historial interno.',
   },
   'work_orders:update': {
     title: 'Actualizar órdenes de trabajo',

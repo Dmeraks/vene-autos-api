@@ -1,13 +1,23 @@
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { MONEY_DECIMAL_REGEX } from '../../cash/cash.constants';
 
 /** Registra un cobro en caja asociado a la OT (crea ingreso + fila de cobro en una transacción). */
 export class RecordWorkOrderPaymentDto {
+  /**
+   * `partial`: abono; no cambia el estado de la OT.
+   * `full`: liquidación del saldo pendiente; marca la OT como entregada y bloquea edición hasta reapertura.
+   */
+  @IsString()
+  @IsIn(['partial', 'full'], {
+    message: 'paymentKind debe ser "partial" (abono) o "full" (pago total / liquidación).',
+  })
+  paymentKind!: 'partial' | 'full';
+
   @IsString()
   @MinLength(1)
   @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'Monto inválido: use entero o hasta 2 decimales (ej. "150000" o "150000.50")',
+    message: 'Monto inválido: solo pesos enteros en dígitos, sin decimales (ej. "150000")',
   })
   amount!: string;
 
@@ -27,7 +37,7 @@ export class RecordWorkOrderPaymentDto {
   @IsOptional()
   @IsString()
   @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'tenderAmount debe ser un decimal positivo con máximo 2 decimales',
+    message: 'tenderAmount: solo pesos enteros en dígitos, sin decimales (ej. "150000")',
   })
   tenderAmount?: string;
 }

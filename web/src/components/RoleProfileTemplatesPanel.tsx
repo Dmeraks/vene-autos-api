@@ -23,7 +23,7 @@ export function RoleProfileTemplatesPanel({
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-600 dark:bg-slate-800/50">
       <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Perfiles predefinidos (opcional)</p>
-      <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+      <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-300">
         Podés marcar varios perfiles a la vez: se unen todos los permisos (por ejemplo,{' '}
         <span className="font-medium text-slate-600 dark:text-slate-300">Mecánico + Inventario</span> para que la
         misma persona atienda taller y stock). Luego reemplazá o sumá al listado manual de abajo.
@@ -58,14 +58,14 @@ export function RoleProfileTemplatesPanel({
                 />
                 <span className="min-w-0 flex-1">
                   <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{t.label}</span>
-                  <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{t.description}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-300">{t.description}</span>
                 </span>
               </label>
               <details className="border-t border-slate-200/80 dark:border-slate-600">
                 <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-brand-700 hover:bg-slate-50/80 dark:text-brand-300 dark:hover:bg-slate-800/60">
                   <span className="inline-flex items-center gap-1">
                     Ver permisos del catálogo
-                    <span className="font-normal text-slate-500 dark:text-slate-400">
+                    <span className="font-normal text-slate-500 dark:text-slate-300">
                       ({t.permissionCodes.length})
                     </span>
                   </span>
@@ -73,7 +73,7 @@ export function RoleProfileTemplatesPanel({
                 <ul className="space-y-2 border-t border-slate-100 px-3 py-2 dark:border-slate-700">
                   {rows.map((r) => (
                     <li key={r.code} className="text-xs leading-snug">
-                      <p className="font-mono text-[11px] text-slate-600 dark:text-slate-400">{r.code}</p>
+                      <p className="font-mono text-[11px] text-slate-600 dark:text-slate-300">{r.code}</p>
                       {r.missingFromCatalog ? (
                         <p className="mt-0.5 text-amber-800 dark:text-amber-200/90">
                           No aparece en el catálogo cargado; revisá el API o el seed.
@@ -95,7 +95,7 @@ export function RoleProfileTemplatesPanel({
         <button
           type="button"
           disabled={checkedTemplateIds.size === 0}
-          className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="va-btn-primary !min-h-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => {
             const codes = unionPermissionCodes(checkedTemplateIds)
             setSel(codesToSelectedIds(permissions, codes))
@@ -106,7 +106,7 @@ export function RoleProfileTemplatesPanel({
         <button
           type="button"
           disabled={checkedTemplateIds.size === 0}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          className="va-btn-secondary !min-h-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => {
             const codes = unionPermissionCodes(checkedTemplateIds)
             const add = codesToSelectedIds(permissions, codes)

@@ -57,7 +57,7 @@ export function PermissionPicker({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+      <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
         Marcá solo lo necesario para el puesto. Cada permiso indica qué puede hacer la persona en el
         sistema; el código interno sirve para soporte y no define poderes por sí solo.
       </p>
@@ -101,7 +101,7 @@ export function PermissionPicker({
                   onClick={() => setOpen((o) => ({ ...o, [resource]: !isOpen }))}
                 >
                   {groupTitle}
-                  <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">
+                  <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-300">
                     ({filtered.filter((p) => selectedIds.has(p.id)).length}/{filtered.length})
                   </span>
                 </button>
@@ -122,7 +122,7 @@ export function PermissionPicker({
                         />
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{title}</p>
-                          <p id={`${p.id}-desc`} className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                          <p id={`${p.id}-desc`} className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
                             {detail}
                           </p>
                           <details className="mt-1.5">

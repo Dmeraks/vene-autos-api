@@ -40,6 +40,11 @@ model User {
   invoicesCreated             Invoice[]             @relation("InvoiceCreatedBy")
   invoiceDispatchRequested    InvoiceDispatchEvent[] @relation("InvoiceDispatchRequestedBy")
   creditNotesCreated          CreditNote[]          @relation("CreditNoteCreatedBy")
+  creditNotesIssued           CreditNote[]          @relation("CreditNoteIssuedBy")
+  creditNotesVoided           CreditNote[]          @relation("CreditNoteVoidedBy")
+  debitNotesCreated           DebitNote[]           @relation("DebitNoteCreatedBy")
+  debitNotesIssued            DebitNote[]           @relation("DebitNoteIssuedBy")
+  debitNotesVoided            DebitNote[]           @relation("DebitNoteVoidedBy")
   invoicePaymentsRecorded     InvoicePayment[]      @relation("InvoicePaymentRecordedBy")
   /// Cliente del taller enlazado para el rol portal (ver solo OT de vehículos de ese cliente).
   portalCustomerId String?   @map("portal_customer_id")
@@ -278,6 +283,8 @@ model WorkOrder {
   @@index([status, createdAt])
   @@index([vehicleId])
   @@index([parentWorkOrderId])
+  /// Fase 8 · Informe «Utilidad por técnico»: filtra DELIVERED por rango de `deliveredAt` agrupando por `assignedToId`.
+  @@index([assignedToId, deliveredAt])
   @@map("work_orders")
 }
 
@@ -339,6 +346,8 @@ model InventoryItem {
   invoiceLines         InvoiceLine[]
 
   @@index([measurementUnitId])
+  /// Fase 8 · Informe «Stock crítico»: filtra `isActive=true` + `trackStock=true` y ordena por `quantityOnHand`.
+  @@index([isActive, trackStock])
   @@map("inventory_items")
 }
 
@@ -837,6 +846,20 @@ enum CreditNoteStatus {
   VOIDED
 }
 
+/// Motivo normalizado de una nota débito (incremento fiscal sobre factura).
+enum DebitNoteReason {
+  PRICE_CORRECTION
+  ADDITIONAL_CHARGE
+  INTEREST
+  OTHER
+}
+
+enum DebitNoteStatus {
+  DRAFT
+  ISSUED
+  VOIDED
+}
+
 /// Resolución DIAN: autoriza un rango de numeración con prefijo.
 ///
 /// Reglas operativas:
@@ -872,6 +895,7 @@ model FiscalResolution {
   createdBy   User?        @relation("FiscalResolutionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   invoices    Invoice[]
   creditNotes CreditNote[]
+  debitNotes  DebitNote[]
 
   @@unique([kind, prefix, resolutionNumber])
   @@index([kind, isActive])
@@ -925,6 +949,7 @@ model Invoice {
   lines            InvoiceLine[]
   dispatchEvents   InvoiceDispatchEvent[]
   creditNotes      CreditNote[]
+  debitNotes       DebitNote[]
   payments         InvoicePayment[]
 
   @@unique([fiscalResolutionId, invoiceNumber])
@@ -1013,6 +1038,10 @@ model CreditNote {
   dianProvider         String?            @map("dian_provider") @db.VarChar(40)
   dianEnvironment      String?            @map("dian_environment") @db.VarChar(20)
   issuedAt             DateTime?          @map("issued_at")
+  issuedById           String?            @map("issued_by_id")
+  voidedAt             DateTime?          @map("voided_at")
+  voidedReason         String?            @map("voided_reason") @db.Text
+  voidedById           String?            @map("voided_by_id")
 
   createdById          String             @map("created_by_id")
   createdAt            DateTime           @default(now()) @map("created_at")
@@ -1021,6 +1050,8 @@ model CreditNote {
   fiscalResolution FiscalResolution @relation(fields: [fiscalResolutionId], references: [id], onDelete: Restrict)
   invoice          Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   createdBy        User             @relation("CreditNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  issuedBy         User?            @relation("CreditNoteIssuedBy", fields: [issuedById], references: [id], onDelete: SetNull)
+  voidedBy         User?            @relation("CreditNoteVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
   lines            CreditNoteLine[]
 
   @@unique([fiscalResolutionId, creditNoteNumber])
@@ -1050,6 +1081,71 @@ model CreditNoteLine {
 
   @@index([creditNoteId, sortOrder])
   @@map("credit_note_lines")
+}
+
+/// Nota débito: incrementa el valor cobrado de una factura emitida (correcciones de precio,
+/// recargos, intereses). Fase 7: la emisión de una DN aceptada reabre el cobro en caja,
+/// ya que `effectiveAmount = grandTotal - SUM(CN issued) + SUM(DN issued)`.
+model DebitNote {
+  id                   String           @id @default(cuid())
+  fiscalResolutionId   String           @map("fiscal_resolution_id")
+  debitNoteNumber      Int              @map("debit_note_number")
+  documentNumber       String           @unique @map("document_number") @db.VarChar(48)
+  invoiceId            String           @map("invoice_id")
+  status               DebitNoteStatus  @default(DRAFT)
+  reason               DebitNoteReason
+  reasonDescription    String           @map("reason_description") @db.Text
+
+  subtotal             Decimal          @db.Decimal(18, 2)
+  totalDiscount        Decimal          @default(0) @map("total_discount") @db.Decimal(18, 2)
+  totalTax             Decimal          @default(0) @map("total_tax") @db.Decimal(18, 2)
+  grandTotal           Decimal          @map("grand_total") @db.Decimal(18, 2)
+
+  cufe                 String?          @db.VarChar(128)
+  dianProvider         String?          @map("dian_provider") @db.VarChar(40)
+  dianEnvironment      String?          @map("dian_environment") @db.VarChar(20)
+  issuedAt             DateTime?        @map("issued_at")
+  issuedById           String?          @map("issued_by_id")
+  voidedAt             DateTime?        @map("voided_at")
+  voidedReason         String?          @map("voided_reason") @db.Text
+  voidedById           String?          @map("voided_by_id")
+
+  createdById          String           @map("created_by_id")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  fiscalResolution FiscalResolution @relation(fields: [fiscalResolutionId], references: [id], onDelete: Restrict)
+  invoice          Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  createdBy        User             @relation("DebitNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  issuedBy         User?            @relation("DebitNoteIssuedBy", fields: [issuedById], references: [id], onDelete: SetNull)
+  voidedBy         User?            @relation("DebitNoteVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  lines            DebitNoteLine[]
+
+  @@unique([fiscalResolutionId, debitNoteNumber])
+  @@index([invoiceId])
+  @@index([status, createdAt])
+  @@map("debit_notes")
+}
+
+model DebitNoteLine {
+  id                     String            @id @default(cuid())
+  debitNoteId            String            @map("debit_note_id")
+  lineType               InvoiceLineType   @map("line_type")
+  sortOrder              Int               @default(0) @map("sort_order")
+  description            String            @db.VarChar(2000)
+  quantity               Decimal           @db.Decimal(18, 4)
+  unitPrice              Decimal           @map("unit_price") @db.Decimal(18, 2)
+  discountAmount         Decimal           @default(0) @map("discount_amount") @db.Decimal(18, 2)
+  taxRatePercentSnapshot Decimal           @default(0) @map("tax_rate_percent_snapshot") @db.Decimal(5, 2)
+  taxRateKindSnapshot    TaxRateKind?      @map("tax_rate_kind_snapshot")
+  lineTotal              Decimal           @map("line_total") @db.Decimal(18, 2)
+  taxAmount              Decimal           @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  createdAt              DateTime          @default(now()) @map("created_at")
+
+  debitNote DebitNote @relation(fields: [debitNoteId], references: [id], onDelete: Cascade)
+
+  @@index([debitNoteId, sortOrder])
+  @@map("debit_note_lines")
 }
 
 // ============================================================================

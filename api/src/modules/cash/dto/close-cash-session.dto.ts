@@ -7,7 +7,7 @@ import { MONEY_DECIMAL_REGEX } from '../cash.constants';
 export class CloseCashSessionDto {
   @IsString()
   @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'closingCounted debe ser un decimal positivo con máximo 2 decimales',
+    message: 'closingCounted: solo pesos enteros en dígitos, sin decimales (ej. "500000")',
   })
   closingCounted!: string;
 

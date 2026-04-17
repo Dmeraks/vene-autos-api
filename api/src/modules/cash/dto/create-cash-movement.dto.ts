@@ -1,6 +1,7 @@
 /** Cuerpo para crear ingreso o egreso; el endpoint fija la dirección, el slug de categoría debe coincidir. */
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
+import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsPrismaCuid } from '../../../common/decorators/is-prisma-cuid.decorator';
 import { MONEY_DECIMAL_REGEX } from '../cash.constants';
 
 export class CreateCashMovementDto {
@@ -10,7 +11,7 @@ export class CreateCashMovementDto {
 
   @IsString()
   @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'amount debe ser un decimal positivo con máximo 2 decimales',
+    message: 'amount: solo pesos enteros en dígitos, sin decimales (ej. "50000")',
   })
   amount!: string;
 
@@ -19,7 +20,7 @@ export class CreateCashMovementDto {
   @IsOptional()
   @IsString()
   @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'tenderAmount debe ser un decimal positivo con máximo 2 decimales',
+    message: 'tenderAmount: solo pesos enteros en dígitos, sin decimales (ej. "50000")',
   })
   tenderAmount?: string;
 
@@ -39,6 +40,6 @@ export class CreateCashMovementDto {
 
   /** Si se envía, fija `referenceType`/`referenceId` al enlace estándar con la orden (no mezclar con otro tipo). */
   @IsOptional()
-  @IsUUID()
+  @IsPrismaCuid()
   workOrderId?: string;
 }

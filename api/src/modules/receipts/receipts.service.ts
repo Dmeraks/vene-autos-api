@@ -134,6 +134,56 @@ export type SaleForReceipt = {
   payments?: SalePaymentForReceipt[];
 };
 
+/**
+ * Ticket de arqueo de caja (Fase 7.6). No reemplaza registro fiscal alguno: es el
+ * comprobante interno que firman cajero y supervisor al cierre de jornada.
+ *
+ * El llamador arma este payload a partir de `CashSessionsService.findOne(id)` (que ya
+ * trae `balanceSummary` y `movements` con categoría) más la nota de apertura, que se
+ * recupera del `AuditLog` porque `CashSession` no la persiste como columna.
+ */
+export type CashSessionMovementForReceipt = {
+  direction: 'INCOME' | 'EXPENSE' | string;
+  amount: { toString(): string };
+  tenderAmount?: { toString(): string } | null;
+  changeAmount?: { toString(): string } | null;
+  note?: string | null;
+  createdAt: Date | string;
+  category?: { name?: string | null; slug?: string | null } | null;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  createdBy?: { fullName?: string | null; email?: string | null } | null;
+};
+
+export type CashSessionForReceipt = {
+  id: string;
+  status: 'OPEN' | 'CLOSED' | string;
+  openedAt: Date | string;
+  closedAt?: Date | string | null;
+  openingAmount: { toString(): string };
+  closingExpected?: { toString(): string } | null;
+  closingCounted?: { toString(): string } | null;
+  differenceNote?: string | null;
+  openedBy?: { fullName?: string | null; email?: string | null } | null;
+  closedBy?: { fullName?: string | null; email?: string | null } | null;
+  movements: CashSessionMovementForReceipt[];
+  balanceSummary?: {
+    totalIncome?: string | null;
+    totalExpense?: string | null;
+    expectedBalance?: string | null;
+    movementCount?: number | null;
+    byReferenceType?: Array<{
+      referenceType: string;
+      label?: string | null;
+      incomeTotal: string;
+      expenseTotal: string;
+      count: number;
+    }> | null;
+  } | null;
+  /** Nota operacional escrita al abrir la sesión (se recupera del audit log). */
+  openingNote?: string | null;
+};
+
 const WORKSHOP_SETTING_KEYS = [
   'workshop.legal_name',
   'workshop.name',
@@ -413,6 +463,157 @@ export class ReceiptsService {
 
     return renderPage({ title, workshop, body });
   }
+
+  /**
+   * Ticket de arqueo de caja (Fase 7.6). Se imprime al cerrar la jornada y queda como constancia
+   * interna del corte: apertura, movimientos, esperado vs. contado y diferencia. No es fiscal.
+   */
+  async renderCashSessionReceipt(session: CashSessionForReceipt): Promise<string> {
+    const workshop = await this.getWorkshopInfo();
+    const isClosed = session.status === 'CLOSED';
+    const title = `Arqueo de caja ${shortId(session.id)}`;
+
+    const summary = session.balanceSummary ?? {};
+    const opening = toNumberSafe(session.openingAmount);
+    const totalIncome = toNumberSafe(summary.totalIncome ?? 0);
+    const totalExpense = toNumberSafe(summary.totalExpense ?? 0);
+    const expected = toNumberSafe(
+      summary.expectedBalance ?? (opening + totalIncome - totalExpense),
+    );
+    const countedRaw = session.closingCounted;
+    const counted = countedRaw == null ? null : toNumberSafe(countedRaw);
+    const diff = counted == null ? null : counted - expected;
+
+    const refRows = (summary.byReferenceType ?? [])
+      .map((r) => {
+        const label = escapeHtml(r.label ?? r.referenceType);
+        const inc = formatCop(r.incomeTotal);
+        const exp = formatCop(r.expenseTotal);
+        return `
+          <tr>
+            <td>${label}</td>
+            <td class="num">${r.count}</td>
+            <td class="num">${inc}</td>
+            <td class="num">${exp}</td>
+          </tr>`;
+      })
+      .join('');
+
+    const movementRows = session.movements
+      .map((m) => {
+        const isIncome = m.direction === 'INCOME';
+        const amount = formatCop(m.amount);
+        const concept =
+          m.category?.name?.trim() ||
+          (m.referenceType && m.referenceType.trim()
+            ? `${m.referenceType} · ${shortId(m.referenceId ?? '')}`
+            : 'Movimiento');
+        const who =
+          m.createdBy?.fullName?.trim() || m.createdBy?.email?.trim() || '—';
+        const note = m.note ? `<div class="muted" style="margin-left:0">${escapeHtml(m.note)}</div>` : '';
+        return `
+          <tr>
+            <td class="mono-small">${formatDate(m.createdAt)}</td>
+            <td><span class="${isIncome ? 'badge-in' : 'badge-out'}">${isIncome ? 'Ingreso' : 'Egreso'}</span></td>
+            <td>${escapeHtml(concept)}${note}</td>
+            <td class="num ${isIncome ? 'txt-in' : 'txt-out'}">${isIncome ? '+' : '-'}${amount}</td>
+            <td class="mono-small">${escapeHtml(who)}</td>
+          </tr>`;
+      })
+      .join('');
+
+    const body = `
+      <section class="doc-meta">
+        <div>
+          <div class="doc-kind">ARQUEO DE CAJA · CIERRE DE JORNADA</div>
+          <div class="doc-code">${escapeHtml(shortId(session.id))} <span class="muted">· ${isClosed ? 'Cerrada' : 'Abierta'}</span></div>
+        </div>
+        <div class="doc-dates">
+          <div><strong>Apertura:</strong> ${formatDate(session.openedAt)}</div>
+          ${session.closedAt ? `<div><strong>Cierre:</strong> ${formatDate(session.closedAt)}</div>` : ''}
+          <div><strong>Estado:</strong> ${escapeHtml(isClosed ? 'Cerrada' : 'Abierta')}</div>
+        </div>
+      </section>
+
+      <section class="parties">
+        <div class="party">
+          <h4>Abrió</h4>
+          <div>${escapeHtml(session.openedBy?.fullName || session.openedBy?.email || '—')}</div>
+          ${session.openingNote ? `<div class="muted" style="margin-left:0">Nota: ${escapeHtml(session.openingNote)}</div>` : ''}
+        </div>
+        <div class="party">
+          <h4>Cerró</h4>
+          <div>${escapeHtml(session.closedBy?.fullName || session.closedBy?.email || (isClosed ? '—' : 'Sesión aún abierta'))}</div>
+          ${session.differenceNote ? `<div class="muted" style="margin-left:0">Nota: ${escapeHtml(session.differenceNote)}</div>` : ''}
+        </div>
+      </section>
+
+      <section class="totals">
+        <table>
+          <tr><th>Monto de apertura</th><td class="num">${formatCop(opening)}</td></tr>
+          <tr><th>Total ingresos</th><td class="num txt-in">+${formatCop(totalIncome)}</td></tr>
+          <tr><th>Total egresos</th><td class="num txt-out">-${formatCop(totalExpense)}</td></tr>
+          <tr class="grand"><th>Saldo esperado</th><td class="num">${formatCop(expected)}</td></tr>
+          ${
+            counted != null
+              ? `<tr><th>Conteo físico</th><td class="num">${formatCop(counted)}</td></tr>`
+              : `<tr><th>Conteo físico</th><td class="num muted" style="margin-left:0">— (sesión abierta)</td></tr>`
+          }
+          ${
+            diff != null
+              ? `<tr class="${Math.abs(diff) > 0 ? 'due' : ''}"><th>Diferencia</th><td class="num">${diff > 0 ? '+' : diff < 0 ? '-' : ''}${formatCop(Math.abs(diff))}</td></tr>`
+              : ''
+          }
+        </table>
+      </section>
+
+      ${
+        refRows
+          ? `<section><h4>Desglose por tipo de movimiento</h4>
+              <table class="payments">
+                <thead><tr>
+                  <th>Origen</th>
+                  <th class="num">Cant.</th>
+                  <th class="num">Ingresos</th>
+                  <th class="num">Egresos</th>
+                </tr></thead>
+                <tbody>${refRows}</tbody>
+              </table>
+            </section>`
+          : ''
+      }
+
+      <section><h4>Detalle de movimientos (${session.movements.length})</h4>
+        <table class="payments">
+          <thead><tr>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Concepto</th>
+            <th class="num">Monto</th>
+            <th>Registró</th>
+          </tr></thead>
+          <tbody>${movementRows || '<tr><td colspan="5" class="muted center">Sin movimientos registrados en esta sesión.</td></tr>'}</tbody>
+        </table>
+      </section>
+    `;
+
+    return renderPage({
+      title,
+      workshop,
+      body,
+      overrideFiscalLegend:
+        'Ticket interno de arqueo de caja. No tiene validez fiscal ni sustituye factura de venta. Se conserva como soporte operativo firmado por cajero y supervisor.',
+    });
+  }
+}
+
+/**
+ * Muestra IDs en CUID de forma compacta sin perder unicidad razonable para impresión.
+ * Para CUIDs típicos (25 chars) usa los últimos 8, que son el componente más variable.
+ */
+function shortId(id: string): string {
+  if (!id) return '—';
+  return id.length > 10 ? id.slice(-8).toUpperCase() : id.toUpperCase();
 }
 
 function computeLineTotalFallback(ln: {
@@ -439,9 +640,11 @@ function renderPage(input: {
   title: string;
   workshop: WorkshopInfo;
   body: string;
+  /** Si se provee, reemplaza la leyenda fiscal por régimen (útil para tickets internos). */
+  overrideFiscalLegend?: string;
 }): string {
   const { title, workshop, body } = input;
-  const regimeLegend = regimeLegendFor(workshop.regime);
+  const regimeLegend = input.overrideFiscalLegend ?? regimeLegendFor(workshop.regime);
   const contactBits = [
     workshop.address,
     workshop.city,
@@ -519,7 +722,18 @@ function renderPage(input: {
     .totals tr.grand th, .totals tr.grand td { font-weight: 700; font-size: 14px; border-top: 1.5px solid #0f172a; padding-top: 8px; }
     .totals tr.due td { color: #b45309; font-weight: 600; }
     table.payments th { text-align: left; font-size: 10.5px; text-transform: uppercase; color: #64748b; letter-spacing: .6px; padding: 5px 4px; border-bottom: 1px solid #cbd5e1; }
-    table.payments td { padding: 5px 4px; border-bottom: 1px dotted #e2e8f0; font-size: 12px; }
+    table.payments td { padding: 5px 4px; border-bottom: 1px dotted #e2e8f0; font-size: 12px; vertical-align: top; }
+    .mono-small { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: #334155; white-space: nowrap; }
+    .txt-in { color: #047857; }
+    .txt-out { color: #b91c1c; }
+    .badge-in {
+      display: inline-block; padding: 1px 6px; border-radius: 4px;
+      background: #ecfdf5; color: #065f46; font-size: 10.5px; font-weight: 600; letter-spacing: .3px;
+    }
+    .badge-out {
+      display: inline-block; padding: 1px 6px; border-radius: 4px;
+      background: #fef2f2; color: #991b1b; font-size: 10.5px; font-weight: 600; letter-spacing: .3px;
+    }
     .legend { margin-top: 22px; padding-top: 10px; border-top: 1.5px solid #0f172a; font-size: 10.5px; color: #475569; line-height: 1.5; }
     .legend .stamp { display: inline-block; padding: 4px 10px; border: 1.5px dashed #b45309; color: #9a3412; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; font-size: 10px; margin-bottom: 8px; }
     .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; font-size: 11px; color: #475569; }

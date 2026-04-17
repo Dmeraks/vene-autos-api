@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import App from './App.tsx'
 import { ConfirmProvider } from './components/confirm/ConfirmProvider'
+import { PanelThemeProvider } from './theme/PanelThemeProvider'
 import { ThemeProvider } from './theme/ThemeContext'
 import './index.css'
 
@@ -13,7 +14,9 @@ createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <ConfirmProvider>
           <AuthProvider>
-            <App />
+            <PanelThemeProvider>
+              <App />
+            </PanelThemeProvider>
           </AuthProvider>
         </ConfirmProvider>
       </BrowserRouter>

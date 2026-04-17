@@ -32,7 +32,7 @@ export function NotesMinCharCounter({
   if (applicability === 'withGap' && len === 0) {
     return (
       <p
-        className={`mt-1 text-xs leading-snug text-slate-500 dark:text-slate-400 ${className}`.trim()}
+        className={`mt-1 text-xs leading-snug text-slate-500 dark:text-slate-300 ${className}`.trim()}
         aria-live="polite"
       >
         {gapEmptyHint ??
@@ -48,7 +48,7 @@ export function NotesMinCharCounter({
 
   return (
     <p
-      className={`mt-1 text-xs tabular-nums leading-snug ${meets ? 'text-slate-600 dark:text-slate-400' : 'text-amber-800 dark:text-amber-200'} ${className}`.trim()}
+      className={`mt-1 text-xs tabular-nums leading-snug ${meets ? 'text-slate-600 dark:text-slate-300' : 'text-amber-800 dark:text-amber-100'} ${className}`.trim()}
       aria-live="polite"
     >
       <span className="font-semibold">{len}</span> / {minLength} caracteres{gapSuffix}

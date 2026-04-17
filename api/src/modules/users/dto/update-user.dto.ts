@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -15,4 +15,9 @@ export class UpdateUserDto {
   @ArrayMinSize(1)
   @IsString({ each: true })
   roleIds?: string[];
+
+  /** Enlace portal: cliente cuyas OT puede ver el usuario (null = quitar). */
+  @IsOptional()
+  @IsUUID()
+  portalCustomerId?: string | null;
 }

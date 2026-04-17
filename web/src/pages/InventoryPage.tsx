@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { PageHeader } from '../components/layout/PageHeader'
+import { usePanelTheme } from '../theme/PanelThemeProvider'
 import type { InventoryItem, MeasurementUnit } from '../api/types'
+import {
+  API_MONEY_DECIMAL_REGEX,
+  formatMoneyInputDisplayFromNormalized,
+  normalizeMoneyDecimalStringForApi,
+} from '../utils/copFormat'
 
 export function InventoryPage() {
+  const panelTheme = usePanelTheme()
+  const isSaas = panelTheme === 'saas_light'
   const { can } = useAuth()
+  const showInvActions = can('inventory_items:update')
   const [rows, setRows] = useState<InventoryItem[] | null>(null)
   const [units, setUnits] = useState<MeasurementUnit[]>([])
   const [err, setErr] = useState<string | null>(null)
@@ -16,9 +26,37 @@ export function InventoryPage() {
   const [initialQty, setInitialQty] = useState('0')
   const [editItem, setEditItem] = useState<InventoryItem | null>(null)
   const [editName, setEditName] = useState('')
+  const [editSupplier, setEditSupplier] = useState('')
+  const [editCategory, setEditCategory] = useState('')
   const [editAvgCost, setEditAvgCost] = useState('')
   const [editTrack, setEditTrack] = useState(true)
   const [editActive, setEditActive] = useState(true)
+  const [newSupplier, setNewSupplier] = useState('')
+  const [newCategory, setNewCategory] = useState('')
+  const createBtnClass = 'va-btn-primary w-full shrink-0 sm:w-auto'
+  const tableWrapClass = isSaas
+    ? 'va-saas-page-section va-saas-page-section--flush min-w-0'
+    : 'va-card-flush min-w-0'
+
+  function formatMoney(value: string | null | undefined): string {
+    if (value == null || value === '') return '—'
+    const n = Number(value)
+    if (Number.isNaN(n)) return value
+    return Math.ceil(n - 1e-9).toLocaleString('es-CO', { maximumFractionDigits: 0 })
+  }
+
+  /** Evita que SKU u otros códigos se muestren en varias líneas (Excel a veces trae \n). */
+  function singleLineCode(s: string): string {
+    return s.replace(/\r\n|\r|\n/g, ' ').trim()
+  }
+
+  function stockTotalValue(row: InventoryItem): string {
+    if (row.averageCost == null || row.averageCost === '') return '—'
+    const q = Number(row.quantityOnHand)
+    const c = Number(row.averageCost)
+    if (Number.isNaN(q) || Number.isNaN(c)) return '—'
+    return Math.ceil(q * c - 1e-9).toLocaleString('es-CO', { maximumFractionDigits: 0 })
+  }
 
   const load = async () => {
     const data = await api<InventoryItem[]>('/inventory/items')
@@ -60,7 +98,9 @@ export function InventoryPage() {
   function openEdit(r: InventoryItem) {
     setEditItem(r)
     setEditName(r.name)
-    setEditAvgCost(r.averageCost ?? '')
+    setEditSupplier(r.supplier ?? '')
+    setEditCategory(r.category ?? '')
+    setEditAvgCost(r.averageCost != null ? normalizeMoneyDecimalStringForApi(String(r.averageCost)) : '')
     setEditTrack(r.trackStock)
     setEditActive(r.isActive)
     setMsg(null)
@@ -70,12 +110,19 @@ export function InventoryPage() {
     e.preventDefault()
     if (!editItem) return
     setMsg(null)
+    const costNorm = normalizeMoneyDecimalStringForApi(editAvgCost)
+    if (editAvgCost.trim() && (!costNorm || !API_MONEY_DECIMAL_REGEX.test(costNorm))) {
+      setMsg('Costo: solo pesos enteros; miles con punto, o dejá vacío.')
+      return
+    }
     try {
       await api(`/inventory/items/${editItem.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           name: editName.trim(),
-          averageCost: editAvgCost.trim() === '' ? null : editAvgCost.trim(),
+          supplier: editSupplier.trim(),
+          category: editCategory.trim(),
+          averageCost: costNorm === '' ? null : costNorm,
           trackStock: editTrack,
           isActive: editActive,
         }),
@@ -97,6 +144,8 @@ export function InventoryPage() {
         body: JSON.stringify({
           sku: sku.trim(),
           name: name.trim(),
+          supplier: newSupplier.trim() || undefined,
+          category: newCategory.trim() || undefined,
           measurementUnitSlug: slug,
           initialQuantity: initialQty.trim() || '0',
         }),
@@ -104,6 +153,8 @@ export function InventoryPage() {
       setOpen(false)
       setSku('')
       setName('')
+      setNewSupplier('')
+      setNewCategory('')
       setInitialQty('0')
       await load()
       setMsg('Ítem creado')
@@ -114,91 +165,174 @@ export function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">Repuestos e ítems</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Catálogo con stock aproximado para las órdenes.</p>
-        </div>
-        {can('inventory_items:create') && (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
-          >
-            Nuevo ítem
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Repuestos e ítems"
+        description="Catálogo con stock. El costo unitario es el promedio ponderado; el valor stock es cantidad × ese costo (útil para márgenes e informes)."
+        actions={
+          can('inventory_items:create') ? (
+            <button type="button" onClick={() => setOpen(true)} className={createBtnClass}>
+              Nuevo ítem
+            </button>
+          ) : null
+        }
+      />
 
       {err && (
-        <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+        <p className="va-alert-error-lg">
           {err}
         </p>
       )}
       {msg && <p className="va-card-muted">{msg}</p>}
 
-      {!rows && !err && <p className="text-slate-500 dark:text-slate-400">Cargando…</p>}
+      {!rows && !err && <p className="text-slate-500 dark:text-slate-300">Cargando…</p>}
 
       {rows && (
-        <div className="va-card-flush overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-500">
-                  <th className="px-4 py-3 sm:px-6">SKU</th>
-                  <th className="px-4 py-3 sm:px-6">Nombre</th>
-                  <th className="px-4 py-3 sm:px-6">Unidad</th>
-                  <th className="px-4 py-3 sm:px-6">Stock</th>
-                  <th className="px-4 py-3 sm:px-6">Activo</th>
-                  {can('inventory_items:update') && (
-                    <th className="px-4 py-3 sm:px-6 text-right">Acciones</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/80">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600 sm:px-6 dark:text-slate-400">{r.sku}</td>
-                    <td className="px-4 py-3 font-medium text-slate-900 sm:px-6 dark:text-slate-50">{r.name}</td>
-                    <td className="px-4 py-3 text-slate-600 sm:px-6 dark:text-slate-300">{r.measurementUnit.name}</td>
-                    <td className="px-4 py-3 font-mono text-slate-800 sm:px-6 dark:text-slate-200">{r.quantityOnHand}</td>
-                    <td className="px-4 py-3 text-slate-600 sm:px-6 dark:text-slate-300">{r.isActive ? 'Sí' : 'No'}</td>
-                    {can('inventory_items:update') && (
-                      <td className="px-4 py-3 text-right sm:px-6">
+        <div className={tableWrapClass}>
+          {/*
+            En móvil, table-fixed + w-full aplasta columnas; ancho mínimo + scroll horizontal evita solapamiento.
+          */}
+          <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+            <table className="va-table va-table-inv w-full min-w-[44rem]">
+            <colgroup>
+              <col className="w-[8%]" />
+              <col className="w-[10%]" />
+              <col className="w-[10%]" />
+              <col className={showInvActions ? 'w-[28%]' : 'w-[34%]'} />
+              <col className="w-[7%]" />
+              <col className="w-[6%]" />
+              <col className="w-[11%]" />
+              <col className="w-[10%]" />
+              <col className="w-[4%]" />
+              {showInvActions ? <col className="w-[6%]" /> : null}
+            </colgroup>
+            <thead>
+              <tr className="va-table-head-row">
+                <th className="va-table-th min-w-0 whitespace-nowrap" title="SKU">
+                  SKU
+                </th>
+                <th className="va-table-th min-w-0" title="Proveedor">
+                  Prov.
+                </th>
+                <th className="va-table-th min-w-0" title="Categoría">
+                  Cat.
+                </th>
+                <th className="va-table-th min-w-0" title="Nombre">
+                  Nombre
+                </th>
+                <th className="va-table-th min-w-0" title="Unidad de medida">
+                  Ud.
+                </th>
+                <th className="va-table-th min-w-0 text-right" title="Stock">
+                  Stk
+                </th>
+                <th className="va-table-th min-w-0 text-right" title="Costo unitario promedio">
+                  C. prom.
+                </th>
+                <th className="va-table-th min-w-0 text-right" title="Valor stock (cantidad × costo)">
+                  Val. $
+                </th>
+                <th className="va-table-th min-w-0 text-center" title="Activo en catálogo">
+                  Act.
+                </th>
+                {showInvActions ? (
+                  <th className="va-table-th min-w-0 text-right" title="Acciones">
+                    Editar
+                  </th>
+                ) : null}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const stockVal = stockTotalValue(r)
+                const sup = r.supplier || '—'
+                const cat = r.category || '—'
+                return (
+                  <tr key={r.id} className="va-table-body-row">
+                    <td className="va-table-td min-w-0 whitespace-nowrap font-mono text-sm text-slate-600 dark:text-slate-300">
+                      {singleLineCode(r.sku)}
+                    </td>
+                    <td className="va-table-td min-w-0 max-w-0 truncate text-slate-600 dark:text-slate-300" title={sup}>
+                      {sup}
+                    </td>
+                    <td className="va-table-td min-w-0 max-w-0 truncate text-slate-600 dark:text-slate-300" title={cat}>
+                      {cat}
+                    </td>
+                    <td
+                      className="va-table-td min-w-0 max-w-0 truncate font-medium text-slate-900 dark:text-slate-50"
+                      title={r.name}
+                    >
+                      {r.name}
+                    </td>
+                    <td
+                      className="va-table-td min-w-0 max-w-0 truncate text-slate-600 dark:text-slate-300"
+                      title={r.measurementUnit.name}
+                    >
+                      {r.measurementUnit.name}
+                    </td>
+                    <td className="va-table-td whitespace-nowrap text-right font-mono text-sm text-slate-800 dark:text-slate-200">
+                      {r.quantityOnHand}
+                    </td>
+                    <td className="va-table-td whitespace-nowrap text-right font-mono text-sm tabular-nums text-slate-700 dark:text-slate-200">
+                      {r.averageCost != null && r.averageCost !== '' ? `$${formatMoney(r.averageCost)}` : '—'}
+                    </td>
+                    <td className="va-table-td whitespace-nowrap text-right font-mono text-sm tabular-nums text-slate-700 dark:text-slate-200">
+                      {stockVal === '—' ? '—' : `$${stockVal}`}
+                    </td>
+                    <td className="va-table-td whitespace-nowrap text-center text-slate-600 dark:text-slate-300">
+                      {r.isActive ? 'Sí' : 'No'}
+                    </td>
+                    {showInvActions ? (
+                      <td className="va-table-td min-w-0 !px-0 py-2 pr-1 text-right sm:pr-2">
                         <button
                           type="button"
                           onClick={() => openEdit(r)}
-                          className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                          className="inline-flex rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                         >
                           Editar
                         </button>
                       </td>
-                    )}
+                    ) : null}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                )
+              })}
+            </tbody>
+          </table>
           </div>
         </div>
       )}
 
       {editItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
-          role="presentation"
-        >
+        <div className="va-modal-overlay" role="presentation">
           <div
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-600 dark:bg-slate-900 dark:shadow-black/40"
+            className="va-modal-panel"
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-item-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="edit-item-title" className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+            <h2 id="edit-item-title" className="va-section-title">
               Editar ítem
             </h2>
-            <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">{editItem.sku}</p>
+            <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-300">{editItem.sku}</p>
             <form className="mt-4 space-y-3" onSubmit={saveEdit}>
+              <label className="block text-sm">
+                <span className="va-label">Proveedor</span>
+                <input
+                  value={editSupplier}
+                  onChange={(e) => setEditSupplier(e.target.value)}
+                  maxLength={200}
+                  className="va-field mt-1"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="va-label">Categoría</span>
+                <input
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  maxLength={200}
+                  className="va-field mt-1"
+                />
+              </label>
               <label className="block text-sm">
                 <span className="va-label">Nombre</span>
                 <input
@@ -210,8 +344,14 @@ export function InventoryPage() {
                 />
               </label>
               <label className="block text-sm">
-                <span className="va-label">Costo promedio (vacío = sin costo)</span>
-                <input value={editAvgCost} onChange={(e) => setEditAvgCost(e.target.value)} className="va-field mt-1" />
+                <span className="va-label">Costo unitario promedio (vacío = sin costo)</span>
+                <input
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={formatMoneyInputDisplayFromNormalized(normalizeMoneyDecimalStringForApi(editAvgCost))}
+                  onChange={(e) => setEditAvgCost(normalizeMoneyDecimalStringForApi(e.target.value))}
+                  className="va-field mt-1"
+                />
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -232,17 +372,10 @@ export function InventoryPage() {
                 <span className="text-slate-600 dark:text-slate-300">Activo en catálogo</span>
               </label>
               <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
-                >
+                <button type="submit" className="va-btn-primary">
                   Guardar
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setEditItem(null)}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                >
+                <button type="button" onClick={() => setEditItem(null)} className="va-btn-secondary">
                   Cancelar
                 </button>
               </div>
@@ -252,24 +385,39 @@ export function InventoryPage() {
       )}
 
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center"
-          role="presentation"
-        >
+        <div className="va-modal-overlay" role="presentation">
           <div
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-600 dark:bg-slate-900 dark:shadow-black/40"
+            className="va-modal-panel"
             role="dialog"
             aria-modal="true"
             aria-labelledby="new-item-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="new-item-title" className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+            <h2 id="new-item-title" className="va-section-title">
               Nuevo ítem
             </h2>
             <form className="mt-4 space-y-3" onSubmit={createItem}>
               <label className="block text-sm">
                 <span className="va-label">SKU</span>
                 <input required value={sku} onChange={(e) => setSku(e.target.value)} className="va-field mt-1" />
+              </label>
+              <label className="block text-sm">
+                <span className="va-label">Proveedor (opcional)</span>
+                <input
+                  value={newSupplier}
+                  onChange={(e) => setNewSupplier(e.target.value)}
+                  maxLength={200}
+                  className="va-field mt-1"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="va-label">Categoría (opcional)</span>
+                <input
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  maxLength={200}
+                  className="va-field mt-1"
+                />
               </label>
               <label className="block text-sm">
                 <span className="va-label">Nombre</span>
@@ -290,17 +438,10 @@ export function InventoryPage() {
                 <input value={initialQty} onChange={(e) => setInitialQty(e.target.value)} className="va-field mt-1" />
               </label>
               <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
-                >
+                <button type="submit" className="va-btn-primary">
                   Crear
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                >
+                <button type="button" onClick={() => setOpen(false)} className="va-btn-secondary">
                   Cancelar
                 </button>
               </div>

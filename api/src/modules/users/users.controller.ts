@@ -33,7 +33,7 @@ export class UsersController {
     if (!user) {
       throw new UnauthorizedException('Sesión no válida');
     }
-    return this.users.findOne(user.sub);
+    return this.users.meForSession(user);
   }
 
   @Get()

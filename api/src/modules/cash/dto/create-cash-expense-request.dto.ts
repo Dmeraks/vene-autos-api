@@ -11,7 +11,7 @@ export class CreateCashExpenseRequestDto {
 
   @IsString()
   @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'amount debe ser un decimal positivo con máximo 2 decimales',
+    message: 'amount: solo pesos enteros en dígitos, sin decimales (ej. "50000")',
   })
   amount!: string;
 

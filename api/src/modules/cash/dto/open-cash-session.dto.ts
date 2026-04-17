@@ -5,7 +5,7 @@ import { MONEY_DECIMAL_REGEX } from '../cash.constants';
 export class OpenCashSessionDto {
   @IsString()
   @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'openingAmount debe ser un decimal positivo con máximo 2 decimales',
+    message: 'openingAmount: solo pesos enteros en dígitos, sin decimales (ej. "500000")',
   })
   openingAmount!: string;
 

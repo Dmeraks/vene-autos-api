@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import { useAuth } from '../../auth/AuthContext'
 import { useConfirm } from '../../components/confirm/ConfirmProvider'
+import { PageHeader } from '../../components/layout/PageHeader'
+import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
 type RoleBrief = { id: string; name: string; slug: string }
 type UserRow = {
@@ -13,6 +15,8 @@ type UserRow = {
 }
 
 export function UsersPage() {
+  const panelTheme = usePanelTheme()
+  const isSaas = panelTheme === 'saas_light'
   const { can } = useAuth()
   const confirm = useConfirm()
   const [rows, setRows] = useState<UserRow[] | null>(null)
@@ -27,6 +31,10 @@ export function UsersPage() {
   const [roleIds, setRoleIds] = useState<Set<string>>(new Set())
   const [isActive, setIsActive] = useState(true)
   const [editInitial, setEditInitial] = useState<{ roleIds: string[]; isActive: boolean } | null>(null)
+  const createBtnClass = 'va-btn-primary'
+  const tableCardClass = isSaas
+    ? 'va-saas-page-section va-saas-page-section--flush overflow-hidden'
+    : 'va-card-flush overflow-hidden'
 
   async function load() {
     const [u, r] = await Promise.all([
@@ -148,48 +156,42 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-            Usuarios
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Alta, roles y estado de acceso.</p>
-        </div>
-        {can('users:create') && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
-          >
-            Nuevo usuario
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Usuarios"
+        description="Alta, roles y estado de acceso."
+        actions={
+          can('users:create') ? (
+            <button type="button" onClick={openCreate} className={createBtnClass}>
+              Nuevo usuario
+            </button>
+          ) : null
+        }
+      />
       {msg && <p className="va-card-muted">{msg}</p>}
-      {!rows && <p className="text-slate-500 dark:text-slate-400">Cargando…</p>}
+      {!rows && <p className="text-slate-500 dark:text-slate-300">Cargando…</p>}
       {rows && (
-        <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-sm">
+        <div className={tableCardClass}>
+          <div className="va-table-scroll">
+            <table className="va-table min-w-[560px]">
               <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-500">
-                  <th className="px-4 py-3 sm:px-6">Nombre</th>
-                  <th className="px-4 py-3 sm:px-6">Correo</th>
-                  <th className="px-4 py-3 sm:px-6">Roles</th>
-                  <th className="px-4 py-3 sm:px-6">Activo</th>
-                  <th className="px-4 py-3 sm:px-6" />
+                <tr className="va-table-head-row">
+                  <th className="va-table-th">Nombre</th>
+                  <th className="va-table-th">Correo</th>
+                  <th className="va-table-th">Roles</th>
+                  <th className="va-table-th">Activo</th>
+                  <th className="va-table-th" />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((u) => (
-                  <tr key={u.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/80">
-                    <td className="px-4 py-3 font-medium text-slate-900 sm:px-6 dark:text-slate-50">{u.fullName}</td>
-                    <td className="px-4 py-3 text-slate-600 sm:px-6 dark:text-slate-300">{u.email}</td>
-                    <td className="px-4 py-3 text-xs text-slate-500 sm:px-6 dark:text-slate-400">
+                  <tr key={u.id} className="va-table-body-row">
+                    <td className="va-table-td font-medium text-slate-900 dark:text-slate-50">{u.fullName}</td>
+                    <td className="va-table-td text-slate-600 dark:text-slate-300">{u.email}</td>
+                    <td className="va-table-td text-xs text-slate-500 dark:text-slate-300">
                       {u.roles.map((r) => r.role.name).join(', ') || '—'}
                     </td>
-                    <td className="px-4 py-3 sm:px-6">{u.isActive ? 'Sí' : 'No'}</td>
-                    <td className="px-4 py-3 sm:px-6">
+                    <td className="va-table-td">{u.isActive ? 'Sí' : 'No'}</td>
+                    <td className="va-table-td">
                       {can('users:update') && (
                         <button
                           type="button"
@@ -209,12 +211,8 @@ export function UsersPage() {
       )}
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" role="presentation">
-          <div
-            className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-          >
+        <div className="va-modal-overlay" role="presentation">
+          <div className="va-modal-panel" onClick={(e) => e.stopPropagation()} role="dialog">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
               {modal === 'create' ? 'Nuevo usuario' : 'Editar usuario'}
             </h2>
@@ -245,7 +243,7 @@ export function UsersPage() {
                 </label>
               )}
               {modal === 'edit' && (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-slate-500 dark:text-slate-300">
                   <span className="font-medium text-slate-700 dark:text-slate-200">{email}</span>
                 </p>
               )}
@@ -287,15 +285,12 @@ export function UsersPage() {
                 </label>
               )}
               <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white"
-                >
+                <button type="submit" className="va-btn-primary">
                   Guardar
                 </button>
                 <button
                   type="button"
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  className="va-btn-secondary"
                   onClick={() => setModal(null)}
                 >
                   Cancelar

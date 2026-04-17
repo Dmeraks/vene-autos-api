@@ -29,6 +29,60 @@ const META: Record<string, SettingFieldPresentation> = {
     label: 'Zona horaria',
     description: 'IANA (p. ej. America/Bogota) para fechas y auditoría.',
   },
+  'workshop.legal_name': {
+    label: 'Razón social',
+    description:
+      'Nombre legal del taller. Aparece en el encabezado de los comprobantes imprimibles (OT y venta).',
+  },
+  'workshop.document_kind': {
+    label: 'Tipo de documento',
+    description: 'NIT, CC, CE o Pasaporte. Se muestra en el comprobante junto al número.',
+  },
+  'workshop.document_id': {
+    label: 'Número de documento',
+    description: 'Solo dígitos o caracteres, sin puntos ni espacios.',
+  },
+  'workshop.address': {
+    label: 'Dirección',
+    description: 'Dirección física del taller.',
+  },
+  'workshop.city': {
+    label: 'Ciudad',
+    description: 'Ciudad del taller (se muestra en el encabezado del comprobante).',
+  },
+  'workshop.phone': {
+    label: 'Teléfono',
+    description: 'Teléfono de contacto del taller.',
+  },
+  'workshop.email': {
+    label: 'Correo del taller',
+    description: 'Correo visible en el comprobante.',
+  },
+  'workshop.regime': {
+    label: 'Régimen fiscal',
+    description:
+      'Determina la leyenda del pie del comprobante: persona natural no obligada, natural obligada, jurídica responsable o no responsable de IVA.',
+  },
+  'workshop.receipt_footer': {
+    label: 'Pie del comprobante',
+    description:
+      'Texto libre que se imprime al final del recibo (garantías, horarios, política de devoluciones, etc.).',
+  },
+  'billing.electronic_invoice_enabled': {
+    label: 'Facturación electrónica activa',
+    description:
+      '“Sí” muestra el módulo «Facturación» en el menú y habilita emisión DIAN (requiere proveedor + resolución). “No” (por defecto): se opera sólo con comprobantes internos de OT y venta.',
+  },
+  'cash.arqueo_autoprint_enabled': {
+    label: 'Imprimir arqueo automáticamente al cerrar caja',
+    description:
+      '“Sí”: al confirmar el cierre de la sesión se abre solito el ticket de arqueo en una pestaña nueva (lista para imprimir o guardar en PDF). “No” (por defecto): el cajero imprime manualmente con el botón “Imprimir arqueo” del panel de caja.',
+  },
+  'inventory.stock_critical_threshold': {
+    label: 'Umbral de stock crítico (unidades)',
+    description:
+      'Cuántas unidades o menos hacen que un ítem aparezca en el informe «Stock crítico» de la pantalla de Informes. Se aplica a ítems activos con control de stock. Por defecto 3. Bajá el número para que alerte solo al borde (ej. 1), o subilo para adelantar el aviso.',
+  },
   'ui.panel_theme': {
     label: 'Tema visual del panel del taller',
     description:

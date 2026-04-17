@@ -12,9 +12,17 @@ import {
 } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { CashMovementDirection, CashSessionStatus, Prisma } from '@prisma/client';
+import { ceilWholeCop, decimalFromMoneyApiString } from '../../common/money/cop-money';
 import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import {
+  CASH_EXPENSE_REQUEST_REFERENCE_TYPE,
+  CASH_INVOICE_REFERENCE_TYPE,
+  CASH_PURCHASE_RECEIPT_REFERENCE_TYPE,
+  CASH_SALE_REFERENCE_TYPE,
+  CASH_WORK_ORDER_REFERENCE_TYPE,
+} from './cash.constants';
 import type { CloseCashSessionDto } from './dto/close-cash-session.dto';
 import type { OpenCashSessionDto } from './dto/open-cash-session.dto';
 
@@ -25,6 +33,15 @@ export class CashSessionsService {
     private readonly audit: AuditService,
     private readonly notes: NotesPolicyService,
   ) {}
+
+  /** Solo indica si existe sesión OPEN (cualquier usuario autenticado; sin montos ni movimientos). */
+  async getOpenStatus(): Promise<{ open: boolean }> {
+    const row = await this.prisma.cashSession.findFirst({
+      where: { status: CashSessionStatus.OPEN },
+      select: { id: true },
+    });
+    return { open: !!row };
+  }
 
   /** Sesión abierta con movimientos ordenados cronológicamente, o `null` si no hay ninguna. */
   async getCurrentOpen() {
@@ -105,7 +122,11 @@ export class CashSessionsService {
   private withBalanceSummary<
     T extends {
       openingAmount: Prisma.Decimal;
-      movements: { direction: CashMovementDirection; amount: Prisma.Decimal }[];
+      movements: {
+        direction: CashMovementDirection;
+        amount: Prisma.Decimal;
+        referenceType?: string | null;
+      }[];
     },
   >(session: T) {
     const { totalIncome, totalExpense, expected } = this.computeExpectedBalance(
@@ -115,12 +136,67 @@ export class CashSessionsService {
     return {
       ...session,
       balanceSummary: {
-        totalIncome: totalIncome.toFixed(2),
-        totalExpense: totalExpense.toFixed(2),
-        expectedBalance: expected.toFixed(2),
+        totalIncome: ceilWholeCop(totalIncome).toString(),
+        totalExpense: ceilWholeCop(totalExpense).toString(),
+        expectedBalance: ceilWholeCop(expected).toString(),
         movementCount: session.movements.length,
+        byReferenceType: this.summarizeByReferenceType(session.movements),
       },
     };
+  }
+
+  /**
+   * Fase 6 · Desglose del arqueo por tipo de documento origen del movimiento.
+   * Incluye explícitamente `Invoice` (cobros en caja de facturación, Fase 5)
+   * para que el cierre reconozca esta fuente de ingreso sin mezclarla con
+   * otros rubros.
+   */
+  private summarizeByReferenceType(
+    movements: {
+      direction: CashMovementDirection;
+      amount: Prisma.Decimal;
+      referenceType?: string | null;
+    }[],
+  ): Array<{
+    referenceType: string;
+    label: string;
+    incomeTotal: string;
+    expenseTotal: string;
+    count: number;
+  }> {
+    const labels: Record<string, string> = {
+      [CASH_EXPENSE_REQUEST_REFERENCE_TYPE]: 'Solicitud de egreso',
+      [CASH_WORK_ORDER_REFERENCE_TYPE]: 'Orden de trabajo',
+      [CASH_SALE_REFERENCE_TYPE]: 'Venta',
+      [CASH_INVOICE_REFERENCE_TYPE]: 'Factura',
+      [CASH_PURCHASE_RECEIPT_REFERENCE_TYPE]: 'Recepción de compra',
+      MANUAL: 'Manual / otros',
+    };
+    const agg = new Map<
+      string,
+      { income: Prisma.Decimal; expense: Prisma.Decimal; count: number }
+    >();
+    for (const m of movements) {
+      const key = m.referenceType ?? 'MANUAL';
+      let bucket = agg.get(key);
+      if (!bucket) {
+        bucket = { income: new Prisma.Decimal(0), expense: new Prisma.Decimal(0), count: 0 };
+        agg.set(key, bucket);
+      }
+      if (m.direction === CashMovementDirection.INCOME) {
+        bucket.income = bucket.income.add(m.amount);
+      } else {
+        bucket.expense = bucket.expense.add(m.amount);
+      }
+      bucket.count += 1;
+    }
+    return [...agg.entries()].map(([key, b]) => ({
+      referenceType: key,
+      label: labels[key] ?? key,
+      incomeTotal: ceilWholeCop(b.income).toString(),
+      expenseTotal: ceilWholeCop(b.expense).toString(),
+      count: b.count,
+    }));
   }
 
   /**
@@ -135,7 +211,7 @@ export class CashSessionsService {
       throw new ConflictException('Ya existe una sesión de caja abierta');
     }
 
-    const openingAmount = new Prisma.Decimal(dto.openingAmount);
+    const openingAmount = decimalFromMoneyApiString(dto.openingAmount);
     if (openingAmount.lte(0)) {
       throw new BadRequestException('El monto de apertura debe ser mayor a cero');
     }
@@ -195,7 +271,7 @@ export class CashSessionsService {
       throw new ConflictException('La sesión ya está cerrada');
     }
 
-    const counted = new Prisma.Decimal(dto.closingCounted);
+    const counted = decimalFromMoneyApiString(dto.closingCounted);
     if (counted.lt(0)) {
       throw new BadRequestException('closingCounted inválido');
     }
@@ -237,8 +313,8 @@ export class CashSessionsService {
       },
       nextPayload: {
         status: updated.status,
-        closingExpected: expected.toFixed(2),
-        closingCounted: counted.toFixed(2),
+        closingExpected: ceilWholeCop(expected).toString(),
+        closingCounted: ceilWholeCop(counted).toString(),
         differenceNote: updated.differenceNote,
       },
       ipAddress: meta.ip ?? null,

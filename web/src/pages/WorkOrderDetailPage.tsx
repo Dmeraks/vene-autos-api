@@ -9,7 +9,7 @@ import {
   type SetStateAction,
 } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, ApiError } from '../api/client'
+import { api, ApiError, openAuthenticatedHtml } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useAlert, useConfirm } from '../components/confirm/ConfirmProvider'
 import { ClientConsentSignModal } from '../components/work-order/ClientConsentSignModal'
@@ -1581,6 +1581,28 @@ export function WorkOrderDetailPage() {
           {msg}
         </p>
       )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            void openAuthenticatedHtml(
+              `/work-orders/${wo.id}/receipt`,
+              `Comprobante OT ${wo.publicCode}`,
+            ).catch((err) => {
+              setMsg(
+                err instanceof Error
+                  ? err.message
+                  : 'No se pudo abrir el comprobante',
+              )
+            })
+          }}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+          title="Abrir comprobante interno imprimible (no es factura electrónica)"
+        >
+          Imprimir comprobante
+        </button>
+      </div>
 
       {wo.parentWorkOrder ? (
           <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/90 px-4 py-3 text-sm text-violet-950 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-50">

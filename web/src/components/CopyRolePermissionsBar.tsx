@@ -25,7 +25,7 @@ export function CopyRolePermissionsBar({ roles, excludeRoleId, setSel }: Props) 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-900/80">
       <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Copiar desde un rol existente</p>
-      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
         Elegí un rol del taller y aplicá sus permisos como punto de partida o sumalos a lo que ya marcaste.
       </p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
@@ -48,7 +48,7 @@ export function CopyRolePermissionsBar({ roles, excludeRoleId, setSel }: Props) 
           <button
             type="button"
             disabled={!sourceId}
-            className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="va-btn-primary !min-h-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => {
               const role = roles.find((x) => x.id === sourceId)
               setSel(permissionIdsFromRole(role))
@@ -59,7 +59,7 @@ export function CopyRolePermissionsBar({ roles, excludeRoleId, setSel }: Props) 
           <button
             type="button"
             disabled={!sourceId}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="va-btn-secondary !min-h-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => {
               const role = roles.find((x) => x.id === sourceId)
               const add = permissionIdsFromRole(role)

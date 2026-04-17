@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { api } from '../api/client'
+import { api, openAuthenticatedHtml } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { useConfirm } from '../components/confirm/ConfirmProvider'
@@ -9,7 +9,7 @@ import { CashSessionMovementsPanel, type SessionMovementRow } from '../component
 import { ExpenseRequestReviewModal } from '../components/ExpenseRequestReviewModal'
 import { PageHeader } from '../components/layout/PageHeader'
 import { TabRow } from '../components/layout/TabRow'
-import { usePanelTheme } from '../theme/PanelThemeProvider'
+import { usePanelTheme, useUiSettings } from '../theme/PanelThemeProvider'
 import { NotesMinCharCounter } from '../components/NotesMinCharCounter'
 import {
   notesMinHint,
@@ -17,7 +17,7 @@ import {
   SETTINGS_UI_CONTEXT_PATH,
   type SettingsUiContextResponse,
 } from '../config/operationalNotes'
-import { successMessageWithDrawerPulse } from '../utils/cashDrawerBridge'
+import { successMessageWithDrawerPulse, triggerCashDrawerPulse } from '../utils/cashDrawerBridge'
 import {
   API_MONEY_DECIMAL_REGEX,
   formatCopFromString,
@@ -93,6 +93,7 @@ function expenseRequestStatusLabel(r: ExpenseReq): string {
 
 export function CashPage() {
   const panelTheme = usePanelTheme()
+  const { arqueoAutoprintEnabled } = useUiSettings()
   const isSaasPanel = panelTheme === 'saas_light'
   const pageStackClass = isSaasPanel ? 'space-y-6 sm:space-y-7' : 'space-y-5 sm:space-y-6'
   const surfaceCardClass = isSaasPanel ? 'va-saas-page-section' : 'va-card'
@@ -279,15 +280,33 @@ export function CashPage() {
         method: 'POST',
         body: JSON.stringify({ openingAmount: amtNorm, note: openNote.trim() }),
       })
-      setMsg(null)
       setOpenAmt('0')
       setOpenNote('')
       await loadCore()
       await refreshCashOpen()
+      /**
+       * Fase 7.6 · Pulso al cajón físico al abrir la sesión: el cajero necesita depositar
+       * el fondo inicial. Si el bridge no está corriendo el helper agrega un hint al mensaje.
+       */
+      setMsg(await successMessageWithDrawerPulse('Sesión de caja abierta'))
       return true
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error')
       return false
+    }
+  }
+
+  /**
+   * Fase 7.6 · Abre el modal de cierre y dispara el pulso al cajón físico para que el cajero
+   * cuente el efectivo antes de tipear el arqueo. Si el bridge no responde, igual se abre el
+   * modal (no queremos bloquear el flujo si la integración local está caída).
+   */
+  async function onOpenCloseSessionModal() {
+    setCloseSessionModalOpen(true)
+    try {
+      await triggerCashDrawerPulse()
+    } catch {
+      /* pulso best-effort: el modal ya está abierto y el cajero puede contar igualmente */
     }
   }
 
@@ -328,8 +347,9 @@ export function CashPage() {
       confirmLabel: 'Cerrar sesión',
     })
     if (!okClose) return false
+    const closedSessionId = current.id
     try {
-      await api(`/cash/sessions/${current.id}/close`, {
+      await api(`/cash/sessions/${closedSessionId}/close`, {
         method: 'POST',
         body: JSON.stringify({
           closingCounted: counted,
@@ -341,10 +361,41 @@ export function CashPage() {
       setCloseDiff('')
       await loadCore()
       await refreshCashOpen()
+      /**
+       * Fase 7.6 · Si el taller activó `cash.arqueo_autoprint_enabled`, abrimos solito el
+       * ticket de arqueo. Si falla (popup bloqueado, bridge caído, etc.), avisamos al cajero
+       * y dejamos que use el botón manual "Imprimir arqueo".
+       */
+      if (arqueoAutoprintEnabled) {
+        try {
+          await openAuthenticatedHtml(
+            `/cash/sessions/${closedSessionId}/receipt`,
+            'Arqueo de caja',
+          )
+        } catch (printErr) {
+          setMsg(
+            printErr instanceof Error
+              ? `Sesión cerrada, pero falló la impresión automática del arqueo: ${printErr.message}`
+              : 'Sesión cerrada, pero falló la impresión automática del arqueo.',
+          )
+        }
+      }
       return true
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error')
       return false
+    }
+  }
+
+  /**
+   * Fase 7.6 · Botón manual "Imprimir arqueo" del banner de sesión. Abre el ticket en una
+   * pestaña nueva; los errores de popup/bridge se reportan en el banner `msg`.
+   */
+  async function printCashSessionReceipt(sessionId: string) {
+    try {
+      await openAuthenticatedHtml(`/cash/sessions/${sessionId}/receipt`, 'Arqueo de caja')
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'No se pudo abrir el arqueo.')
     }
   }
 
@@ -619,6 +670,16 @@ export function CashPage() {
             )}
             {current != null && current.status !== 'OPEN' && 'Sesión cerrada'}
           </p>
+          {current != null && can('cash_sessions:read') && (
+            <button
+              type="button"
+              onClick={() => void printCashSessionReceipt(current.id)}
+              className="va-btn-secondary ml-auto shrink-0 text-xs"
+              title="Abre el ticket de arqueo en una pestaña nueva para imprimirlo o guardarlo en PDF."
+            >
+              Imprimir arqueo
+            </button>
+          )}
         </div>
       )}
 
@@ -629,7 +690,7 @@ export function CashPage() {
             can('cash_sessions:close') && current ? (
               <button
                 type="button"
-                onClick={() => setCloseSessionModalOpen(true)}
+                onClick={() => void onOpenCloseSessionModal()}
                 className="va-btn-danger va-tab-row-stretch-btn"
               >
                 Cerrar sesión

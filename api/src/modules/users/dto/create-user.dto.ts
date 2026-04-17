@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsEmail, IsString, MinLength } from 'class-validator';
+import { ArrayMinSize, IsArray, IsEmail, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 export class CreateUserDto {
   @IsEmail()
@@ -16,4 +16,9 @@ export class CreateUserDto {
   @ArrayMinSize(1)
   @IsString({ each: true })
   roleIds!: string[];
+
+  /** Cliente del taller para usuarios con rol portal (ver solo OT de sus vehículos). */
+  @IsOptional()
+  @IsUUID()
+  portalCustomerId?: string;
 }

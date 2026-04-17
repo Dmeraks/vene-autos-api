@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthSessionService } from '../auth/auth-session.service';
+import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { ResetUserPasswordDto } from './dto/reset-user-password.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
@@ -29,6 +30,7 @@ export class UsersService {
         email: true,
         fullName: true,
         isActive: true,
+        portalCustomerId: true,
         createdAt: true,
         updatedAt: true,
         roles: {
@@ -48,6 +50,7 @@ export class UsersService {
         email: true,
         fullName: true,
         isActive: true,
+        portalCustomerId: true,
         createdAt: true,
         updatedAt: true,
         roles: {
@@ -76,6 +79,18 @@ export class UsersService {
     return user;
   }
 
+  /** Perfil para el front: datos de BD + permisos efectivos del JWT (vista por rol si aplica). */
+  async meForSession(actor: JwtUserPayload) {
+    const profile = await this.findOne(actor.sub);
+    const roleSlugs = profile.roles.map((ur) => ur.role.slug);
+    return {
+      ...profile,
+      roleSlugs,
+      effectivePermissions: actor.permissions,
+      previewRole: actor.previewRole ?? null,
+    };
+  }
+
   async create(dto: CreateUserDto, actorUserId: string, meta: { ip?: string; userAgent?: string }) {
     await this.assertActorMayCreateUsers(actorUserId);
 
@@ -90,12 +105,20 @@ export class UsersService {
       throw new BadRequestException('Uno o más roles no existen');
     }
 
+    if (dto.portalCustomerId) {
+      const cust = await this.prisma.customer.findUnique({ where: { id: dto.portalCustomerId } });
+      if (!cust) {
+        throw new BadRequestException('Cliente portal no encontrado');
+      }
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const user = await this.prisma.user.create({
       data: {
         email,
         passwordHash,
         fullName: dto.fullName.trim(),
+        portalCustomerId: dto.portalCustomerId ?? undefined,
         roles: {
           createMany: {
             data: dto.roleIds.map((roleId) => ({ roleId })),
@@ -127,7 +150,10 @@ export class UsersService {
   ) {
     const before = await this.prisma.user.findUnique({
       where: { id },
-      include: {
+      select: {
+        fullName: true,
+        isActive: true,
+        portalCustomerId: true,
         roles: { select: { roleId: true } },
       },
     });
@@ -145,12 +171,24 @@ export class UsersService {
     const data: {
       fullName?: string;
       isActive?: boolean;
+      portalCustomerId?: string | null;
     } = {};
     if (dto.fullName !== undefined) {
       data.fullName = dto.fullName.trim();
     }
     if (dto.isActive !== undefined) {
       data.isActive = dto.isActive;
+    }
+    if (dto.portalCustomerId !== undefined) {
+      if (dto.portalCustomerId === null) {
+        data.portalCustomerId = null;
+      } else {
+        const cust = await this.prisma.customer.findUnique({ where: { id: dto.portalCustomerId } });
+        if (!cust) {
+          throw new BadRequestException('Cliente portal no encontrado');
+        }
+        data.portalCustomerId = dto.portalCustomerId;
+      }
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -172,7 +210,12 @@ export class UsersService {
 
     const after = await this.prisma.user.findUnique({
       where: { id },
-      include: { roles: { select: { roleId: true } } },
+      select: {
+        fullName: true,
+        isActive: true,
+        portalCustomerId: true,
+        roles: { select: { roleId: true } },
+      },
     });
 
     await this.audit.recordDomain({
@@ -184,11 +227,13 @@ export class UsersService {
         fullName: before.fullName,
         isActive: before.isActive,
         roleIds: before.roles.map((r) => r.roleId),
+        portalCustomerId: before.portalCustomerId ?? null,
       },
       nextPayload: {
         fullName: after?.fullName,
         isActive: after?.isActive,
         roleIds: after?.roles.map((r) => r.roleId) ?? [],
+        portalCustomerId: after?.portalCustomerId ?? null,
       },
       ipAddress: meta.ip ?? null,
       userAgent: meta.userAgent ?? null,

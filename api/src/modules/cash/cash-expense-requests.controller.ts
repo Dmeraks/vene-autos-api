@@ -56,6 +56,16 @@ export class CashExpenseRequestsController {
     });
   }
 
+  /** Cajero: registra el egreso en caja física para una solicitud ya aprobada. */
+  @Post(':id/pay-out')
+  @RequirePermissions('cash_movements:create_expense')
+  payOut(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload, @Req() req: Request) {
+    return this.requests.payOut(actor.sub, id, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
+  }
+
   @Post(':id/reject')
   @RequirePermissions('cash_expense_requests:reject')
   reject(
