@@ -1,15 +1,20 @@
 import { WorkOrderStatus } from '@prisma/client';
 import {
   Allow,
+  IsBoolean,
+  IsEmail,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
-  IsUUID,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateIf,
 } from 'class-validator';
+import { IsPrismaCuid } from '../../../common/decorators/is-prisma-cuid.decorator';
 import { MONEY_DECIMAL_REGEX } from '../../cash/cash.constants';
 
 const STATUSES = Object.values(WorkOrderStatus);
@@ -32,10 +37,64 @@ export class UpdateWorkOrderDto {
   @MaxLength(80)
   customerPhone?: string;
 
+  /** Correo para facturación u otros usos en esta OT; vacío o `null` lo borra. */
+  @IsOptional()
+  @Allow()
+  @ValidateIf((_, v) => v != null && String(v).trim() !== '')
+  @IsEmail()
+  @MaxLength(120)
+  customerEmail?: string | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(40)
   vehiclePlate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  vehicleBrand?: string;
+
+  /** Modelo al ingreso (instantánea en la OT); vacío o `null` lo borra. */
+  @IsOptional()
+  @Allow()
+  @ValidateIf((_, v) => v != null && String(v).trim() !== '')
+  @IsString()
+  @MaxLength(80)
+  vehicleModel?: string | null;
+
+  @IsOptional()
+  @Allow()
+  @ValidateIf((_, v) => v != null && String(v).trim() !== '')
+  @IsString()
+  @MaxLength(120)
+  vehicleLine?: string | null;
+
+  @IsOptional()
+  @Allow()
+  @ValidateIf((_, v) => v != null && String(v).trim() !== '')
+  @IsString()
+  @MaxLength(32)
+  vehicleCylinderCc?: string | null;
+
+  @IsOptional()
+  @Allow()
+  @ValidateIf((_, v) => v != null && String(v).trim() !== '')
+  @IsString()
+  @MaxLength(80)
+  vehicleColor?: string | null;
+
+  @IsOptional()
+  @Allow()
+  @ValidateIf((_, v) => v != null)
+  @IsInt()
+  @Min(0)
+  @Max(9_999_999)
+  intakeOdometerKm?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  inspectionOnly?: boolean;
 
   @IsOptional()
   @IsString()
@@ -54,14 +113,14 @@ export class UpdateWorkOrderDto {
   @IsOptional()
   @Allow()
   @ValidateIf((_, v) => v != null)
-  @IsUUID()
+  @IsPrismaCuid()
   assignedToId?: string | null;
 
   /** Enlazar o desenlazar vehículo formal; `null` quita el vínculo (no borra texto legado). */
   @IsOptional()
   @Allow()
   @ValidateIf((_, v) => v != null)
-  @IsUUID()
+  @IsPrismaCuid()
   vehicleId?: string | null;
 
   /** Tope de cobros; `null` quita el tope. */
@@ -70,7 +129,24 @@ export class UpdateWorkOrderDto {
   @ValidateIf((_, v) => v != null)
   @IsString()
   @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'Monto inválido: use entero o hasta 2 decimales (ej. "150000" o "150000.50")',
+    message: 'Monto inválido: solo pesos enteros en dígitos, sin decimales (ej. "150000")',
   })
   authorizedAmount?: string | null;
+
+  /** Copia del texto de consentimiento mostrado al cliente (solo con `clientSignaturePngBase64`). */
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  @MaxLength(50000)
+  clientConsentTextSnapshot?: string;
+
+  /**
+   * PNG en base64 (opcional prefijo `data:image/png;base64,`). Solo se acepta si aún no hay firma en la orden.
+   * Debe enviarse junto con `clientConsentTextSnapshot`.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(200)
+  @MaxLength(2_500_000)
+  clientSignaturePngBase64?: string;
 }

@@ -13,7 +13,9 @@ export class UpdateWorkOrderLineDto {
 
   @IsOptional()
   @IsString()
-  @Matches(MONEY_DECIMAL_REGEX, { message: 'Precio unitario inválido' })
+  @Matches(MONEY_DECIMAL_REGEX, {
+    message: 'Precio unitario: solo pesos enteros en dígitos, sin decimales',
+  })
   unitPrice?: string | null;
 
   @IsOptional()
@@ -21,4 +23,24 @@ export class UpdateWorkOrderLineDto {
   @MinLength(3)
   @MaxLength(2000)
   description?: string;
+
+  /** Vincular/desvincular un servicio del catálogo (solo tiene sentido en líneas LABOR). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  serviceId?: string | null;
+
+  /** Cambiar la tarifa de impuesto aplicada (null → quitar). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  taxRateId?: string | null;
+
+  /** Descuento de línea en COP enteros (null → quitar). */
+  @IsOptional()
+  @IsString()
+  @Matches(MONEY_DECIMAL_REGEX, {
+    message: 'Descuento: solo pesos enteros en dígitos, sin decimales',
+  })
+  discountAmount?: string | null;
 }

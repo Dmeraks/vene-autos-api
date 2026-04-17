@@ -23,6 +23,10 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { ServicesModule } from './modules/services/services.module';
+import { TaxRatesModule } from './modules/tax-rates/tax-rates.module';
+import { SalesModule } from './modules/sales/sales.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { HealthController } from './health/health.controller';
 import { RootController } from './root.controller';
 
@@ -43,6 +47,10 @@ import { RootController } from './root.controller';
     CustomersModule,
     VehiclesModule,
     InventoryModule,
+    TaxRatesModule,
+    ServicesModule,
+    SalesModule,
+    BillingModule,
     ReportsModule,
   ],
   controllers: [RootController, HealthController],

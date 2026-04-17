@@ -19,98 +19,193 @@ export type ConfirmOptions = {
   variant?: 'default' | 'danger'
 }
 
-type ConfirmContextValue = {
-  confirm: (options: ConfirmOptions) => Promise<boolean>
+/** Diálogo informativo de un solo botón (misma cáscara visual que `confirm`). */
+export type AlertOptions = {
+  title: string
+  message: ReactNode
+  okLabel?: string
+  variant?: 'default' | 'danger'
 }
 
-const ConfirmContext = createContext<ConfirmContextValue | null>(null)
+type QueuedItem =
+  | { type: 'confirm'; opts: ConfirmOptions; resolve: (value: boolean) => void }
+  | { type: 'alert'; opts: AlertOptions; resolve: () => void }
 
-export function useConfirm(): ConfirmContextValue['confirm'] {
-  const ctx = useContext(ConfirmContext)
+type DialogContextValue = {
+  confirm: (options: ConfirmOptions) => Promise<boolean>
+  alert: (options: AlertOptions) => Promise<void>
+}
+
+const DialogContext = createContext<DialogContextValue | null>(null)
+
+export function useConfirm(): DialogContextValue['confirm'] {
+  const ctx = useContext(DialogContext)
   if (!ctx) {
     throw new Error('useConfirm debe usarse dentro de ConfirmProvider')
   }
   return ctx.confirm
 }
 
+export function useAlert(): DialogContextValue['alert'] {
+  const ctx = useContext(DialogContext)
+  if (!ctx) {
+    throw new Error('useAlert debe usarse dentro de ConfirmProvider')
+  }
+  return ctx.alert
+}
+
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const titleId = useId()
   const [open, setOpen] = useState(false)
-  const [options, setOptions] = useState<ConfirmOptions | null>(null)
-  const resolverRef = useRef<((value: boolean) => void) | null>(null)
+  const [active, setActive] = useState<QueuedItem | null>(null)
+  const activeRef = useRef<QueuedItem | null>(null)
+  const lockRef = useRef(false)
+  const queueRef = useRef<QueuedItem[]>([])
 
-  const finish = useCallback((value: boolean) => {
-    setOpen(false)
-    setOptions(null)
-    resolverRef.current?.(value)
-    resolverRef.current = null
+  const showItem = useCallback((item: QueuedItem) => {
+    activeRef.current = item
+    setActive(item)
+    setOpen(true)
   }, [])
 
-  const confirm = useCallback((opts: ConfirmOptions) => {
-    return new Promise<boolean>((resolve) => {
-      resolverRef.current = resolve
-      setOptions(opts)
-      setOpen(true)
-    })
+  const settleAndAdvance = useCallback(() => {
+    const next = queueRef.current.shift()
+    if (next) {
+      activeRef.current = next
+      setActive(next)
+    } else {
+      lockRef.current = false
+      activeRef.current = null
+      setActive(null)
+      setOpen(false)
+    }
   }, [])
+
+  const finish = useCallback(
+    (outcome: boolean | 'alert-ok') => {
+      const cur = activeRef.current
+      if (!cur) return
+      if (cur.type === 'confirm') {
+        cur.resolve(outcome === true)
+      } else {
+        cur.resolve()
+      }
+      settleAndAdvance()
+    },
+    [settleAndAdvance],
+  )
+
+  const confirm = useCallback(
+    (opts: ConfirmOptions) => {
+      return new Promise<boolean>((resolve) => {
+        const item: QueuedItem = { type: 'confirm', opts, resolve }
+        if (lockRef.current) {
+          queueRef.current.push(item)
+          return
+        }
+        lockRef.current = true
+        showItem(item)
+      })
+    },
+    [showItem],
+  )
+
+  const alert = useCallback(
+    (opts: AlertOptions) => {
+      return new Promise<void>((resolve) => {
+        const item: QueuedItem = { type: 'alert', opts, resolve }
+        if (lockRef.current) {
+          queueRef.current.push(item)
+          return
+        }
+        lockRef.current = true
+        showItem(item)
+      })
+    },
+    [showItem],
+  )
 
   useEffect(() => {
-    if (!open) return
+    if (!open || !active) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') finish(false)
+      if (e.key === 'Escape') {
+        if (active.type === 'confirm') finish(false)
+        else finish('alert-ok')
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, finish])
+  }, [open, active, finish])
 
-  const confirmBtnClass =
-    options?.variant === 'danger'
-      ? 'min-h-[44px] rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 sm:min-h-0'
-      : 'min-h-[44px] rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 sm:min-h-0'
+  const primaryBtnClass =
+    active?.type === 'confirm'
+      ? active.opts.variant === 'danger'
+        ? 'va-btn-danger'
+        : 'va-btn-primary'
+      : active?.opts.variant === 'danger'
+        ? 'va-btn-danger'
+        : 'va-btn-primary'
+
+  const overlayDismiss = () => {
+    if (!activeRef.current) return
+    if (activeRef.current.type === 'confirm') finish(false)
+    else finish('alert-ok')
+  }
+
+  const opts = active?.type === 'confirm' ? active.opts : active?.opts
 
   return (
-    <ConfirmContext.Provider value={{ confirm }}>
+    <DialogContext.Provider value={{ confirm, alert }}>
       {children}
-      {open && options && (
+      {open && active && opts && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-900/55 p-4 py-8 dark:bg-black/65 sm:p-6"
+          className="va-modal-overlay z-[100] !items-center overflow-y-auto py-8 sm:p-6"
           role="presentation"
+          onClick={overlayDismiss}
         >
           <div
             role="alertdialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className="va-card max-h-[min(85dvh,calc(100dvh-2rem))] w-full max-w-lg overflow-y-auto shadow-2xl ring-1 ring-slate-200/60 dark:ring-slate-600/50"
+            className="va-modal-panel max-h-[min(85dvh,calc(100dvh-2rem))] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-              Confirmación
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-300">
+              {active.type === 'confirm' ? 'Confirmación' : 'Aviso'}
             </p>
-            <h2 id={titleId} className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">
-              {options.title}
+            <h2 id={titleId} className="mt-1 va-section-title text-lg">
+              {opts.title}
             </h2>
             <div className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300 [&_strong]:font-semibold [&_strong]:text-slate-800 dark:[&_strong]:text-slate-100 [&_.tabular-nums]:tracking-tight">
-              {typeof options.message === 'string' ? (
-                <div className="whitespace-pre-wrap break-words">{options.message}</div>
+              {typeof opts.message === 'string' ? (
+                <div className="whitespace-pre-wrap break-words">{opts.message}</div>
               ) : (
-                options.message
+                opts.message
               )}
             </div>
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3">
-              <button
-                type="button"
-                className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 sm:min-h-0"
-                onClick={() => finish(false)}
-              >
-                {options.cancelLabel ?? 'Cancelar'}
-              </button>
-              <button type="button" className={confirmBtnClass} onClick={() => finish(true)}>
-                {options.confirmLabel ?? 'Aceptar'}
-              </button>
+              {active.type === 'confirm' ? (
+                <>
+                  <button
+                    type="button"
+                    className="va-btn-secondary"
+                    onClick={() => finish(false)}
+                  >
+                    {active.opts.cancelLabel ?? 'Cancelar'}
+                  </button>
+                  <button type="button" className={primaryBtnClass} onClick={() => finish(true)}>
+                    {active.opts.confirmLabel ?? 'Aceptar'}
+                  </button>
+                </>
+              ) : (
+                <button type="button" className={primaryBtnClass} onClick={() => finish('alert-ok')}>
+                  {active.opts.okLabel ?? 'Entendido'}
+                </button>
+              )}
             </div>
           </div>
         </div>
       )}
-    </ConfirmContext.Provider>
+    </DialogContext.Provider>
   )
 }

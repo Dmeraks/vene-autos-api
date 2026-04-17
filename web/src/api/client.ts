@@ -37,16 +37,25 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  if (!headers.has('Cache-Control')) {
+    headers.set('Cache-Control', 'no-cache')
+    headers.set('Pragma', 'no-cache')
+  }
   if (init.body != null && typeof init.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 
   let res: Response
   try {
-    res = await fetch(`${API_PREFIX}${path}`, { ...init, headers })
+    res = await fetch(`${API_PREFIX}${path}`, {
+      ...init,
+      headers,
+      /** Evita que el navegador sirva JSON viejo (p. ej. líneas de OT tras DELETE) desde caché HTTP. */
+      cache: init.cache ?? 'no-store',
+    })
   } catch {
     throw new ApiError(
-      'No se pudo contactar al servidor. En desarrollo: levantá PostgreSQL, iniciá la API en el puerto 3000 (por ejemplo npm run api:dev desde la raíz del proyecto) y recargá esta página.',
+      'No se pudo contactar al servidor. En desarrollo, desde la raíz del repo: npm run db:up (PostgreSQL en Docker), npm run api:dev, y esperá a ver en consola la línea que empieza con «Vene Autos API —». Recargá esta página.',
       0,
       null,
     )
@@ -61,14 +70,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await parseBody(res)
-    let msg =
+    const rawMsg =
       typeof body === 'object' && body !== null && 'message' in body
-        ? String((body as { message: unknown }).message)
+        ? (body as { message: unknown }).message
         : res.statusText
+    let msg =
+      Array.isArray(rawMsg) ? rawMsg.map((x) => String(x)).filter(Boolean).join(' ') : String(rawMsg ?? res.statusText)
 
     if (res.status === 502 || res.status === 503 || res.status === 504) {
       msg =
-        'La API no respondió (Bad Gateway / servicio no disponible). Suele pasar si el backend no está en marcha o PostgreSQL no está accesible: iniciá Docker/Postgres, npm run api:dev, y esperá a ver “Vene Autos API” en la consola del servidor.'
+        'La API no respondió correctamente (502/503/504). Suele ocurrir si el backend no está en marcha o PostgreSQL no está accesible. Desde la raíz del repo: npm run db:up, luego npm run api:dev, y comprobar en la consola del servidor la línea «Vene Autos API — http://localhost:…».'
     }
 
     throw new ApiError(msg || 'Error de API', res.status, body)

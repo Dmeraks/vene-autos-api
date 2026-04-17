@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import { useAuth } from '../../auth/AuthContext'
 import { useConfirm } from '../../components/confirm/ConfirmProvider'
+import { PageHeader } from '../../components/layout/PageHeader'
 import { getSettingPresentation } from '../../config/settingsPresentation'
+import { usePanelTheme } from '../../theme/PanelThemeProvider'
+import { isResumeLastModuleEnabled, setResumeLastModuleEnabled } from '../../utils/lastModule'
 
 function displayValue(v: unknown): string {
   if (v === null || v === undefined) return ''
@@ -15,22 +18,104 @@ function isUserCreatePolicyKey(key: string) {
   return key === 'users.create_requires_dueno_role' || key === 'users.create_requires_owner_role'
 }
 
+const DIAN_ENUM_OPTIONS = {
+  'dian.provider': [
+    { value: 'facture', label: 'Facture' },
+    { value: 'alegra', label: 'Alegra' },
+    { value: 'siigo', label: 'Siigo' },
+    { value: 'carvajal', label: 'Carvajal' },
+    { value: 'custom', label: 'Integración propia' },
+  ],
+  'dian.environment': [
+    { value: 'sandbox', label: 'Sandbox (pruebas)' },
+    { value: 'production', label: 'Producción' },
+  ],
+  'dian.emission_mode': [
+    { value: 'async', label: 'Asíncrono (recomendado)' },
+    { value: 'sync', label: 'Síncrono (solo si el proveedor responde rápido)' },
+  ],
+} as const satisfies Record<string, ReadonlyArray<{ value: string; label: string }>>
+
+type DianEnumKey = keyof typeof DIAN_ENUM_OPTIONS
+
+function isDianBooleanKey(key: string): boolean {
+  return key === 'dian.enabled'
+}
+
+function isDianEnumKey(key: string): key is DianEnumKey {
+  return Object.prototype.hasOwnProperty.call(DIAN_ENUM_OPTIONS, key)
+}
+
+function isDianSecretKey(key: string): boolean {
+  return key === 'dian.api_token'
+}
+
+/** Ancho del control según tipo de dato (evita inputs de 2 dígitos a todo el ancho). */
+function settingFieldWidthClass(key: string): string {
+  if (key === PANEL_THEME_KEY) return 'w-full max-w-md'
+  if (isUserCreatePolicyKey(key)) return 'w-full max-w-[12rem]'
+  if (isDianBooleanKey(key)) return 'w-full max-w-[12rem]'
+  if (isDianEnumKey(key)) return 'w-full max-w-md'
+  if (key === 'dian.api_base_url' || key === 'dian.api_token') return 'w-full max-w-2xl font-mono'
+  if (
+    key === 'dian.company_nit' ||
+    key === 'dian.company_verification_digit' ||
+    key === 'dian.resolution_prefix' ||
+    key === 'dian.resolution_number' ||
+    key === 'dian.test_set_id' ||
+    key === 'dian.resolution_valid_until'
+  ) {
+    return 'w-full max-w-xs font-mono tabular-nums'
+  }
+  if (key === 'dian.resolution_from' || key === 'dian.resolution_to') {
+    return 'w-full max-w-[9rem] font-mono tabular-nums'
+  }
+  if (key === 'workshop.name' || key === 'workshop.timezone' || key === 'workshop.currency') {
+    return 'w-full max-w-xl'
+  }
+  if (key.startsWith('notes.')) {
+    return 'w-full max-w-[9rem] font-mono tabular-nums sm:max-w-[10rem]'
+  }
+  return 'w-full max-w-[9rem] font-mono tabular-nums sm:max-w-[10rem]'
+}
+
 const WORK_ORDER_PAYMENT_NOTE_KEY = 'notes.min_length.work_order_payment'
 
 const DEFAULT_WORK_ORDER_PAYMENT_MIN = 70
 
+const PANEL_THEME_KEY = 'ui.panel_theme'
+
 function mergeSettingsFromServer(m: Record<string, unknown>): Record<string, unknown> {
   const out = { ...m }
   if (!(WORK_ORDER_PAYMENT_NOTE_KEY in out)) out[WORK_ORDER_PAYMENT_NOTE_KEY] = DEFAULT_WORK_ORDER_PAYMENT_MIN
+  if (!(PANEL_THEME_KEY in out)) out[PANEL_THEME_KEY] = 'standard'
   return out
 }
 
 function parseValue(key: string, raw: string): unknown {
   const t = raw.trim()
+  if (key === PANEL_THEME_KEY) {
+    if (t === 'commercial') return 'commercial'
+    if (t === 'saas_light') return 'saas_light'
+    return 'standard'
+  }
   if (key === 'auth.session_idle_timeout_minutes') return parseInt(t, 10)
   if (key === 'notes.min_length_chars' || key === WORK_ORDER_PAYMENT_NOTE_KEY) return parseInt(t, 10)
   if (isUserCreatePolicyKey(key)) {
     return t === 'true' || t === '1' || t === 'sí'
+  }
+  if (isDianBooleanKey(key)) {
+    return t === 'true' || t === '1' || t === 'sí'
+  }
+  if (isDianEnumKey(key)) {
+    return t
+  }
+  if (key === 'dian.resolution_from' || key === 'dian.resolution_to') {
+    const n = parseInt(t, 10)
+    return Number.isFinite(n) ? n : t
+  }
+  if (key.startsWith('dian.')) {
+    return t
   }
   try {
     return JSON.parse(t)
@@ -50,31 +135,44 @@ const SETTING_SECTIONS: Array<{
   {
     id: 'auth',
     title: 'Sesión y seguridad',
-    description: 'Tiempo de inactividad y políticas de acceso al panel.',
+    description: 'Inactividad y acceso.',
     match: (key) => key.startsWith('auth.'),
   },
   {
     id: 'workshop',
     title: 'Identidad del taller',
-    description: 'Nombre, moneda y zona horaria usados en el sistema.',
+    description: 'Nombre, moneda, zona horaria.',
     match: (key) => key.startsWith('workshop.'),
+  },
+  {
+    id: 'ui',
+    title: 'Interfaz del panel',
+    description: 'Tema visual del panel.',
+    match: (key) => key.startsWith('ui.'),
   },
   {
     id: 'notes',
     title: 'Notas operativas',
-    description: 'Longitud mínima de textos en caja, cobros y recepción.',
+    description: 'Mínimos de caracteres en notas.',
     match: (key) => key.startsWith('notes.'),
+  },
+  {
+    id: 'dian',
+    title: 'Facturación electrónica DIAN',
+    description:
+      'Credenciales y numeración para el proveedor. Si está desactivada, la app opera sin emisión (valores quedan listos para una futura integración).',
+    match: (key) => key.startsWith('dian.'),
   },
   {
     id: 'users',
     title: 'Política de usuarios',
-    description: 'Quién puede dar de alta cuentas nuevas.',
+    description: 'Alta de cuentas nuevas.',
     match: (key) => isUserCreatePolicyKey(key),
   },
   {
     id: 'other',
     title: 'Otros parámetros',
-    description: 'Claves adicionales guardadas en base (avanzado).',
+    description: 'Claves extra en base.',
     match: () => true,
   },
 ]
@@ -97,6 +195,8 @@ function groupSettingKeys(keys: string[]): Array<{ section: (typeof SETTING_SECT
 }
 
 export function SettingsPage() {
+  const panelTheme = usePanelTheme()
+  const isSaas = panelTheme === 'saas_light'
   const { can } = useAuth()
   const confirm = useConfirm()
   const canSaveSettings = can('settings:update')
@@ -115,6 +215,8 @@ export function SettingsPage() {
   const [resetPw2, setResetPw2] = useState('')
   const [resetMsg, setResetMsg] = useState<string | null>(null)
   const [resetBusy, setResetBusy] = useState(false)
+  const [resumeLastModuleEnabled, setResumeLastModuleEnabledState] = useState(true)
+  const [resumePrefMsg, setResumePrefMsg] = useState<string | null>(null)
 
   useEffect(() => {
     void api<Record<string, unknown>>('/settings')
@@ -139,6 +241,16 @@ export function SettingsPage() {
       })
       .catch(() => setUserOptions([]))
   }, [canResetPasswords])
+
+  useEffect(() => {
+    setResumeLastModuleEnabledState(isResumeLastModuleEnabled())
+  }, [])
+
+  useEffect(() => {
+    if (!resumePrefMsg) return
+    const timer = window.setTimeout(() => setResumePrefMsg(null), 2200)
+    return () => window.clearTimeout(timer)
+  }, [resumePrefMsg])
 
   const keys = map ? Object.keys(map).sort() : []
   const groupedKeys = useMemo(() => groupSettingKeys(keys), [keys])
@@ -196,6 +308,7 @@ export function SettingsPage() {
       }
       setDraft(d)
       setMsg('Configuración guardada')
+      window.dispatchEvent(new CustomEvent('vene:panel-theme-changed'))
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error al guardar')
     }
@@ -244,24 +357,38 @@ export function SettingsPage() {
   )
 
   const showSupportTab = canResetPasswords
+  const pageClass = isSaas ? 'space-y-4 lg:space-y-5' : 'space-y-3 sm:space-y-4'
+  const sectionCardClass = isSaas
+    ? 'scroll-mt-4 va-settings-section overflow-hidden'
+    : 'scroll-mt-4 va-card border-slate-200/90 p-3 shadow-sm sm:p-4 dark:border-slate-700/90'
+  const supportCardClass = isSaas
+    ? 'va-settings-section overflow-hidden'
+    : 'va-card border-brand-200/60 p-3 dark:border-brand-900/50'
+  const sectionHeadClass = isSaas
+    ? 'va-settings-section-head'
+    : 'border-b border-slate-100 pb-2 dark:border-slate-800'
+  const sectionTitleClass = isSaas ? 'va-section-title text-sm' : 'text-sm font-semibold text-slate-900 dark:text-slate-50'
+  const settingRowClass = isSaas
+    ? 'grid gap-1.5 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4 sm:py-1.5'
+    : 'grid gap-1.5 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4 sm:py-2'
 
   return (
-    <div className="space-y-8">
-      <header className="border-b border-slate-200/80 pb-6 dark:border-slate-800">
-        <p className="text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-300">
-          Administración
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
-          Configuración del taller
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-          Parámetros globales del sistema y, si tu rol lo permite, herramientas de soporte para recuperar accesos. Los
-          cambios quedan registrados en auditoría cuando aplica.
-        </p>
-      </header>
+    <div className={`${pageClass} max-w-6xl mx-auto w-full ${isSaas ? 'va-settings-page' : ''}`}>
+      <PageHeader
+        eyebrow="Administración"
+        title="Configuración del taller"
+        description="Parámetros globales del taller. Los cambios relevantes quedan en auditoría."
+        rootClassName={
+          isSaas ? undefined : 'border-b border-slate-200/80 pb-4 dark:border-slate-800'
+        }
+      />
 
       {showSupportTab && (
-        <div className="va-tabstrip max-w-xl" role="tablist" aria-label="Secciones de configuración">
+        <div
+          className={`va-tabstrip max-w-xl ${isSaas ? 'va-tabstrip--inline va-tabstrip--compact' : ''}`}
+          role="tablist"
+          aria-label="Secciones de configuración"
+        >
           <button
             type="button"
             role="tab"
@@ -287,115 +414,219 @@ export function SettingsPage() {
 
       {(!showSupportTab || panel === 'workshop') && (
         <>
-          {!map && <p className="text-slate-500 dark:text-slate-400">Cargando…</p>}
+          <section className={`${sectionCardClass} ${isSaas ? 'p-3 sm:p-3.5' : ''}`}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className={sectionTitleClass}>Experiencia de navegación</h2>
+                <p className="mt-0.5 text-xs leading-snug text-slate-600 dark:text-slate-300">
+                  Retomar el último módulo al iniciar sesión. Solo en este navegador (no cambia la API).
+                </p>
+              </div>
+              <label className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={resumeLastModuleEnabled}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                    setResumeLastModuleEnabledState(next)
+                    setResumeLastModuleEnabled(next)
+                    setResumePrefMsg(
+                      next
+                        ? 'Listo: se retomará el último módulo al iniciar sesión.'
+                        : 'Listo: desactivado. Se abrirá el inicio del panel.',
+                    )
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                />
+                <span>{resumeLastModuleEnabled ? 'Activado' : 'Desactivado'}</span>
+              </label>
+            </div>
+            {resumePrefMsg && (
+              <p
+                role="status"
+                aria-live="polite"
+                className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100"
+              >
+                {resumePrefMsg}
+              </p>
+            )}
+          </section>
+
+          {!map && <p className="text-slate-500 dark:text-slate-300">Cargando…</p>}
           {map && (
-            <form onSubmit={save} className="space-y-8">
+            <form onSubmit={save} className="min-w-0 space-y-5">
               {!canSaveSettings && (
-                <p className="rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                <p className="rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
                   Solo tenés permiso de lectura. Los valores se muestran para consulta; un usuario con permiso de
                   actualización puede modificarlos.
                 </p>
               )}
 
-              {groupedKeys.map(({ section, keys: sectionKeys }) => (
-                <section
-                  key={section.id}
-                  className="va-card border-slate-200/90 shadow-sm dark:border-slate-700/90"
-                >
-                  <div className="border-b border-slate-100 pb-4 dark:border-slate-800">
-                    <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">{section.title}</h2>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{section.description}</p>
-                  </div>
-                  <div className="mt-5 space-y-6">
-                    {sectionKeys.map((key) => {
-                      const { label, description } = getSettingPresentation(key)
-                      return (
-                        <div
-                          key={key}
-                          className="rounded-xl border border-slate-100 bg-slate-50/40 p-4 dark:border-slate-800 dark:bg-slate-800/30"
-                        >
-                          <label className="block">
-                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">{label}</span>
-                            <span className="mt-0.5 block font-mono text-[11px] text-slate-400 dark:text-slate-500">
-                              {key}
-                            </span>
-                            <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                              {description}
-                            </p>
-                            {isUserCreatePolicyKey(key) ? (
-                              <select
-                                value={draft[key] === 'true' ? 'true' : 'false'}
-                                disabled={!canSaveSettings}
-                                onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
-                                className="va-field mt-3 max-w-md disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                <option value="false">No</option>
-                                <option value="true">Sí</option>
-                              </select>
-                            ) : (
-                              <input
-                                value={draft[key] ?? ''}
-                                disabled={!canSaveSettings}
-                                onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
-                                className="va-field mt-3 font-mono disabled:cursor-not-allowed disabled:opacity-60"
-                              />
-                            )}
-                          </label>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </section>
-              ))}
-
-              {canSaveSettings && (
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="submit"
-                    className="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700"
+              <div className="grid gap-3 lg:grid-cols-2 lg:items-start lg:gap-x-5 lg:gap-y-4">
+                {groupedKeys.map(({ section, keys: sectionKeys }) => (
+                  <section
+                    key={section.id}
+                    id={`cfg-${section.id}`}
+                    className={`${sectionCardClass} ${section.id === 'other' ? 'lg:col-span-2' : ''}`}
                   >
-                    Guardar cambios
-                  </button>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Antes de guardar se muestra un resumen para confirmar.
-                  </p>
-                </div>
-              )}
+                    <div className={sectionHeadClass}>
+                      <h2 className={sectionTitleClass}>{section.title}</h2>
+                      <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400 sm:text-xs">
+                        {section.description}
+                      </p>
+                    </div>
+                    <ul className="mt-0 divide-y divide-slate-100 px-3 pb-1 dark:divide-slate-800 sm:px-3.5">
+                      {sectionKeys.map((key) => {
+                        const { label, description } = getSettingPresentation(key)
+                        const fieldId = `setting-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+                        const width = settingFieldWidthClass(key)
+                        return (
+                          <li key={key} className={settingRowClass}>
+                            <div className="min-w-0">
+                              <label htmlFor={fieldId} className="block cursor-pointer" title={key}>
+                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">{label}</span>
+                                <span className="ml-1.5 hidden align-middle font-mono text-[10px] font-normal tracking-tight text-slate-400 sm:inline dark:text-slate-500">
+                                  ({key})
+                                </span>
+                              </label>
+                              <p className="mt-0.5 text-[11px] leading-snug text-slate-600 dark:text-slate-300 sm:text-xs">
+                                {description}
+                              </p>
+                            </div>
+                            <div className="shrink-0 sm:pt-0.5 sm:text-right">
+                              {key === PANEL_THEME_KEY ? (
+                                <select
+                                  id={fieldId}
+                                  value={
+                                    draft[key] === 'commercial'
+                                      ? 'commercial'
+                                      : draft[key] === 'saas_light'
+                                        ? 'saas_light'
+                                        : 'standard'
+                                  }
+                                  disabled={!canSaveSettings}
+                                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                                  className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
+                                >
+                                  <option value="standard">Estándar (panel clásico)</option>
+                                  <option value="commercial">Comercial (estética web pública)</option>
+                                  <option value="saas_light">SaaS claro (dashboard moderno)</option>
+                                </select>
+                              ) : isUserCreatePolicyKey(key) ? (
+                                <select
+                                  id={fieldId}
+                                  value={draft[key] === 'true' ? 'true' : 'false'}
+                                  disabled={!canSaveSettings}
+                                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                                  className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
+                                >
+                                  <option value="false">No</option>
+                                  <option value="true">Sí</option>
+                                </select>
+                              ) : isDianBooleanKey(key) ? (
+                                <select
+                                  id={fieldId}
+                                  value={draft[key] === 'true' ? 'true' : 'false'}
+                                  disabled={!canSaveSettings}
+                                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                                  className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
+                                >
+                                  <option value="false">No (sin emisión)</option>
+                                  <option value="true">Sí (emitir a DIAN)</option>
+                                </select>
+                              ) : isDianEnumKey(key) ? (
+                                <select
+                                  id={fieldId}
+                                  value={draft[key] ?? ''}
+                                  disabled={!canSaveSettings}
+                                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                                  className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
+                                >
+                                  {DIAN_ENUM_OPTIONS[key].map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : isDianSecretKey(key) ? (
+                                <input
+                                  id={fieldId}
+                                  type="password"
+                                  autoComplete="off"
+                                  value={draft[key] ?? ''}
+                                  disabled={!canSaveSettings}
+                                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                                  className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
+                                  placeholder="•••••••• (queda en base, no se muestra)"
+                                />
+                              ) : (
+                                <input
+                                  id={fieldId}
+                                  value={draft[key] ?? ''}
+                                  disabled={!canSaveSettings}
+                                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                                  className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
+                                />
+                              )}
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </section>
+                ))}
+
+                {canSaveSettings && (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 lg:col-span-2">
+                    <button type="submit" className="va-btn-primary px-5">
+                      Guardar cambios
+                    </button>
+                    <p className="text-xs text-slate-500 dark:text-slate-300">Antes de guardar se muestra un resumen para confirmar.</p>
+                  </div>
+                )}
+              </div>
             </form>
           )}
         </>
       )}
 
       {showSupportTab && panel === 'support' && (
-        <section className="va-card border-brand-200/60 dark:border-brand-900/50">
-          <div className="flex flex-col gap-2 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between dark:border-slate-800">
+        <section className={supportCardClass}>
+          <div
+            className={`flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between ${
+              isSaas
+                ? 'va-settings-section-head mb-2'
+                : 'border-b border-slate-100 pb-3 dark:border-slate-800'
+            }`}
+          >
             <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Restablecer contraseña</h2>
-              <p className="mt-1 max-w-xl text-sm text-slate-600 dark:text-slate-400">
-                Uso restringido cuando un integrante pierde el acceso. No existe en el panel la opción de que cada
-                usuario cambie su propia contraseña: solo quien tenga este permiso puede asignar una nueva.
+              <h2 className={isSaas ? 'va-section-title text-sm' : 'text-lg font-semibold text-slate-900 dark:text-slate-50'}>
+                Restablecer contraseña
+              </h2>
+              <p className="mt-0.5 max-w-xl text-xs leading-snug text-slate-600 dark:text-slate-300 sm:text-sm">
+                Solo con permiso explícito. El usuario afectado deberá iniciar sesión de nuevo.
               </p>
             </div>
-            <span className="shrink-0 rounded-lg bg-brand-100 px-2.5 py-1 text-xs font-medium text-brand-900 dark:bg-brand-950/80 dark:text-brand-200">
+            <span className="inline-flex shrink-0 items-center rounded-lg border border-brand-200 bg-brand-100 px-2.5 py-1 text-xs font-medium text-brand-900 dark:border-brand-500 dark:bg-brand-900 dark:text-brand-50 dark:shadow-sm">
               Permiso: users:reset_password
             </span>
           </div>
 
           {resetMsg && (
             <p
-              className={`mt-4 rounded-xl border px-3 py-2 text-sm ${
+              className={`mx-3 mt-3 text-sm sm:mx-3.5 ${
                 resetMsg.includes('Error') || resetMsg.includes('coinciden') || resetMsg.includes('Elegí')
-                  ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200'
-                  : 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100'
+                  ? 'va-alert-error'
+                  : 'rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100'
               }`}
             >
               {resetMsg}
             </p>
           )}
 
-          {!userOptions && <p className="mt-4 text-sm text-slate-500">Cargando usuarios…</p>}
+          {!userOptions && <p className="mx-3 mt-3 text-sm text-slate-500 sm:mx-3.5">Cargando usuarios…</p>}
           {userOptions && (
-            <form className="mt-6 space-y-4" onSubmit={submitResetPassword}>
+            <form className="mx-3 mt-4 space-y-3 pb-3 sm:mx-3.5 sm:pb-3.5" onSubmit={submitResetPassword}>
               <label className="block text-sm">
                 <span className="va-label">Usuario</span>
                 <select
@@ -434,11 +665,7 @@ export function SettingsPage() {
                   className="va-field mt-1 max-w-lg"
                 />
               </label>
-              <button
-                type="submit"
-                disabled={resetBusy}
-                className="rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
-              >
+              <button type="submit" disabled={resetBusy} className="va-btn-primary px-5 disabled:opacity-60">
                 {resetBusy ? 'Aplicando…' : 'Restablecer contraseña'}
               </button>
             </form>
