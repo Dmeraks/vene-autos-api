@@ -6,19 +6,30 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
+  InternalServerErrorException,
+  Logger,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  Res,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Public } from '../../common/decorators/public.decorator';
+import { RequireAnyPermission, RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
+import {
+  ReceiptsService,
+  type WorkOrderForReceipt,
+} from '../receipts/receipts.service';
 import { CreateWorkOrderDto } from './dto/create-work-order.dto';
 import { ListWorkOrdersQueryDto } from './dto/list-work-orders.query.dto';
+import { LookupPublicWorkOrderDto } from './dto/lookup-public-work-order.dto';
 import { RecordWorkOrderPaymentDto } from './dto/record-work-order-payment.dto';
+import { ReopenDeliveredWorkOrderDto } from './dto/reopen-delivered-work-order.dto';
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
 import { CreateWorkOrderLineDto } from './dto/create-work-order-line.dto';
 import { UpdateWorkOrderLineDto } from './dto/update-work-order-line.dto';
@@ -28,10 +39,13 @@ import { WorkOrdersService } from './work-orders.service';
 
 @Controller('work-orders')
 export class WorkOrdersController {
+  private readonly logger = new Logger(WorkOrdersController.name);
+
   constructor(
     private readonly workOrders: WorkOrdersService,
     private readonly workOrderPayments: WorkOrderPaymentsService,
     private readonly workOrderLines: WorkOrderLinesService,
+    private readonly receipts: ReceiptsService,
   ) {}
 
   @Post()
@@ -41,28 +55,41 @@ export class WorkOrdersController {
     @CurrentUser() actor: JwtUserPayload,
     @Req() req: Request,
   ) {
-    return this.workOrders.create(actor.sub, dto, {
+    return this.workOrders.create(actor, dto, {
       ip: req.ip,
       userAgent: req.headers['user-agent'] as string | undefined,
     });
   }
 
+  /** Seguimiento de OT para el cliente (código de comprobante + placa). Sin autenticación. */
+  @Public()
+  @Post('public/lookup')
+  lookupPublic(@Body() dto: LookupPublicWorkOrderDto) {
+    return this.workOrders.lookupPublicByCodeAndPlate(dto);
+  }
+
   @Get()
-  @RequirePermissions('work_orders:read')
+  @RequireAnyPermission('work_orders:read', 'work_orders:read_portal')
   list(@CurrentUser() actor: JwtUserPayload, @Query() query: ListWorkOrdersQueryDto) {
-    return this.workOrders.list(actor.sub, query);
+    return this.workOrders.list(actor, query);
+  }
+
+  @Get('assignable-users')
+  @RequirePermissions('work_orders:reassign')
+  listAssignableUsers() {
+    return this.workOrders.listAssignableUsers();
   }
 
   @Get(':id/payments')
   @RequirePermissions('work_orders:read')
-  listPayments(@Param('id') id: string) {
-    return this.workOrderPayments.list(id);
+  listPayments(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload) {
+    return this.workOrderPayments.list(id, actor);
   }
 
   @Get(':id/summary')
   @RequirePermissions('work_orders:read')
-  paymentsSummary(@Param('id') id: string) {
-    return this.workOrderPayments.summary(id);
+  paymentsSummary(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload) {
+    return this.workOrderPayments.summary(id, actor);
   }
 
   @Post(':id/payments')
@@ -73,22 +100,40 @@ export class WorkOrdersController {
     @CurrentUser() actor: JwtUserPayload,
     @Req() req: Request,
   ) {
-    return this.workOrderPayments.record(id, actor.sub, dto, {
+    return this.workOrderPayments.record(id, actor, dto, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'] as string | undefined,
+    });
+  }
+
+  @Post(':id/reopen-delivered')
+  @RequirePermissions('work_orders:reopen_delivered')
+  reopenDelivered(
+    @Param('id') id: string,
+    @Body() dto: ReopenDeliveredWorkOrderDto,
+    @CurrentUser() actor: JwtUserPayload,
+    @Req() req: Request,
+  ) {
+    return this.workOrders.reopenDelivered(id, actor, dto, {
       ip: req.ip,
       userAgent: req.headers['user-agent'] as string | undefined,
     });
   }
 
   @Get(':id/lines/subtotal')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+  @Header('Pragma', 'no-cache')
   @RequirePermissions('work_orders:read')
-  linesSubtotal(@Param('id') id: string) {
-    return this.workOrderLines.subtotal(id);
+  linesSubtotal(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload) {
+    return this.workOrderLines.subtotal(id, actor);
   }
 
   @Get(':id/lines')
-  @RequirePermissions('work_orders:read')
-  listLines(@Param('id') id: string) {
-    return this.workOrderLines.list(id);
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+  @Header('Pragma', 'no-cache')
+  @RequireAnyPermission('work_orders:read', 'work_orders:read_portal')
+  listLines(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload) {
+    return this.workOrderLines.list(id, actor);
   }
 
   @Post(':id/lines')
@@ -99,7 +144,7 @@ export class WorkOrdersController {
     @CurrentUser() actor: JwtUserPayload,
     @Req() req: Request,
   ) {
-    return this.workOrderLines.create(id, actor.sub, dto, {
+    return this.workOrderLines.create(id, actor, dto, {
       ip: req.ip,
       userAgent: req.headers['user-agent'] as string | undefined,
     });
@@ -114,7 +159,7 @@ export class WorkOrdersController {
     @CurrentUser() actor: JwtUserPayload,
     @Req() req: Request,
   ) {
-    return this.workOrderLines.update(id, lineId, actor.sub, dto, {
+    return this.workOrderLines.update(id, lineId, actor, dto, {
       ip: req.ip,
       userAgent: req.headers['user-agent'] as string | undefined,
     });
@@ -122,22 +167,69 @@ export class WorkOrdersController {
 
   @Delete(':id/lines/:lineId')
   @RequirePermissions('work_orders:update', 'work_order_lines:delete')
-  removeLine(
+  async removeLine(
     @Param('id') id: string,
     @Param('lineId') lineId: string,
     @CurrentUser() actor: JwtUserPayload,
     @Req() req: Request,
   ) {
-    return this.workOrderLines.remove(id, lineId, actor.sub, {
+    await this.workOrderLines.remove(id, lineId, actor, {
       ip: req.ip,
       userAgent: req.headers['user-agent'] as string | undefined,
     });
+    /** Misma respuesta que GET …/lines: el cliente actualiza la tabla sin un segundo GET que pueda verse “antes” del commit. */
+    return this.workOrderLines.list(id, actor);
   }
 
   @Get(':id')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+  @Header('Pragma', 'no-cache')
+  @RequireAnyPermission('work_orders:read', 'work_orders:read_portal')
+  findOne(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload) {
+    return this.workOrders.findOne(id, actor);
+  }
+
+  /**
+   * Comprobante imprimible (Fase 7.5): HTML listo para `window.print()` con los datos del
+   * taller como encabezado. No es un documento fiscal; úsese mientras la facturación
+   * electrónica DIAN esté apagada.
+   */
+  @Get(':id/receipt')
   @RequirePermissions('work_orders:read')
-  findOne(@Param('id') id: string) {
-    return this.workOrders.findOne(id);
+  async receipt(
+    @Param('id') id: string,
+    @CurrentUser() actor: JwtUserPayload,
+    @Res() res: Response,
+  ) {
+    /**
+     * Cargamos OT y pagos por separado: si el actor no puede ver montos, igual imprimimos
+     * la OT sin la sección de pagos (el recibo sigue siendo útil como constancia del servicio).
+     */
+    const detail = await this.workOrders.findOne(id, actor);
+    let payments: unknown[] = [];
+    try {
+      payments = (await this.workOrderPayments.list(id, actor)) as unknown[];
+    } catch {
+      payments = [];
+    }
+    try {
+      const payload: WorkOrderForReceipt = {
+        ...(detail as unknown as WorkOrderForReceipt),
+        payments: payments as unknown as WorkOrderForReceipt['payments'],
+      };
+      const html = await this.receipts.renderWorkOrderReceipt(payload);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.send(html);
+    } catch (err) {
+      this.logger.error(
+        `Falló al renderizar comprobante de OT ${id}: ${(err as Error)?.message ?? err}`,
+        (err as Error)?.stack,
+      );
+      throw new InternalServerErrorException(
+        `No se pudo generar el comprobante de la orden (${(err as Error)?.message ?? 'error interno'}).`,
+      );
+    }
   }
 
   @Patch(':id')
@@ -148,7 +240,7 @@ export class WorkOrdersController {
     @CurrentUser() actor: JwtUserPayload,
     @Req() req: Request,
   ) {
-    return this.workOrders.update(id, actor.sub, dto, {
+    return this.workOrders.update(id, actor, dto, {
       ip: req.ip,
       userAgent: req.headers['user-agent'] as string | undefined,
     });
