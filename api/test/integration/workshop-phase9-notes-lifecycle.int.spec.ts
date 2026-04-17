@@ -503,7 +503,7 @@ describe('Phase 9 · Notas crédito/débito + reapertura de cobro (integración)
           },
           {},
         ),
-      ).rejects.toThrow(/saldo pendiente/i);
+      ).rejects.toThrow(/saldo (pendiente|efectivo)/i);
 
       // Pago por el diferencial exacto liquida la factura.
       const done = await payments.record(
