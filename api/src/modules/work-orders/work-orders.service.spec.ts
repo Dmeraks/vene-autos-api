@@ -460,23 +460,24 @@ describe('WorkOrdersService', () => {
 
     it('filtra por vehicleId; con read sin read_all aplica visibilidad de taller (cola + asignadas + propias)', async () => {
       await service.list(actorOwn, { vehicleId: 'v-uuid' } satisfies ListWorkOrdersQueryDto);
+      const visibilityOr = [
+        { createdById: actorId },
+        { assignedToId: actorId },
+        { assignedToId: null, status: WorkOrderStatus.UNASSIGNED },
+      ];
+      const listWhere = {
+        AND: [{ OR: visibilityOr }, { vehicleId: 'v-uuid' }],
+      };
       expect(prisma.workOrder.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            vehicleId: 'v-uuid',
-            OR: [
-              { createdById: actorId },
-              { assignedToId: actorId },
-              { assignedToId: null, status: WorkOrderStatus.UNASSIGNED },
-            ],
-          }),
+          where: listWhere,
           skip: 0,
           take: 50,
         }),
       );
       expect(prisma.workOrder.count).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ vehicleId: 'v-uuid' }),
+          where: listWhere,
         }),
       );
     });

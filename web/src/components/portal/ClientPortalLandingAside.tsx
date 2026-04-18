@@ -72,6 +72,22 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
   const decorRef = useRef<HTMLDivElement>(null)
   const stripRef = useRef<HTMLDivElement>(null)
   const midBandRef = useRef<HTMLDivElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const closeMenu = () => setMenuOpen(false)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [menuOpen])
 
   useEffect(() => {
     if (reducedMotion) return
@@ -139,76 +155,187 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
 
   return (
     <div className="bg-black text-white">
-      {/* Navegación + acceso al panel integrado (carril derecho en escritorio, franja en móvil) */}
+      {/* Navegación en dos carriles (desktop) + hamburguesa con drawer (móvil/tablet) */}
       <nav className="sticky top-0 z-40 border-b border-zinc-200 bg-white text-black shadow-[0_1px_0_rgba(0,0,0,0.04)] dark:border-zinc-800 dark:bg-black dark:text-white dark:shadow-[0_1px_0_rgba(0,0,0,0.35)]">
+        {/* Fila 1: marca + (lg+) acceso o (lg-) hamburguesa */}
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div
-            className={`grid grid-cols-1 lg:items-center lg:gap-0 lg:py-3 ${
-              accessSlot ? 'lg:grid-cols-[auto_minmax(0,1fr)_auto]' : 'lg:grid-cols-[auto_minmax(0,1fr)]'
-            }`}
-          >
+          <div className="flex min-h-[56px] items-center justify-between gap-3 py-2">
             {/* Marca */}
-            <div className="flex min-h-[52px] items-center border-b border-zinc-200 py-3 lg:border-b-0 lg:py-0 lg:pr-6 dark:border-zinc-800">
-              <a href="#inicio" className="font-black italic tracking-tight text-brand-600 transition hover:text-brand-700">
-                VENE <span className="text-black not-italic dark:text-white">AUTOS</span>
-              </a>
-            </div>
+            <a
+              href="#inicio"
+              className="inline-flex shrink-0 items-center transition hover:opacity-80"
+              aria-label="Vene Autos — inicio"
+              onClick={closeMenu}
+            >
+              <img
+                src="/logo_landing.png"
+                alt="Vene Autos"
+                className="h-9 w-auto max-w-[200px] select-none lg:h-10 lg:max-w-[220px]"
+                draggable={false}
+              />
+            </a>
 
-            {/* Menú: visible en móvil (scroll horizontal); escritorio centrado en la columna */}
-            <div className="flex min-h-[48px] w-full min-w-0 items-center border-b border-zinc-200 py-2 lg:border-b-0 lg:border-x lg:py-0 lg:px-5 dark:border-zinc-800">
-              <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div
-                  className="flex min-w-min flex-nowrap items-center justify-start gap-x-5 px-1 pb-0.5 lg:min-w-full lg:justify-center lg:px-2"
-                  role="navigation"
-                  aria-label="Secciones"
-                >
-                  <a
-                    href="#inicio"
-                    className="shrink-0 border-b-2 border-brand-600 pb-0.5 text-xs font-semibold uppercase tracking-[0.12em] text-black transition hover:text-brand-700 dark:text-white"
-                  >
-                    Inicio
-                  </a>
-                  <a
-                    href="#servicios"
-                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
-                  >
-                    Servicios
-                  </a>
-                  <a
-                    href="#nosotros"
-                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
-                  >
-                    Nosotros
-                  </a>
-                  <a
-                    href="#contacto"
-                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
-                  >
-                    Contacto
-                  </a>
-                  <Link
-                    to="/consultar-ot"
-                    title="Consultar orden de trabajo"
-                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
-                  >
-                    Consultar OT
-                  </Link>
-                </div>
-              </div>
-            </div>
-
+            {/* Acceso integrado (solo desktop) */}
             {accessSlot ? (
               <aside
                 id="acceso-panel"
-                className="border-t border-zinc-200 bg-white px-4 py-3 text-black sm:px-5 lg:flex lg:min-h-[48px] lg:items-center lg:border-l lg:border-t-0 lg:border-zinc-200 lg:py-0 lg:pl-6 lg:pr-4 dark:border-zinc-800 dark:bg-black dark:text-white"
+                className="hidden lg:flex lg:min-h-[48px] lg:items-center lg:pl-6"
                 aria-label="Acceso al panel del taller"
               >
                 {accessSlot}
               </aside>
             ) : null}
+
+            {/* Hamburguesa (móvil y tablet) */}
+            <button
+              type="button"
+              aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={menuOpen}
+              aria-controls="menu-drawer"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="inline-flex items-center gap-2 border border-zinc-300 bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black transition hover:border-brand-600 hover:text-brand-700 lg:hidden dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:border-brand-500 dark:hover:text-brand-300"
+            >
+              <span className="flex h-4 w-5 flex-col justify-between" aria-hidden="true">
+                <span className="block h-0.5 w-full bg-current" />
+                <span className="block h-0.5 w-full bg-brand-600" />
+                <span className="block h-0.5 w-full bg-current" />
+              </span>
+              Menú
+            </button>
+          </div>
+        </div>
+
+        {/* Fila 2: menú horizontal centrado (solo desktop) */}
+        <div className="hidden border-t border-zinc-200 bg-white lg:block dark:border-zinc-800 dark:bg-black">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div
+              className="flex min-h-[40px] w-full items-center justify-center gap-x-8 py-1.5"
+              role="navigation"
+              aria-label="Secciones"
+            >
+              <a
+                href="#inicio"
+                className="border-b-2 border-brand-600 pb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-black transition hover:text-brand-700 dark:text-white"
+              >
+                Inicio
+              </a>
+              <a
+                href="#servicios"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
+              >
+                Servicios
+              </a>
+              <a
+                href="#nosotros"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
+              >
+                Nosotros
+              </a>
+              <a
+                href="#contacto"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
+              >
+                Contacto
+              </a>
+              <Link
+                to="/consultar-ot"
+                title="Consultar orden de trabajo"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
+              >
+                Consultar OT
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
+
+      {/* Drawer móvil / tablet */}
+      {menuOpen ? (
+        <div
+          id="menu-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menú principal"
+          className="fixed inset-0 z-50 lg:hidden"
+        >
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            onClick={closeMenu}
+            className="absolute inset-0 h-full w-full cursor-default bg-black/60 backdrop-blur-sm"
+          />
+          <aside className="absolute inset-y-0 right-0 flex w-[min(320px,88vw)] flex-col border-l-4 border-brand-600 bg-white text-black shadow-2xl dark:bg-black dark:text-white">
+            <div className="flex min-h-[56px] items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800">
+              <img src="/logo_landing.png" alt="Vene Autos" className="h-7 w-auto select-none" draggable={false} />
+              <button
+                type="button"
+                onClick={closeMenu}
+                aria-label="Cerrar menú"
+                className="inline-flex h-9 w-9 items-center justify-center text-black transition hover:text-brand-600 dark:text-white dark:hover:text-brand-400"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.25"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+
+            <nav className="flex flex-col gap-1 p-3" aria-label="Secciones">
+              <a
+                href="#inicio"
+                onClick={closeMenu}
+                className="border-l-2 border-brand-600 px-3 py-2.5 text-sm font-bold uppercase tracking-[0.14em] text-black dark:text-white"
+              >
+                Inicio
+              </a>
+              <a
+                href="#servicios"
+                onClick={closeMenu}
+                className="border-l-2 border-transparent px-3 py-2.5 text-sm font-semibold uppercase tracking-[0.14em] text-zinc-700 transition hover:border-brand-600 hover:text-brand-700 dark:text-zinc-200 dark:hover:text-brand-300"
+              >
+                Servicios
+              </a>
+              <a
+                href="#nosotros"
+                onClick={closeMenu}
+                className="border-l-2 border-transparent px-3 py-2.5 text-sm font-semibold uppercase tracking-[0.14em] text-zinc-700 transition hover:border-brand-600 hover:text-brand-700 dark:text-zinc-200 dark:hover:text-brand-300"
+              >
+                Nosotros
+              </a>
+              <a
+                href="#contacto"
+                onClick={closeMenu}
+                className="border-l-2 border-transparent px-3 py-2.5 text-sm font-semibold uppercase tracking-[0.14em] text-zinc-700 transition hover:border-brand-600 hover:text-brand-700 dark:text-zinc-200 dark:hover:text-brand-300"
+              >
+                Contacto
+              </a>
+              <Link
+                to="/consultar-ot"
+                onClick={closeMenu}
+                className="border-l-2 border-transparent px-3 py-2.5 text-sm font-semibold uppercase tracking-[0.14em] text-zinc-700 transition hover:border-brand-600 hover:text-brand-700 dark:text-zinc-200 dark:hover:text-brand-300"
+              >
+                Consultar OT
+              </Link>
+            </nav>
+
+            {accessSlot ? (
+              <div className="mt-auto border-t border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-black">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.24em] text-brand-600">Acceso</p>
+                {accessSlot}
+              </div>
+            ) : null}
+          </aside>
+        </div>
+      ) : null}
 
       {/* Hero parallax */}
       <header
@@ -430,9 +557,12 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-start">
             <div>
-              <p className="text-lg font-black italic text-brand-600">
-                VENE <span className="text-black not-italic">AUTOS</span>
-              </p>
+              <img
+                src="/logo_landing_footer.png"
+                alt="Vene Autos"
+                className="h-10 w-auto select-none"
+                draggable={false}
+              />
               <p className="mt-2 max-w-md text-sm text-zinc-600">
                 Consultas comerciales y turnos por los canales habituales del taller.
               </p>

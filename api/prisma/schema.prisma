@@ -46,6 +46,10 @@ model User {
   debitNotesIssued            DebitNote[]           @relation("DebitNoteIssuedBy")
   debitNotesVoided            DebitNote[]           @relation("DebitNoteVoidedBy")
   invoicePaymentsRecorded     InvoicePayment[]      @relation("InvoicePaymentRecordedBy")
+  /// Configuración de nómina (comisión sobre mano de obra) — solo aplica a técnicos.
+  payrollConfig               TechnicianPayrollConfig? @relation("TechnicianPayrollConfigUser")
+  payrollRunsAsTechnician     PayrollRun[]             @relation("PayrollRunTechnician")
+  payrollAdjustmentsCreated   PayrollAdjustment[]      @relation("PayrollAdjustmentCreatedBy")
   /// Cliente del taller enlazado para el rol portal (ver solo OT de vehículos de ese cliente).
   portalCustomerId String?   @map("portal_customer_id")
   portalCustomer   Customer? @relation("UserPortalCustomer", fields: [portalCustomerId], references: [id], onDelete: SetNull)
@@ -279,6 +283,8 @@ model WorkOrder {
   /// Venta emitida a partir de esta OT (1:1 opcional).
   sale       Sale?
   invoices   Invoice[]
+  /// Entradas de nómina que incluyeron la MO de esta OT (histórico).
+  payrollEntries PayrollRunEntry[]
 
   @@index([status, createdAt])
   @@index([vehicleId])
@@ -557,6 +563,8 @@ model CashMovement {
   workOrderPayment       WorkOrderPayment?
   salePayment            SalePayment?
   invoicePayment         InvoicePayment?
+  /// Si el movimiento es un pago de nómina, enlaza 1:1 con la corrida.
+  payrollRun             PayrollRun?          @relation("PayrollRunCashMovement")
 
   @@index([sessionId, createdAt])
   @@map("cash_movements")
@@ -1181,4 +1189,121 @@ model InvoicePayment {
   @@index([invoiceId, createdAt])
   @@map("invoice_payments")
 }
+
+/// Estado de una corrida semanal de nómina técnica.
+enum PayrollStatus {
+  /// Borrador: se puede recalcular y editar ajustes.
+  DRAFT
+  /// Pagada: generó un CashMovement EXPENSE y quedó congelada.
+  PAID
+  /// Anulada: el pago fue reversado. Se conserva como histórico.
+  VOIDED
+}
+
+/// Tipo de ajuste aplicado a una corrida semanal.
+enum PayrollAdjustmentKind {
+  /// Suma (bonificación, hora extra, reintegro, etc.).
+  BONUS
+  /// Resta (descuento por adelanto ya entregado).
+  ADVANCE
+  /// Resta (descuento por herramienta, préstamo, sanción, etc.).
+  DEDUCTION
+  /// Otro (el signo lo define el monto).
+  OTHER
+}
+
+/// Configuración de nómina por técnico (User con rol técnico).
+/// Sólo existe fila para técnicos "enrolados" en nómina; el dueño edita el %.
+model TechnicianPayrollConfig {
+  id                  String   @id @default(cuid())
+  userId              String   @unique @map("user_id")
+  user                User     @relation("TechnicianPayrollConfigUser", fields: [userId], references: [id], onDelete: Cascade)
+  /// Porcentaje (0–100) de la base de mano de obra que se le paga. Default 50%.
+  laborCommissionPct  Decimal  @default(50.00) @map("labor_commission_pct") @db.Decimal(5, 2)
+  /// Si está inactivo, no se calcula nómina para él (pero se conservan corridas pasadas).
+  isActive            Boolean  @default(true) @map("is_active")
+  notes               String?  @db.Text
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("technician_payroll_configs")
+}
+
+/// Una corrida semanal de nómina para un técnico (lunes → sábado, día de pago sábado).
+/// Se crea automáticamente al calcular la semana si hay OT entregadas con MO > 0.
+model PayrollRun {
+  id                   String         @id @default(cuid())
+  technicianId         String         @map("technician_id")
+  technician           User           @relation("PayrollRunTechnician", fields: [technicianId], references: [id], onDelete: Restrict)
+  /// Lunes 00:00:00 UTC de la semana.
+  weekStart            DateTime       @map("week_start")
+  /// Sábado 23:59:59.999 UTC de la semana (rango cerrado [start, end]).
+  weekEnd              DateTime       @map("week_end")
+  status               PayrollStatus  @default(DRAFT)
+  /// % aplicado sobre la base de MO al calcular (snapshot: si cambia el % del técnico, corridas pagadas no se tocan).
+  commissionPctApplied Decimal        @map("commission_pct_applied") @db.Decimal(5, 2)
+  /// Σ subtotales de líneas LABOR (sin IVA, con descuento) de OTs entregadas de esa semana.
+  baseAmount           Decimal        @map("base_amount") @db.Decimal(18, 2)
+  /// baseAmount × commissionPctApplied / 100.
+  commissionAmount     Decimal        @map("commission_amount") @db.Decimal(18, 2)
+  /// Σ ajustes (BONUS positivos; ADVANCE / DEDUCTION negativos; OTHER según signo del monto).
+  adjustmentsTotal     Decimal        @default(0) @map("adjustments_total") @db.Decimal(18, 2)
+  /// commissionAmount + adjustmentsTotal.
+  totalToPay           Decimal        @map("total_to_pay") @db.Decimal(18, 2)
+  paidAt               DateTime?      @map("paid_at")
+  /// Movimiento de caja EXPENSE que materializa el pago (categoria "nomina_tecnicos").
+  cashMovementId       String?        @unique @map("cash_movement_id")
+  cashMovement         CashMovement?  @relation("PayrollRunCashMovement", fields: [cashMovementId], references: [id], onDelete: SetNull)
+  notes                String?        @db.Text
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  entries     PayrollRunEntry[]
+  adjustments PayrollAdjustment[]
+
+  /// Una sola corrida por técnico y semana (se recalcula sobre la misma fila en DRAFT).
+  @@unique([technicianId, weekStart])
+  @@index([weekStart, weekEnd])
+  @@index([status])
+  @@map("payroll_runs")
+}
+
+/// Detalle: cada OT que aportó MO a la corrida semanal.
+model PayrollRunEntry {
+  id             String     @id @default(cuid())
+  payrollRunId   String     @map("payroll_run_id")
+  run            PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  workOrderId    String     @map("work_order_id")
+  workOrder      WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  /// Subtotal neto (qty × unitPrice − discount) de la línea LABOR al momento del cálculo.
+  laborSubtotal  Decimal    @map("labor_subtotal") @db.Decimal(18, 2)
+  /// Comisión pagada por esta OT = laborSubtotal × pctAplicado / 100.
+  commission     Decimal    @db.Decimal(18, 2)
+  /// deliveredAt de la OT (snapshot) para auditoría y ordenamiento.
+  deliveredAt    DateTime   @map("delivered_at")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  /// Una OT sólo puede aparecer una vez por corrida.
+  @@unique([payrollRunId, workOrderId])
+  @@index([workOrderId])
+  @@map("payroll_run_entries")
+}
+
+/// Ajuste manual sobre una corrida semanal (antes del pago o para dejar histórico).
+model PayrollAdjustment {
+  id           String                @id @default(cuid())
+  payrollRunId String                @map("payroll_run_id")
+  run          PayrollRun            @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  kind         PayrollAdjustmentKind
+  /// Signo que efectivamente suma al totalToPay (BONUS/OTHER+ suman, ADVANCE/DEDUCTION restan).
+  amount       Decimal               @db.Decimal(18, 2)
+  note         String?               @db.Text
+  createdById  String                @map("created_by_id")
+  createdBy    User                  @relation("PayrollAdjustmentCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime              @default(now()) @map("created_at")
+
+  @@index([payrollRunId])
+  @@map("payroll_adjustments")
+}
+
 

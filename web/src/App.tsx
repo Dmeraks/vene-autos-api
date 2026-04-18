@@ -26,6 +26,7 @@ import { SaleDetailPage } from './pages/SaleDetailPage'
 import { SalesPage } from './pages/SalesPage'
 import { InvoiceDetailPage } from './pages/InvoiceDetailPage'
 import { InvoicesPage } from './pages/InvoicesPage'
+import PayrollPage from './pages/PayrollPage'
 import { WorkOrdersPage } from './pages/WorkOrdersPage'
 
 export default function App() {
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="/facturacion" element={<InvoicesPage />} />
           <Route path="/facturacion/:id" element={<InvoiceDetailPage />} />
           <Route path="/informes" element={<ReportsPage />} />
+          <Route path="/admin/nomina" element={<PayrollPage />} />
           <Route path="/admin/usuarios" element={<UsersPage />} />
           <Route path="/admin/roles" element={<RolesPage />} />
           <Route path="/admin/roles/:id" element={<RoleDetailPage />} />

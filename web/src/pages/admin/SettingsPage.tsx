@@ -546,12 +546,14 @@ export function SettingsPage() {
                 </p>
               )}
 
-              <div className="grid gap-3 lg:grid-cols-2 lg:items-start lg:gap-x-5 lg:gap-y-4">
+              <div className="columns-1 gap-x-5 [column-fill:balance] lg:columns-2">
                 {groupedKeys.map(({ section, keys: sectionKeys }) => (
                   <section
                     key={section.id}
                     id={`cfg-${section.id}`}
-                    className={`${sectionCardClass} ${section.id === 'other' ? 'lg:col-span-2' : ''}`}
+                    className={`${sectionCardClass} mb-3 break-inside-avoid sm:mb-4 ${
+                      section.id === 'other' ? 'lg:[column-span:all]' : ''
+                    }`}
                   >
                     <div className={sectionHeadClass}>
                       <h2 className={sectionTitleClass}>{section.title}</h2>
@@ -692,7 +694,7 @@ export function SettingsPage() {
                 ))}
 
                 {canSaveSettings && (
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 lg:col-span-2">
+                  <div className="mt-1 flex flex-col gap-2 break-inside-avoid sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 lg:mt-2 lg:[column-span:all]">
                     <button type="submit" className="va-btn-primary px-5">
                       Guardar cambios
                     </button>

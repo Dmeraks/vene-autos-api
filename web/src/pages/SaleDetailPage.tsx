@@ -12,6 +12,7 @@ import type {
   TaxRate,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { useConfirm } from '../components/confirm/ConfirmProvider'
 import { PageHeader } from '../components/layout/PageHeader'
 import { formatCopFromString, normalizeMoneyDecimalStringForApi } from '../utils/copFormat'
 import {
@@ -67,6 +68,7 @@ export function SaleDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { can } = useAuth()
+  const confirmDlg = useConfirm()
 
   const [sale, setSale] = useState<SaleDetail | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -241,7 +243,13 @@ export function SaleDetailPage() {
 
   async function onDeleteLine(lineId: string) {
     if (!sale) return
-    if (!window.confirm('¿Eliminar esta línea?')) return
+    const ok = await confirmDlg({
+      title: 'Eliminar línea',
+      message: '¿Eliminar esta línea de la venta?',
+      variant: 'danger',
+      confirmLabel: 'Eliminar',
+    })
+    if (!ok) return
     try {
       await api(`/sales/${sale.id}/lines/${lineId}`, { method: 'DELETE' })
       await load()
@@ -252,8 +260,13 @@ export function SaleDetailPage() {
 
   async function onConfirm() {
     if (!sale || confirmBusy) return
-    if (!window.confirm('Confirmar la venta descontará el inventario de los repuestos. ¿Continuar?'))
-      return
+    const ok = await confirmDlg({
+      title: 'Confirmar venta',
+      message:
+        'Al confirmar la venta se descontará el inventario de los repuestos según las líneas cargadas. ¿Continuar?',
+      confirmLabel: 'Confirmar venta',
+    })
+    if (!ok) return
     setConfirmBusy(true)
     try {
       await api(`/sales/${sale.id}/confirm`, { method: 'POST' })
@@ -271,7 +284,13 @@ export function SaleDetailPage() {
       setMsg('Describe el motivo de anulación (al menos 5 caracteres).')
       return
     }
-    if (!window.confirm('¿Anular la venta? Se reintegrará el inventario si aplica.')) return
+    const okCancel = await confirmDlg({
+      title: 'Anular venta',
+      message: '¿Anular la venta? Se reintegrará el inventario de repuestos si aplica.',
+      variant: 'danger',
+      confirmLabel: 'Anular venta',
+    })
+    if (!okCancel) return
     setCancelBusy(true)
     try {
       await api(`/sales/${sale.id}/cancel`, {

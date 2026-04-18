@@ -323,6 +323,27 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
     action: 'manage_dispatch',
     description: 'Administrar la cola de envío a DIAN (reintentos, revisión manual)',
   },
+  // Nómina (Fase 9): pago semanal a técnicos por % de mano de obra.
+  {
+    resource: 'payroll',
+    action: 'read',
+    description: 'Ver el panel de nómina técnica (corridas semanales y detalle).',
+  },
+  {
+    resource: 'payroll',
+    action: 'calculate',
+    description: 'Calcular / recalcular la corrida semanal y editar ajustes (BONUS / ADVANCE / DEDUCTION / OTHER).',
+  },
+  {
+    resource: 'payroll',
+    action: 'pay',
+    description: 'Ejecutar el pago semanal (genera CashMovement EXPENSE y congela la corrida).',
+  },
+  {
+    resource: 'payroll',
+    action: 'configure',
+    description: 'Editar el % de comisión de cada técnico (default 50%).',
+  },
 ];
 
 /**
@@ -416,6 +437,10 @@ const BACKEND_REQUIRED_PERMISSION_CODES: readonly string[] = [
   'debit_notes:issue',
   'debit_notes:void',
   'dian:manage_dispatch',
+  'payroll:read',
+  'payroll:calculate',
+  'payroll:pay',
+  'payroll:configure',
 ];
 
 const CASH_CATEGORIES: Array<{
@@ -441,6 +466,12 @@ const CASH_CATEGORIES: Array<{
     name: 'Gastos menores',
     direction: CashMovementDirection.EXPENSE,
     sortOrder: 30,
+  },
+  {
+    slug: 'nomina_mecanicos',
+    name: 'Pago de nómina · Mecánicos',
+    direction: CashMovementDirection.EXPENSE,
+    sortOrder: 40,
   },
   /**
    * Medios de pago operativos (Fase 8). `ingreso_cobro` queda como la categoría histórica /
@@ -625,6 +656,10 @@ async function main() {
     'invoices:record_payment',
     'credit_notes:read',
     'debit_notes:read',
+    // Fase 9: nómina técnica (dueño+cajero pueden pagar; sólo dueño configura el %).
+    'payroll:read',
+    'payroll:calculate',
+    'payroll:pay',
   ];
   const cajeroPerms = pick(...cajeroCodes);
   const cajeroRole = await prisma.role.upsert({
@@ -682,10 +717,11 @@ async function main() {
     });
   }
 
-  /** Sin `read_all`: ve cola + asignadas a él + las que creó (reglas en `WorkOrdersService.workOrderVisibilityWhere`). */
-  const tecnicoCodes = [
+  /** Sin `read_all`: ve cola + asignadas a él + las que creó (reglas en `WorkOrdersService.workOrderVisibilityWhere`). Incluye `payroll:read` (solo comisión en panel/API, sin montos de MO). */
+  const mecanicoCodes = [
     'permissions:read',
     'settings:read',
+    'payroll:read',
     'work_orders:read',
     'work_orders:update',
     'work_order_lines:create',
@@ -697,30 +733,39 @@ async function main() {
     'inventory_items:read',
     'services:read',
   ];
-  const tecnicoPerms = pick(...tecnicoCodes);
-  const tecnicoRole = await prisma.role.upsert({
-    where: { slug: 'tecnico' },
+  const mecanicoPerms = pick(...mecanicoCodes);
+  const mecanicoRole = await prisma.role.upsert({
+    where: { slug: 'mecanico' },
     create: {
-      name: 'Técnico',
-      slug: 'tecnico',
+      name: 'Mecánico',
+      slug: 'mecanico',
       description:
-        'Operación en taller: ver cola y órdenes asignadas, tomar OT, agregar repuestos (ítem y cantidad) y editar mano de obra; no ve importes en la OT ni costo de ítems; no fija precios ni modifica/quita repuestos ya cargados (caja, administrador o dueño). Sin caja ni ver todas las OT del taller',
+        'Operación en taller: ver cola y órdenes asignadas, tomar OT, agregar repuestos (ítem y cantidad) y editar mano de obra; no ve importes en la OT ni costo de ítems; no fija precios ni modifica/quita repuestos ya cargados (caja, administrador o dueño). Puede ver nómina y su comisión, no el monto de MO agregado. Sin caja ni ver todas las OT del taller',
       isSystem: true,
     },
     update: {
-      name: 'Técnico',
+      name: 'Mecánico',
       description:
-        'Operación en taller: ver cola y órdenes asignadas, tomar OT, agregar repuestos (ítem y cantidad) y editar mano de obra; no ve importes en la OT ni costo de ítems; no fija precios ni modifica/quita repuestos ya cargados (caja, administrador o dueño). Sin caja ni ver todas las OT del taller',
+        'Operación en taller: ver cola y órdenes asignadas, tomar OT, agregar repuestos (ítem y cantidad) y editar mano de obra; no ve importes en la OT ni costo de ítems; no fija precios ni modifica/quita repuestos ya cargados (caja, administrador o dueño). Puede ver nómina y su comisión, no el monto de MO agregado. Sin caja ni ver todas las OT del taller',
     },
   });
-  await prisma.rolePermission.deleteMany({ where: { roleId: tecnicoRole.id } });
-  if (tecnicoPerms.length) {
+  await prisma.rolePermission.deleteMany({ where: { roleId: mecanicoRole.id } });
+  if (mecanicoPerms.length) {
     await prisma.rolePermission.createMany({
-      data: tecnicoPerms.map((perm) => ({
-        roleId: tecnicoRole.id,
+      data: mecanicoPerms.map((perm) => ({
+        roleId: mecanicoRole.id,
         permissionId: perm.id,
       })),
     });
+  }
+
+  /** Rol duplicado si hubo seed antes de alinear slugs con la migración `rename_tecnico_to_mecanico`. */
+  const orphanTecnico = await prisma.role.findUnique({
+    where: { slug: 'tecnico' },
+    include: { _count: { select: { users: true } } },
+  });
+  if (orphanTecnico && orphanTecnico._count.users === 0) {
+    await prisma.role.delete({ where: { id: orphanTecnico.id } });
   }
 
   const clientePortalCodes = ['work_orders:read_portal'];

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import { emitWorkOrderChanged, WORK_ORDER_CHANGED_EVENT } from '../lib/workOrderEvents'
 import type {
   CreateWorkOrderPayload,
@@ -19,20 +19,66 @@ import {
   normalizeMoneyDecimalStringForApi,
 } from '../utils/copFormat'
 
-const STATUS: Record<WorkOrderStatus, { label: string; tone: string }> = {
+const STATUS: Record<
+  WorkOrderStatus,
+  { label: string; badge: string; cardBody: string; listRow: string }
+> = {
   UNASSIGNED: {
     label: 'Sin asignar',
-    tone: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100',
+    badge:
+      'bg-slate-200/90 text-slate-800 ring-1 ring-slate-300/70 dark:bg-slate-600 dark:text-slate-100 dark:ring-slate-500/80',
+    cardBody:
+      'border-l-slate-400 bg-gradient-to-br from-slate-50/90 to-white dark:border-l-slate-500 dark:from-slate-800/40 dark:to-slate-900',
+    listRow: 'border-l-slate-400 bg-slate-50/35 dark:border-l-slate-500 dark:bg-slate-800/30',
   },
-  RECEIVED: { label: 'Recibida', tone: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' },
-  IN_WORKSHOP: { label: 'En taller', tone: 'bg-blue-50 text-blue-800 dark:bg-blue-900/75 dark:text-blue-50' },
+  RECEIVED: {
+    label: 'Recibida',
+    badge:
+      'bg-sky-100 text-sky-950 ring-1 ring-sky-200/80 dark:bg-sky-900/50 dark:text-sky-100 dark:ring-sky-600/50',
+    cardBody:
+      'border-l-sky-500 bg-gradient-to-br from-sky-50/80 to-white dark:border-l-sky-400 dark:from-sky-950/35 dark:to-slate-900',
+    listRow: 'border-l-sky-500 bg-sky-50/30 dark:border-l-sky-400 dark:bg-sky-950/20',
+  },
+  IN_WORKSHOP: {
+    label: 'En taller',
+    badge:
+      'bg-indigo-100 text-indigo-950 ring-1 ring-indigo-200/80 dark:bg-indigo-900/55 dark:text-indigo-100 dark:ring-indigo-700/50',
+    cardBody:
+      'border-l-indigo-500 bg-gradient-to-br from-indigo-50/85 to-white dark:border-l-indigo-400 dark:from-indigo-950/35 dark:to-slate-900',
+    listRow: 'border-l-indigo-500 bg-indigo-50/30 dark:border-l-indigo-400 dark:bg-indigo-950/22',
+  },
   WAITING_PARTS: {
     label: 'Esperando repuestos',
-    tone: 'bg-amber-50 text-amber-900 dark:bg-amber-900/75 dark:text-amber-50',
+    badge:
+      'bg-amber-100 text-amber-950 ring-1 ring-amber-200/90 dark:bg-amber-900/50 dark:text-amber-50 dark:ring-amber-700/50',
+    cardBody:
+      'border-l-amber-500 bg-gradient-to-br from-amber-50/85 to-white dark:border-l-amber-400 dark:from-amber-950/30 dark:to-slate-900',
+    listRow: 'border-l-amber-500 bg-amber-50/35 dark:border-l-amber-400 dark:bg-amber-950/18',
   },
-  READY: { label: 'Lista', tone: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/75 dark:text-emerald-50' },
-  DELIVERED: { label: 'Entregada', tone: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
-  CANCELLED: { label: 'Cancelada', tone: 'bg-red-50 text-red-800 dark:bg-red-900/75 dark:text-red-50' },
+  READY: {
+    label: 'Lista',
+    badge:
+      'bg-emerald-100 text-emerald-950 ring-1 ring-emerald-200/80 dark:bg-emerald-900/55 dark:text-emerald-100 dark:ring-emerald-700/50',
+    cardBody:
+      'border-l-emerald-500 bg-gradient-to-br from-emerald-50/85 to-white dark:border-l-emerald-400 dark:from-emerald-950/32 dark:to-slate-900',
+    listRow: 'border-l-emerald-500 bg-emerald-50/30 dark:border-l-emerald-400 dark:bg-emerald-950/20',
+  },
+  DELIVERED: {
+    label: 'Entregada',
+    badge:
+      'bg-teal-100 text-teal-950 ring-1 ring-teal-200/80 dark:bg-teal-900/50 dark:text-teal-100 dark:ring-teal-700/50',
+    cardBody:
+      'border-l-teal-500 bg-gradient-to-br from-teal-50/80 to-white dark:border-l-teal-400 dark:from-teal-950/30 dark:to-slate-900',
+    listRow: 'border-l-teal-500 bg-teal-50/28 dark:border-l-teal-400 dark:bg-teal-950/18',
+  },
+  CANCELLED: {
+    label: 'Cancelada',
+    badge:
+      'bg-rose-100 text-rose-950 ring-1 ring-rose-200/80 dark:bg-rose-900/50 dark:text-rose-100 dark:ring-rose-700/50',
+    cardBody:
+      'border-l-rose-500 bg-gradient-to-br from-rose-50/85 to-white dark:border-l-rose-400 dark:from-rose-950/28 dark:to-slate-900',
+    listRow: 'border-l-rose-500 bg-rose-50/30 dark:border-l-rose-400 dark:bg-rose-950/18',
+  },
 }
 
 const STATUS_KEYS = Object.keys(STATUS) as WorkOrderStatus[]
@@ -69,6 +115,24 @@ function readStoredPageSize(): (typeof WO_PAGE_SIZE_OPTIONS)[number] {
 /** Insignia “Garantía” compacta (OT hija). */
 const WO_WARRANTY_BADGE_CLASS =
   'shrink-0 rounded px-1 py-0 text-[9px] font-semibold uppercase tracking-wide bg-violet-100 text-violet-800 dark:bg-violet-900/60 dark:text-violet-100'
+
+/** Remaches decorativos en esquinas (placa CO, vista cuadrícula): pequeños, negros, al borde. */
+const WO_GRID_PLATE_RIVET_CLASS =
+  'pointer-events-none absolute size-1 rounded-full bg-black shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]'
+
+/**
+ * Texto de patente al estilo visual colombiano (letras · números), sin ciudad ni leyendas.
+ * Ej.: XTZ-308 → XTZ • 308; formato Mercosur ABC12D → ABC • 12D.
+ */
+function formatColombianPlateDisplay(raw: string): string {
+  const s = raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (!s) return raw.trim().toUpperCase()
+  const mercosur = s.match(/^([A-Z]{3})(\d{2}[A-Z0-9]+)$/)
+  if (mercosur) return `${mercosur[1]} • ${mercosur[2]}`
+  const i = s.search(/\d/)
+  if (i > 0) return `${s.slice(0, i)} • ${s.slice(i)}`
+  return s
+}
 
 function formatWoDate(iso: string) {
   try {
@@ -318,6 +382,7 @@ export function WorkOrdersPage() {
   const vehicleIdFilter = (searchParams.get('vehicleId') ?? '').trim()
   const customerIdFilter = (searchParams.get('customerId') ?? '').trim()
   const vehiclePlateLabel = (searchParams.get('plate') ?? '').trim()
+  const textSearch = (searchParams.get('search') ?? '').trim()
 
   const [rows, setRows] = useState<WorkOrderSummary[] | null>(null)
   const [total, setTotal] = useState(0)
@@ -420,6 +485,7 @@ export function WorkOrdersPage() {
         if (statusFilter) qs.set('status', statusFilter)
         if (vehicleIdFilter) qs.set('vehicleId', vehicleIdFilter)
         if (customerIdFilter) qs.set('customerId', customerIdFilter)
+        if (textSearch) qs.set('search', textSearch)
         qs.set('page', String(pageNum))
         qs.set('pageSize', String(pageSize))
         const path = `/work-orders?${qs.toString()}`
@@ -429,19 +495,25 @@ export function WorkOrdersPage() {
         setTotal(data.total)
         const maxPage = Math.max(1, Math.ceil(data.total / pageSize) || 1)
         setPage((p) => (p > maxPage ? maxPage : p))
-      } catch {
+      } catch (e) {
         if (signal?.aborted) return
-        setErr('No se pudieron cargar las órdenes')
+        const detail =
+          e instanceof ApiError && e.message
+            ? e.message
+            : e instanceof Error
+              ? e.message
+              : 'Error desconocido'
+        setErr(`No se pudieron cargar las órdenes: ${detail}`)
       } finally {
         setListBusy(false)
       }
     },
-    [statusFilter, vehicleIdFilter, customerIdFilter, pageSize],
+    [statusFilter, vehicleIdFilter, customerIdFilter, textSearch, pageSize],
   )
 
   useEffect(() => {
     const ac = new AbortController()
-    const fk = `${statusFilter}|${vehicleIdFilter}|${customerIdFilter}`
+    const fk = `${statusFilter}|${vehicleIdFilter}|${customerIdFilter}|${textSearch}`
     const prevFk = listFilterRef.current
     const bumped = prevFk !== null && prevFk !== fk
 
@@ -456,7 +528,7 @@ export function WorkOrdersPage() {
 
     void loadPage(page, ac.signal)
     return () => ac.abort()
-  }, [statusFilter, vehicleIdFilter, customerIdFilter, page, pageSize, loadPage])
+  }, [statusFilter, vehicleIdFilter, customerIdFilter, textSearch, page, pageSize, loadPage])
 
   /** Desde ficha de cliente: `?openCreate=1&vehicleId=…&plate=…` abre el alta con vehículo ya elegido. */
   useEffect(() => {
@@ -704,10 +776,16 @@ export function WorkOrdersPage() {
         </div>
       )}
 
-      {(statusFilter || vehicleIdFilter || customerIdFilter) && !err && (
+      {(statusFilter || vehicleIdFilter || customerIdFilter || textSearch) && !err && (
         <div className={activeFiltersClass}>
           <p>
             <span className="font-medium">Filtros activos:</span>{' '}
+            {textSearch && (
+              <>
+                búsqueda «<span className="font-medium">{textSearch}</span>»
+                {statusFilter || vehicleIdFilter || customerIdFilter ? '; ' : '.'}
+              </>
+            )}
             {statusFilter && (
               <>
                 estado «{STATUS[statusFilter].label}»
@@ -1133,7 +1211,7 @@ export function WorkOrdersPage() {
       <ul
         className={
           listView === 'grid'
-            ? 'grid gap-2 sm:grid-cols-2'
+            ? 'grid gap-2 grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-4'
             : listView === 'list'
               ? 'divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200/90 bg-white dark:divide-slate-700 dark:border-slate-700 dark:bg-slate-900'
               : 'space-y-2'
@@ -1150,7 +1228,7 @@ export function WorkOrdersPage() {
               <li key={wo.id}>
                 <Link
                   to={`/ordenes/${wo.id}`}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                  className={`flex w-full items-center gap-2 border-l-4 px-3 py-2 text-left transition hover:bg-slate-50/90 dark:hover:bg-slate-800/70 ${st.listRow}`}
                 >
                   <div className="flex w-[5.5rem] shrink-0 flex-col gap-0.5">
                     <span className="text-[11px] font-semibold leading-tight tracking-tight text-slate-800 dark:text-slate-100">
@@ -1169,7 +1247,7 @@ export function WorkOrdersPage() {
                         .join(' · ') || '—'}
                     </p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${st.tone}`}>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${st.badge}`}>
                     {st.label}
                   </span>
                 </Link>
@@ -1182,7 +1260,7 @@ export function WorkOrdersPage() {
               <li key={wo.id}>
                 <Link
                   to={`/ordenes/${wo.id}`}
-                  className="block rounded-xl border border-slate-200/90 bg-white p-3 shadow-sm transition hover:border-brand-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-brand-600"
+                  className={`block rounded-xl border border-slate-200/90 border-l-4 p-3 shadow-sm transition hover:border-brand-200 hover:shadow-md dark:border-slate-700 dark:hover:border-brand-600 ${st.cardBody}`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-1.5">
                     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -1192,7 +1270,7 @@ export function WorkOrdersPage() {
                       <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500">#{wo.orderNumber}</span>
                       {warrantyBadge}
                     </div>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${st.tone}`}>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${st.badge}`}>
                       {st.label}
                     </span>
                   </div>
@@ -1257,12 +1335,12 @@ export function WorkOrdersPage() {
           }
 
           return (
-            <li key={wo.id}>
+            <li key={wo.id} className="flex min-h-0">
               <Link
                 to={`/ordenes/${wo.id}`}
-                className="block rounded-xl border border-slate-200/90 bg-white p-3 shadow-sm transition hover:border-brand-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-brand-600"
+                className={`flex h-full min-h-[10.5rem] w-full min-w-0 flex-col rounded-xl border border-slate-200/90 border-l-4 p-3 shadow-sm transition hover:border-brand-200 hover:shadow-md dark:border-slate-700 dark:hover:border-brand-600 ${st.cardBody}`}
               >
-                <div className="flex items-start justify-between gap-1.5">
+                <div className="flex shrink-0 items-start justify-between gap-1.5">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <span className="text-xs font-semibold tracking-tight text-slate-800 dark:text-slate-100">
                       {wo.publicCode}
@@ -1270,23 +1348,36 @@ export function WorkOrdersPage() {
                     <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500">#{wo.orderNumber}</span>
                     {warrantyBadge}
                   </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${st.tone}`}>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${st.badge}`}>
                     {st.label}
                   </span>
                 </div>
-                <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug text-slate-900 dark:text-slate-50">
+                <p className="mt-1 min-h-0 flex-1 text-sm font-medium leading-snug text-slate-900 line-clamp-2 dark:text-slate-50">
                   {wo.description}
                 </p>
-                <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-300">
-                  {wo.customerName && <span className="truncate">{wo.customerName}</span>}
-                  {wo.vehiclePlate && (
-                    <span className="shrink-0 rounded bg-slate-100 px-1 py-0 font-mono dark:bg-slate-800 dark:text-slate-200">
-                      {wo.vehiclePlate}
+                <div className="mt-auto flex shrink-0 items-end justify-between gap-2 pt-2">
+                  <div className="min-w-0 flex-1 space-y-0.5 text-[11px] text-slate-500 dark:text-slate-300">
+                    {wo.customerName ? (
+                      <p className="truncate font-medium text-slate-700 dark:text-slate-200">{wo.customerName}</p>
+                    ) : null}
+                    <p className="text-slate-600 dark:text-slate-300">
+                      Téc.: {wo.assignedTo?.fullName ?? '—'}
+                    </p>
+                  </div>
+                  {wo.vehiclePlate ? (
+                    <span
+                      className="relative inline-flex shrink-0 items-center justify-center rounded-[10px] border-2 border-black bg-[#EBC012] px-3 py-2 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.35),0_3px_0_rgba(0,0,0,0.28)]"
+                      title="Patente"
+                    >
+                      <span className={`${WO_GRID_PLATE_RIVET_CLASS} left-1 top-1`} aria-hidden />
+                      <span className={`${WO_GRID_PLATE_RIVET_CLASS} right-1 top-1`} aria-hidden />
+                      <span className={`${WO_GRID_PLATE_RIVET_CLASS} bottom-1 left-1`} aria-hidden />
+                      <span className={`${WO_GRID_PLATE_RIVET_CLASS} bottom-1 right-1`} aria-hidden />
+                      <span className="relative z-[1] text-center font-sans text-[15px] font-black uppercase leading-none tracking-[0.14em] text-black [font-stretch:condensed] [text-shadow:0_1px_0_rgba(255,255,255,0.35)] sm:text-[16px]">
+                        {formatColombianPlateDisplay(wo.vehiclePlate)}
+                      </span>
                     </span>
-                  )}
-                  <span className="text-slate-600 dark:text-slate-300">
-                    Téc.: {wo.assignedTo?.fullName ?? '—'}
-                  </span>
+                  ) : null}
                 </div>
               </Link>
             </li>

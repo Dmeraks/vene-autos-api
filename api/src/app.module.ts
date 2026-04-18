@@ -27,6 +27,7 @@ import { ServicesModule } from './modules/services/services.module';
 import { TaxRatesModule } from './modules/tax-rates/tax-rates.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
 import { HealthController } from './health/health.controller';
 import { RootController } from './root.controller';
 
@@ -52,6 +53,7 @@ import { RootController } from './root.controller';
     SalesModule,
     BillingModule,
     ReportsModule,
+    PayrollModule,
   ],
   controllers: [RootController, HealthController],
   providers: [

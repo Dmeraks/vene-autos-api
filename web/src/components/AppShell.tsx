@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   BarChart3,
   Bell,
+  ChevronLeft,
+  ChevronRight,
   CircleHelp,
   ClipboardList,
   Droplet,
   FileText,
+  HandCoins,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -22,7 +25,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { LoginResponse } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
@@ -139,6 +142,7 @@ const TASK_MODES: TaskMode[] = [
       '/admin/roles',
       '/admin/servicios',
       '/admin/impuestos',
+      '/admin/nomina',
       '/admin/auditoria',
       '/admin/configuracion',
     ],
@@ -157,6 +161,24 @@ function saasIconButtonClass() {
   return 'rounded-lg border border-slate-200/90 bg-white p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100 dark:focus-visible:ring-offset-slate-900'
 }
 
+const SAAS_SIDEBAR_COLLAPSED_KEY = 'vene.panel.sidebarCollapsed'
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SAAS_SIDEBAR_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean) {
+  try {
+    localStorage.setItem(SAAS_SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
+
 function AppShellInner() {
   const panelTheme = usePanelTheme()
   const { electronicInvoiceEnabled } = useUiSettings()
@@ -168,7 +190,42 @@ function AppShellInner() {
   const { user, logout, can, applyAuthResponse } = useAuth()
   const { open: cashSessionOpen } = useCashSessionOpen()
   const location = useLocation()
+  const navigate = useNavigate()
   const taskMode = useMemo(() => resolveTaskMode(location.pathname), [location.pathname])
+  const [panelSearch, setPanelSearch] = useState('')
+  const [saasSidebarCollapsed, setSaasSidebarCollapsed] = useState(readSidebarCollapsed)
+
+  const toggleSaasSidebar = useCallback(() => {
+    setSaasSidebarCollapsed((c) => {
+      const next = !c
+      writeSidebarCollapsed(next)
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    if (location.pathname !== '/ordenes') return
+    const sp = new URLSearchParams(location.search)
+    setPanelSearch(sp.get('search') ?? '')
+  }, [location.pathname, location.search])
+
+  const submitPanelSearch = useCallback(
+    (e?: FormEvent) => {
+      e?.preventDefault()
+      const raw = panelSearch.trim()
+      if (location.pathname === '/ordenes') {
+        const next = new URLSearchParams(location.search)
+        if (raw) next.set('search', raw)
+        else next.delete('search')
+        next.delete('page')
+        const qs = next.toString()
+        navigate({ pathname: '/ordenes', search: qs ? `?${qs}` : '' }, { replace: true })
+      } else {
+        navigate(raw ? `/ordenes?search=${encodeURIComponent(raw)}` : '/ordenes')
+      }
+    },
+    [location.pathname, location.search, navigate, panelSearch],
+  )
   const [previewRoles, setPreviewRoles] = useState<PreviewRoleRow[]>([])
   const [rolePreviewBusy, setRolePreviewBusy] = useState(false)
   const navOuterRef = useRef<HTMLDivElement>(null)
@@ -251,6 +308,7 @@ function AppShellInner() {
       { to: '/inventario', label: 'Repuestos', Icon: Package, show: can('inventory_items:read') },
       { to: '/aceite', label: 'Aceite', Icon: Droplet, show: can('inventory_items:read') },
       { to: '/admin/usuarios', label: 'Usuarios', Icon: UsersRound, show: can('users:read') },
+      { to: '/admin/nomina', label: 'Nómina', Icon: HandCoins, show: can('payroll:read') },
       { to: '/informes', label: 'Informes', Icon: BarChart3, show: can('reports:read') },
       { to: '/admin/servicios', label: 'Servicios', Icon: Wrench, show: can('services:read') },
       { to: '/admin/impuestos', label: 'Impuestos', Icon: Percent, show: can('tax_rates:read') },
@@ -491,7 +549,7 @@ function AppShellInner() {
 
   return (
     <div
-      className={`va-app-shell flex min-h-dvh flex-col bg-slate-100 dark:bg-slate-950 ${isSaas ? 'lg:flex-row' : ''}`}
+      className={`va-app-shell flex min-h-dvh flex-col bg-slate-100 dark:bg-slate-950 ${isSaas ? 'lg:flex-row lg:items-stretch' : ''}`}
     >
       <a
         href="#app-main-content"
@@ -500,24 +558,84 @@ function AppShellInner() {
         Saltar al contenido principal
       </a>
       {isSaas && (
-        <aside className="va-app-shell-sidebar hidden w-64 shrink-0 flex-col self-start lg:sticky lg:top-0 lg:z-20 lg:h-dvh lg:max-h-dvh lg:min-h-0 lg:flex 2xl:w-72">
-          <div className="flex h-[3.5rem] items-center gap-2.5 border-b border-slate-100 px-3.5 dark:border-slate-700/80">
-            <BrandDiamond className="size-7 shrink-0 text-brand-600 dark:text-brand-400" />
-            <NavLink
-              to="/"
-              className="va-app-shell-brand min-w-0 truncate text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-50"
-              end
-            >
-              Vene Autos
-            </NavLink>
+        <aside
+          className={`va-app-shell-sidebar hidden shrink-0 flex-col transition-[width] duration-200 ease-out motion-reduce:transition-none lg:sticky lg:top-0 lg:z-20 lg:flex lg:h-dvh lg:max-h-dvh lg:min-h-0 ${
+            saasSidebarCollapsed ? 'w-14 lg:w-14 2xl:w-14' : 'w-64 2xl:w-72'
+          }`}
+        >
+          <div
+            className={`flex shrink-0 items-center ${
+              saasSidebarCollapsed
+                ? 'min-h-[3.5rem] flex-col justify-center gap-1.5 py-2'
+                : 'h-[3.5rem] gap-2 px-2.5 sm:px-3.5'
+            }`}
+          >
+            {!saasSidebarCollapsed ? (
+              <>
+                <BrandDiamond className="size-7 shrink-0 text-brand-600 dark:text-brand-400" />
+                <NavLink
+                  to="/"
+                  className="va-app-shell-brand min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-50"
+                  end
+                >
+                  Vene Autos
+                </NavLink>
+                <button
+                  type="button"
+                  onClick={toggleSaasSidebar}
+                  className={`${saasIconButtonClass()} !p-2`}
+                  title="Ocultar menú lateral"
+                  aria-expanded={!saasSidebarCollapsed}
+                  aria-controls="va-saas-sidebar-nav"
+                  aria-label="Ocultar menú lateral"
+                >
+                  <ChevronLeft className="size-4 shrink-0" strokeWidth={2} aria-hidden />
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={toggleSaasSidebar}
+                  className={`${saasIconButtonClass()} !p-2`}
+                  title="Mostrar menú lateral"
+                  aria-expanded={false}
+                  aria-controls="va-saas-sidebar-nav"
+                  aria-label="Mostrar menú lateral"
+                >
+                  <ChevronRight className="size-4 shrink-0" strokeWidth={2} aria-hidden />
+                </button>
+                <NavLink
+                  to="/"
+                  className="flex shrink-0 rounded-md p-1 text-brand-600 transition hover:bg-white/80 dark:text-brand-400 dark:hover:bg-slate-800/80"
+                  title="Inicio"
+                  aria-label="Inicio"
+                  end
+                >
+                  <BrandDiamond className="size-6 shrink-0" />
+                </NavLink>
+              </>
+            )}
           </div>
-          <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3" aria-label="Navegación principal">
+          <nav
+            id="va-saas-sidebar-nav"
+            className={`flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden ${saasSidebarCollapsed ? 'px-1 py-2' : 'p-3'}`}
+            aria-label="Navegación principal"
+          >
             {links.map((l) => {
               const Icon = l.Icon
               return (
-                <NavLink key={l.to} to={l.to} className={navLinkSidebarSaasClass}>
+                <NavLink
+                  key={l.to}
+                  to={l.to}
+                  title={l.label}
+                  aria-label={saasSidebarCollapsed ? l.label : undefined}
+                  className={(args) =>
+                    [navLinkSidebarSaasClass(args), saasSidebarCollapsed ? 'justify-center gap-0 px-1.5' : ''].join(' ')
+                  }
+                >
                   <Icon className="size-[1.125rem] shrink-0" strokeWidth={1.75} aria-hidden />
-                  <span className="truncate">{l.label}</span>
+                  <span className={saasSidebarCollapsed ? 'sr-only' : 'truncate'}>{l.label}</span>
                 </NavLink>
               )
             })}
@@ -542,7 +660,12 @@ function AppShellInner() {
                 </NavLink>
               </div>
               <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                <div className="relative min-w-0 flex-1 sm:max-w-md lg:max-w-xl xl:max-w-2xl">
+                <form
+                  className="relative min-w-0 flex-1 sm:max-w-md lg:max-w-xl xl:max-w-2xl"
+                  role="search"
+                  onSubmit={submitPanelSearch}
+                  aria-label="Buscar órdenes de trabajo"
+                >
                   <Search
                     className="va-app-shell-search-icon pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400 dark:text-slate-300"
                     strokeWidth={1.75}
@@ -551,18 +674,23 @@ function AppShellInner() {
                   <input
                     type="search"
                     name="panel-search"
-                    placeholder={taskMode ? `Buscar en ${taskMode.label.toLowerCase()}…` : 'Buscar en el panel…'}
+                    value={panelSearch}
+                    onChange={(e) => setPanelSearch(e.target.value)}
+                    placeholder="Buscar órdenes (código, patente, cliente…)"
+                    title={
+                      taskMode
+                        ? `Atajo al listado de órdenes. Modo actual: ${taskMode.label}.`
+                        : 'Ir al listado de órdenes con filtro de texto.'
+                    }
                     className="va-app-shell-search w-full rounded-lg border border-slate-200/90 bg-white py-2 pl-10 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-600 dark:bg-slate-800/90 dark:text-slate-100 dark:focus:border-brand-400 dark:focus:ring-brand-400/30"
                     autoComplete="off"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') e.preventDefault()
-                    }}
+                    aria-label="Texto a buscar en el listado de órdenes"
                   />
-                </div>
+                </form>
                 {saasToolbar}
               </div>
               {taskMode && relatedTaskLinks.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200/80 pt-2 dark:border-slate-700/70">
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200/80 pb-2.5 pt-2 dark:border-slate-700/70 sm:pb-3 xl:pb-3.5">
                   <span className="rounded-md bg-brand-50 px-2 py-1 text-xs font-medium tracking-normal text-brand-800 dark:bg-brand-900/45 dark:text-brand-100">
                     {taskMode.label}
                   </span>

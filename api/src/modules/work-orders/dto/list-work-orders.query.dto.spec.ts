@@ -22,4 +22,10 @@ describe('ListWorkOrdersQueryDto', () => {
     const errors = await validate(dto);
     expect(errors).toHaveLength(0);
   });
+
+  it('acepta search opcional', async () => {
+    const dto = Object.assign(new ListWorkOrdersQueryDto(), { search: 'VEN-0123', _: String(Date.now()) });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
 });

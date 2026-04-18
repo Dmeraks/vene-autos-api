@@ -624,6 +624,91 @@ export function WorkOrderDetailPage() {
   const showCobrosCajaBlocked = !hideWorkOrderCashUi && cashOpen !== true
 
   const canPatchWo = wo && can('work_orders:update') && !cashierOnly
+
+  /** Alineado con `saveWorkOrder`: si hay diferencias respecto al último `wo` cargado, el botón pide guardar con color de acción. */
+  const workOrderFormDirty = useMemo(() => {
+    if (!wo || !canPatchWo) return false
+    const prevAuth = wo.authorizedAmount != null ? String(wo.authorizedAmount) : ''
+    const prevAuthNorm = prevAuth ? normalizeMoneyDecimalStringForApi(prevAuth) : ''
+    const authNorm = normalizeMoneyDecimalStringForApi(woAuth)
+    const descChanged = woDesc.trim() !== wo.description
+    const statusChanged = woStatus !== wo.status
+    const authChanged = canViewWoFinancials && authNorm !== prevAuthNorm
+    const prevCustomerName = (wo.customerName ?? '').trim()
+    const newCustomerName = woCustomerName.trim()
+    const nameChanged = newCustomerName !== prevCustomerName
+    const prevEmail = (wo.customerEmail ?? '').trim()
+    const newEmail = woCustomerEmail.trim()
+    const emailChanged = newEmail !== prevEmail
+    const prevPhone = (wo.customerPhone ?? '').trim()
+    const newPhone = woCustomerPhone.trim()
+    const phoneChanged = newPhone !== prevPhone
+    const prevPlate = (wo.vehiclePlate ?? '').trim()
+    const newPlate = woVehiclePlate.trim()
+    const plateChanged = newPlate !== prevPlate
+    const prevBrand = (wo.vehicleBrand ?? '').trim()
+    const newBrand = woVehicleBrand.trim()
+    const brandChanged = newBrand !== prevBrand
+    const prevModel = (wo.vehicleModel ?? '').trim()
+    const newModel = woVehicleModel.trim()
+    const modelChanged = newModel !== prevModel
+    const prevLine = (wo.vehicleLine ?? '').trim()
+    const newLine = woVehicleLine.trim()
+    const lineChanged = newLine !== prevLine
+    const prevCylinder = (wo.vehicleCylinderCc ?? '').trim()
+    const newCylinder = woVehicleCylinderCc.trim()
+    const cylinderChanged = newCylinder !== prevCylinder
+    const prevVehicleColor = (wo.vehicleColor ?? '').trim()
+    const newVehicleColor = woVehicleColor.trim()
+    const vehicleColorChanged = newVehicleColor !== prevVehicleColor
+    const prevKm = wo.intakeOdometerKm ?? null
+    const kmTrim = woIntakeKm.trim()
+    let newKmParsed: number | null = null
+    if (kmTrim !== '') {
+      const n = Number(kmTrim)
+      if (!Number.isInteger(n) || n < 0 || n > 9_999_999) {
+        return true
+      }
+      newKmParsed = n
+    }
+    const kmChanged = newKmParsed !== prevKm
+    const inspectionChanged = woInspectionOnly !== Boolean(wo.inspectionOnly)
+    return (
+      descChanged ||
+      statusChanged ||
+      authChanged ||
+      nameChanged ||
+      emailChanged ||
+      phoneChanged ||
+      plateChanged ||
+      brandChanged ||
+      modelChanged ||
+      lineChanged ||
+      cylinderChanged ||
+      vehicleColorChanged ||
+      kmChanged ||
+      inspectionChanged
+    )
+  }, [
+    wo,
+    canPatchWo,
+    canViewWoFinancials,
+    woDesc,
+    woStatus,
+    woAuth,
+    woCustomerName,
+    woCustomerEmail,
+    woCustomerPhone,
+    woVehiclePlate,
+    woVehicleBrand,
+    woVehicleModel,
+    woVehicleLine,
+    woVehicleCylinderCc,
+    woVehicleColor,
+    woIntakeKm,
+    woInspectionOnly,
+  ])
+
   const detailRootClass = isSaas ? 'space-y-7' : 'space-y-8'
   const backLinkClass = isSaas
     ? 'text-sm font-medium text-brand-700 underline-offset-2 hover:underline dark:text-brand-300 dark:hover:text-brand-200'
@@ -1943,7 +2028,16 @@ export function WorkOrderDetailPage() {
           <div className="mt-6 border-t border-slate-100 pt-6 dark:border-slate-800">
             <button
               type="submit"
-              className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600"
+              title={
+                workOrderFormDirty
+                  ? 'Hay cambios sin guardar en datos de la orden'
+                  : 'Los datos coinciden con lo guardado en el servidor'
+              }
+              className={`rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 ${
+                workOrderFormDirty
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-500/60 dark:bg-emerald-600 dark:hover:bg-emerald-500'
+                  : 'cursor-default bg-slate-300 text-slate-600 opacity-90 hover:bg-slate-300 focus-visible:ring-slate-400/40 dark:bg-slate-600 dark:text-slate-300 dark:opacity-95 dark:hover:bg-slate-600'
+              }`}
             >
               Guardar orden
             </button>

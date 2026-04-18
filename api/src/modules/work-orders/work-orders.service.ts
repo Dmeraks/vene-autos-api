@@ -351,18 +351,32 @@ export class WorkOrdersService {
   }
 
   async list(actor: JwtUserPayload, query: ListWorkOrdersQueryDto) {
-    const where: Prisma.WorkOrderWhereInput = {
-      ...this.workOrderVisibilityWhere(actor),
-    };
+    const visibility = this.workOrderVisibilityWhere(actor);
+    const clauses: Prisma.WorkOrderWhereInput[] = [];
+    if (Object.keys(visibility).length > 0) {
+      clauses.push(visibility);
+    }
     if (query.status) {
-      where.status = query.status;
+      clauses.push({ status: query.status });
     }
     if (query.vehicleId) {
-      where.vehicleId = query.vehicleId;
+      clauses.push({ vehicleId: query.vehicleId });
     }
     if (query.customerId) {
-      where.vehicle = { is: { customerId: query.customerId } };
+      clauses.push({ vehicle: { is: { customerId: query.customerId } } });
     }
+    const term = query.search?.trim();
+    if (term) {
+      clauses.push({
+        OR: [
+          { publicCode: { contains: term, mode: 'insensitive' } },
+          { description: { contains: term, mode: 'insensitive' } },
+          { customerName: { contains: term, mode: 'insensitive' } },
+          { vehiclePlate: { contains: term, mode: 'insensitive' } },
+        ],
+      });
+    }
+    const where: Prisma.WorkOrderWhereInput = clauses.length === 0 ? {} : clauses.length === 1 ? clauses[0]! : { AND: clauses };
     const page = query.page && query.page > 0 ? query.page : 1;
     const rawSize = query.pageSize && query.pageSize > 0 ? query.pageSize : LIST_PAGE_SIZE_DEFAULT;
     const pageSize = Math.min(LIST_PAGE_SIZE_MAX, rawSize);

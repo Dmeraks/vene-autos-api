@@ -7,7 +7,21 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from 'react'
+
+export type PromptOptions = {
+  title: string
+  message?: ReactNode
+  defaultValue?: string
+  placeholder?: string
+  confirmLabel?: string
+  cancelLabel?: string
+  multiline?: boolean
+  minLength?: number
+  maxLength?: number
+  variant?: 'default' | 'danger'
+}
 
 export type ConfirmOptions = {
   title: string
@@ -30,10 +44,12 @@ export type AlertOptions = {
 type QueuedItem =
   | { type: 'confirm'; opts: ConfirmOptions; resolve: (value: boolean) => void }
   | { type: 'alert'; opts: AlertOptions; resolve: () => void }
+  | { type: 'prompt'; opts: PromptOptions; resolve: (value: string | null) => void }
 
 type DialogContextValue = {
   confirm: (options: ConfirmOptions) => Promise<boolean>
   alert: (options: AlertOptions) => Promise<void>
+  prompt: (options: PromptOptions) => Promise<string | null>
 }
 
 const DialogContext = createContext<DialogContextValue | null>(null)
@@ -54,13 +70,25 @@ export function useAlert(): DialogContextValue['alert'] {
   return ctx.alert
 }
 
+export function usePrompt(): DialogContextValue['prompt'] {
+  const ctx = useContext(DialogContext)
+  if (!ctx) {
+    throw new Error('usePrompt debe usarse dentro de ConfirmProvider')
+  }
+  return ctx.prompt
+}
+
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const titleId = useId()
+  const promptFieldId = useId()
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState<QueuedItem | null>(null)
   const activeRef = useRef<QueuedItem | null>(null)
   const lockRef = useRef(false)
   const queueRef = useRef<QueuedItem[]>([])
+  const [promptDraft, setPromptDraft] = useState('')
+  const [promptError, setPromptError] = useState<string | null>(null)
+  const promptInputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
 
   const showItem = useCallback((item: QueuedItem) => {
     activeRef.current = item
@@ -87,13 +115,36 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       if (!cur) return
       if (cur.type === 'confirm') {
         cur.resolve(outcome === true)
-      } else {
+      } else if (cur.type === 'alert') {
         cur.resolve()
       }
       settleAndAdvance()
     },
     [settleAndAdvance],
   )
+
+  const resolvePrompt = useCallback(
+    (value: string | null) => {
+      const cur = activeRef.current
+      if (!cur || cur.type !== 'prompt') return
+      cur.resolve(value)
+      settleAndAdvance()
+    },
+    [settleAndAdvance],
+  )
+
+  const submitPrompt = useCallback(() => {
+    const cur = activeRef.current
+    if (!cur || cur.type !== 'prompt') return
+    const trimmed = promptDraft.trim()
+    const min = cur.opts.minLength
+    if (min != null && min > 0 && trimmed.length < min) {
+      setPromptError(`Ingresá al menos ${min} caracteres.`)
+      return
+    }
+    setPromptError(null)
+    resolvePrompt(trimmed)
+  }, [promptDraft, resolvePrompt])
 
   const confirm = useCallback(
     (opts: ConfirmOptions) => {
@@ -125,17 +176,47 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     [showItem],
   )
 
+  const prompt = useCallback(
+    (opts: PromptOptions) => {
+      return new Promise<string | null>((resolve) => {
+        const item: QueuedItem = { type: 'prompt', opts, resolve }
+        if (lockRef.current) {
+          queueRef.current.push(item)
+          return
+        }
+        lockRef.current = true
+        showItem(item)
+      })
+    },
+    [showItem],
+  )
+
+  useEffect(() => {
+    if (active?.type === 'prompt') {
+      setPromptDraft(active.opts.defaultValue ?? '')
+      setPromptError(null)
+    }
+  }, [active])
+
+  useEffect(() => {
+    if (!open || !active) return
+    if (active.type === 'prompt') {
+      window.setTimeout(() => promptInputRef.current?.focus(), 0)
+    }
+  }, [open, active])
+
   useEffect(() => {
     if (!open || !active) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (active.type === 'confirm') finish(false)
-        else finish('alert-ok')
+        else if (active.type === 'alert') finish('alert-ok')
+        else resolvePrompt(null)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, active, finish])
+  }, [open, active, finish, resolvePrompt])
 
   const primaryBtnClass =
     active?.type === 'confirm'
@@ -149,13 +230,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const overlayDismiss = () => {
     if (!activeRef.current) return
     if (activeRef.current.type === 'confirm') finish(false)
-    else finish('alert-ok')
+    else if (activeRef.current.type === 'alert') finish('alert-ok')
+    else resolvePrompt(null)
   }
 
-  const opts = active?.type === 'confirm' ? active.opts : active?.opts
+  const opts = active?.type === 'prompt' ? active.opts : active?.opts
+
+  const promptPrimaryClass =
+    active?.type === 'prompt' && active.opts.variant === 'danger' ? 'va-btn-danger' : 'va-btn-primary'
 
   return (
-    <DialogContext.Provider value={{ confirm, alert }}>
+    <DialogContext.Provider value={{ confirm, alert, prompt }}>
       {children}
       {open && active && opts && (
         <div
@@ -171,13 +256,58 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-[11px] font-medium text-slate-500 dark:text-slate-300">
-              {active.type === 'confirm' ? 'Confirmación' : 'Aviso'}
+              {active.type === 'confirm'
+                ? 'Confirmación'
+                : active.type === 'alert'
+                  ? 'Aviso'
+                  : 'Entrada'}
             </p>
             <h2 id={titleId} className="mt-1 va-section-title text-lg">
               {opts.title}
             </h2>
             <div className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300 [&_strong]:font-semibold [&_strong]:text-slate-800 dark:[&_strong]:text-slate-100 [&_.tabular-nums]:tracking-tight">
-              {typeof opts.message === 'string' ? (
+              {active.type === 'prompt' ? (
+                <>
+                  {active.opts.message != null ? (
+                    typeof active.opts.message === 'string' ? (
+                      <div className="whitespace-pre-wrap break-words">{active.opts.message}</div>
+                    ) : (
+                      active.opts.message
+                    )
+                  ) : null}
+                  <div className="mt-3">
+                    <label htmlFor={promptFieldId} className="sr-only">
+                      {opts.title}
+                    </label>
+                    {active.opts.multiline ? (
+                      <textarea
+                        id={promptFieldId}
+                        ref={promptInputRef as RefObject<HTMLTextAreaElement>}
+                        rows={4}
+                        className="va-field w-full resize-y"
+                        value={promptDraft}
+                        maxLength={active.opts.maxLength ?? undefined}
+                        placeholder={active.opts.placeholder}
+                        onChange={(e) => setPromptDraft(e.target.value)}
+                      />
+                    ) : (
+                      <input
+                        id={promptFieldId}
+                        ref={promptInputRef as RefObject<HTMLInputElement>}
+                        type="text"
+                        className="va-field w-full"
+                        value={promptDraft}
+                        maxLength={active.opts.maxLength ?? undefined}
+                        placeholder={active.opts.placeholder}
+                        onChange={(e) => setPromptDraft(e.target.value)}
+                      />
+                    )}
+                    {promptError ? (
+                      <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">{promptError}</p>
+                    ) : null}
+                  </div>
+                </>
+              ) : typeof opts.message === 'string' ? (
                 <div className="whitespace-pre-wrap break-words">{opts.message}</div>
               ) : (
                 opts.message
@@ -197,10 +327,19 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                     {active.opts.confirmLabel ?? 'Aceptar'}
                   </button>
                 </>
-              ) : (
+              ) : active.type === 'alert' ? (
                 <button type="button" className={primaryBtnClass} onClick={() => finish('alert-ok')}>
                   {active.opts.okLabel ?? 'Entendido'}
                 </button>
+              ) : (
+                <>
+                  <button type="button" className="va-btn-secondary" onClick={() => resolvePrompt(null)}>
+                    {active.opts.cancelLabel ?? 'Cancelar'}
+                  </button>
+                  <button type="button" className={promptPrimaryClass} onClick={submitPrompt}>
+                    {active.opts.confirmLabel ?? 'Aceptar'}
+                  </button>
+                </>
               )}
             </div>
           </div>

@@ -84,29 +84,20 @@ export function ConsultPublicWorkOrderPage() {
 
   return (
     <div className={prefersDark ? 'dark' : ''} style={{ colorScheme: prefersDark ? 'dark' : 'light' }}>
-      <div className="va-landing-commercial-brand min-h-dvh bg-[#f8f9fc] text-slate-900 dark:bg-[#020617] dark:text-slate-100">
-      <nav className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/90 dark:backdrop-blur-md">
+      <div className="va-landing-commercial-brand min-h-dvh bg-[#f8f9fc] text-slate-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <nav className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur-md dark:border-zinc-800 dark:bg-black">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <Link
             to="/login"
-            className="inline-flex items-center gap-2 font-semibold tracking-tight text-slate-900 dark:text-slate-50"
+            className="inline-flex items-center transition hover:opacity-80"
             aria-label="Inicio acceso Vene Autos"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="size-6 shrink-0 text-brand-600 dark:text-brand-400"
-              aria-hidden
-            >
-              <path
-                d="M12 2.5l8.5 9.5L12 21.5l-8.5-9.5L12 2.5z"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Vene Autos
+            <img
+              src="/logo_landing.png"
+              alt="Vene Autos"
+              className="h-9 w-auto max-w-[200px] select-none sm:h-10 sm:max-w-[220px]"
+              draggable={false}
+            />
           </Link>
           <div className="flex flex-wrap items-center gap-3 text-xs font-medium tracking-tight text-slate-600 dark:text-slate-300">
             <Link to="/login" className="transition hover:text-brand-700 dark:hover:text-brand-300">
@@ -120,9 +111,9 @@ export function ConsultPublicWorkOrderPage() {
       </nav>
 
       <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
-        <div className="rounded-2xl border border-slate-200/85 bg-white px-5 py-6 shadow-sm dark:border-slate-600/90 dark:bg-slate-900 sm:px-7">
-        <p className="text-xs font-medium text-brand-700 dark:text-brand-300">Cliente</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-brand-800 dark:text-brand-200 sm:text-4xl">
+        <div className="rounded-2xl border border-slate-200/85 bg-white px-5 py-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:px-7">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-700 dark:text-brand-500">Cliente</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-brand-700 dark:text-brand-500 sm:text-4xl">
           Consultar orden de trabajo
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
@@ -132,7 +123,7 @@ export function ConsultPublicWorkOrderPage() {
         </p>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-slate-200/85 bg-white p-5 shadow-sm dark:border-slate-600/90 dark:bg-slate-900 sm:p-8">
+        <div className="mt-6 rounded-2xl border border-slate-200/85 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-8">
           <form onSubmit={(e) => void onSubmit(e)} className="space-y-5">
             <div>
               <label htmlFor="wo-public-code" className="va-label text-xs">
@@ -178,7 +169,7 @@ export function ConsultPublicWorkOrderPage() {
           ) : null}
 
           {result && st ? (
-            <div className="mt-8 border-t border-slate-200 pt-8 dark:border-slate-700">
+            <div className="mt-8 border-t border-slate-200 pt-8 dark:border-zinc-800">
               <div className="flex flex-wrap items-center gap-3">
                 <span className={`rounded-md px-2.5 py-1 text-xs font-semibold tracking-tight ${st.tone}`}>
                   {st.label}

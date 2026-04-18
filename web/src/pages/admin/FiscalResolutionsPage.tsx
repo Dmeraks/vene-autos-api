@@ -7,6 +7,7 @@ import type {
   FiscalResolutionKind,
 } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
+import { useConfirm } from '../../components/confirm/ConfirmProvider'
 import { PageHeader } from '../../components/layout/PageHeader'
 
 const KIND_LABEL: Record<FiscalResolutionKind, string> = {
@@ -45,6 +46,7 @@ const EMPTY_FORM: DraftForm = {
 
 export function FiscalResolutionsPage() {
   const { can } = useAuth()
+  const confirmDlg = useConfirm()
   const canManage = can('fiscal_resolutions:manage')
 
   const [items, setItems] = useState<FiscalResolution[] | null>(null)
@@ -108,7 +110,13 @@ export function FiscalResolutionsPage() {
 
   async function onDeactivate(id: string) {
     if (!canManage) return
-    if (!window.confirm('¿Desactivar esta resolución? Ya no se podrán emitir documentos con ella.')) return
+    const ok = await confirmDlg({
+      title: 'Desactivar resolución',
+      message: '¿Desactivar esta resolución? Ya no se podrán emitir documentos con ella.',
+      variant: 'danger',
+      confirmLabel: 'Desactivar',
+    })
+    if (!ok) return
     try {
       await api(`/fiscal-resolutions/${id}/deactivate`, { method: 'POST' })
       await load()

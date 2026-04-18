@@ -1,6 +1,6 @@
 import { WorkOrderStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { IsPrismaCuid } from '../../../common/decorators/is-prisma-cuid.decorator';
 
 const STATUSES = Object.values(WorkOrderStatus);
@@ -18,6 +18,12 @@ export class ListWorkOrdersQueryDto {
   @IsOptional()
   @IsPrismaCuid()
   customerId?: string;
+
+  /** Texto libre: coincide con código público, descripción, nombre de cliente o patente (snapshot en la OT). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
 
   @IsOptional()
   @Type(() => Number)

@@ -827,3 +827,112 @@ export type CreateWorkOrderPayload = {
   /** OT origen (debe estar entregada). Crea una orden de garantía vinculada. */
   parentWorkOrderId?: string
 }
+
+// ============================================================================
+// Nómina técnica (Fase 9)
+// ============================================================================
+
+export type PayrollStatus = 'DRAFT' | 'PAID' | 'VOIDED'
+export type PayrollAdjustmentKind = 'BONUS' | 'ADVANCE' | 'DEDUCTION' | 'OTHER'
+
+export type PayrollRunEntry = {
+  id: string
+  workOrderId: string
+  publicCode: string
+  vehiclePlate: string | null
+  vehicleBrand: string | null
+  vehicleModel: string | null
+  customerName: string | null
+  deliveredAt: string
+  /** Subtotal MO sin IVA (base de la comisión). `null` si el actor solo tiene lectura de nómina sin gestionarla. */
+  laborSubtotal: string | null
+  /** Comisión pagada por esa OT. */
+  commission: string
+  workOrderStatus: WorkOrderStatus | null
+}
+
+export type PayrollAdjustment = {
+  id: string
+  kind: PayrollAdjustmentKind
+  /** Monto firmado (positivo suma, negativo resta). */
+  amount: string
+  note: string | null
+  createdAt: string
+  createdBy: { id: string; email: string; fullName: string } | null
+}
+
+export type PayrollRun = {
+  id: string
+  technicianId: string
+  technician: { id: string; fullName: string; email: string }
+  /** Lunes (YYYY-MM-DD). */
+  weekStart: string
+  /** Sábado (YYYY-MM-DD). */
+  weekEnd: string
+  status: PayrollStatus
+  commissionPctApplied: number
+  /** Σ subtotales MO de las OTs DELIVERED en la semana. `null` si el actor no puede ver montos de MO. */
+  baseAmount: string | null
+  /** baseAmount × commissionPctApplied / 100. */
+  commissionAmount: string
+  adjustmentsTotal: string
+  /** commissionAmount + adjustmentsTotal. */
+  totalToPay: string
+  paidAt: string | null
+  cashMovementId: string | null
+  cashMovement: { id: string; createdAt: string } | null
+  otsCount: number
+  adjustments: PayrollAdjustment[]
+  entries: PayrollRunEntry[]
+}
+
+export type PayrollWeekTechnicianRow = {
+  technician: {
+    userId: string
+    fullName: string
+    email: string
+    isActiveUser: boolean
+    commissionPct: number
+    isActiveInPayroll: boolean
+  }
+  run: PayrollRun | null
+}
+
+export type PayrollUnassignedOt = {
+  workOrderId: string
+  publicCode: string
+  vehiclePlate: string | null
+  customerName: string | null
+  deliveredAt: string
+  laborSubtotal: string
+}
+
+/** `totalLaborSubtotal` es `null` cuando el actor no ve montos de MO (misma regla que `PayrollRun.baseAmount`). */
+export type PayrollWeekUnassignedBlock = {
+  ots: PayrollUnassignedOt[]
+  totalLaborSubtotal: string | null
+}
+
+export type PayrollWeekSummary = {
+  weekStart: string
+  weekEnd: string
+  weekStartIso: string
+  weekEndIso: string
+  rows: PayrollWeekTechnicianRow[]
+  unassigned: PayrollWeekUnassignedBlock
+  totals: {
+    commissionDraft: string
+    commissionPaid: string
+  }
+}
+
+export type PayrollTechnicianConfig = {
+  userId: string
+  email: string
+  fullName: string
+  isActiveUser: boolean
+  commissionPct: number
+  isActiveInPayroll: boolean
+  notes: string | null
+}
+
