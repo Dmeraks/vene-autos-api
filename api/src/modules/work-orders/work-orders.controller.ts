@@ -25,6 +25,7 @@ import {
   ReceiptsService,
   type WorkOrderForReceipt,
 } from '../receipts/receipts.service';
+import { TicketBuilderService } from '../receipts/ticket-builder.service';
 import { CreateWorkOrderDto } from './dto/create-work-order.dto';
 import { ListWorkOrdersQueryDto } from './dto/list-work-orders.query.dto';
 import { LookupPublicWorkOrderDto } from './dto/lookup-public-work-order.dto';
@@ -46,6 +47,7 @@ export class WorkOrdersController {
     private readonly workOrderPayments: WorkOrderPaymentsService,
     private readonly workOrderLines: WorkOrderLinesService,
     private readonly receipts: ReceiptsService,
+    private readonly ticketBuilder: TicketBuilderService,
   ) {}
 
   @Post()
@@ -230,6 +232,83 @@ export class WorkOrdersController {
         `No se pudo generar el comprobante de la orden (${(err as Error)?.message ?? 'error interno'}).`,
       );
     }
+  }
+
+  /**
+   * Ticket térmico JSON para la OT completa (Fase 7.7). Lo consume el front para enviarlo al
+   * puente local `vene-drawer-bridge` que lo traduce a ESC/POS (58 mm, CP850). La autoridad de
+   * los datos queda en el API; el puente es solo "driver" de impresora.
+   */
+  @Get(':id/receipt-ticket.json')
+  @RequirePermissions('work_orders:read')
+  async receiptTicket(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload) {
+    const detail = await this.workOrders.findOne(id, actor);
+    let payments: unknown[] = [];
+    try {
+      payments = (await this.workOrderPayments.list(id, actor)) as unknown[];
+    } catch {
+      payments = [];
+    }
+    const payload: WorkOrderForReceipt = {
+      ...(detail as unknown as WorkOrderForReceipt),
+      payments: payments as unknown as WorkOrderForReceipt['payments'],
+    };
+    return this.ticketBuilder.buildWorkOrderTicket(payload);
+  }
+
+  /**
+   * Ticket térmico JSON para un cobro puntual de la OT (uno por pago). Idéntico al que se
+   * imprime automáticamente tras registrar el cobro; disponible también para reimpresión.
+   */
+  @Get(':id/payments/:paymentId/receipt-ticket.json')
+  @RequirePermissions('work_orders:read')
+  async paymentReceiptTicket(
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+    @CurrentUser() actor: JwtUserPayload,
+  ) {
+    const detail = await this.workOrders.findOne(id, actor);
+    const payments = (await this.workOrderPayments.list(id, actor)) as Array<{
+      id: string;
+      amount: { toString(): string };
+      createdAt: Date | string;
+      note?: string | null;
+      cashMovement?: {
+        category?: { name?: string | null; slug?: string | null } | null;
+        tenderAmount?: { toString(): string } | null;
+        changeAmount?: { toString(): string } | null;
+      } | null;
+      recordedBy?: { fullName?: string | null; email?: string | null } | null;
+    }>;
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) {
+      throw new InternalServerErrorException('El cobro no existe o no pertenece a esta orden.');
+    }
+    const summary = await this.workOrderPayments.summary(id, actor);
+    const paidSoFar = payments
+      .filter((p) => new Date(p.createdAt as string).getTime() <= new Date(payment.createdAt as string).getTime())
+      .reduce((acc, p) => acc + Number(p.amount.toString()), 0);
+    const grand = Number(summary.authorizedAmount ?? summary.linesSubtotal ?? 0);
+    const dueAfter = Math.max(0, grand - paidSoFar);
+    const d = detail as unknown as WorkOrderForReceipt;
+    return this.ticketBuilder.buildWorkOrderPaymentTicket(
+      {
+        publicCode: d.publicCode,
+        customerName: d.customerName,
+        customerPhone: d.customerPhone,
+        customerDocumentId: d.customerDocumentId ?? null,
+        vehicle: d.vehicle,
+        vehiclePlate: d.vehiclePlate ?? null,
+        vehicleBrand: d.vehicleBrand ?? null,
+        vehicleModel: d.vehicleModel ?? null,
+        authorizedAmount: d.authorizedAmount ?? null,
+        lines: d.lines,
+        totals: d.totals,
+        totalPaidAfter: paidSoFar.toString(),
+        amountDueAfter: dueAfter.toString(),
+      },
+      payment,
+    );
   }
 
   @Patch(':id')

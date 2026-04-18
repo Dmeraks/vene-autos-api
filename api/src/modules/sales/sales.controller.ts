@@ -27,6 +27,7 @@ import {
   ReceiptsService,
   type SaleForReceipt,
 } from '../receipts/receipts.service';
+import { TicketBuilderService } from '../receipts/ticket-builder.service';
 import { CancelSaleDto } from './dto/cancel-sale.dto';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateSaleFromWorkOrderDto } from './dto/create-sale-from-work-order.dto';
@@ -48,6 +49,7 @@ export class SalesController {
     private readonly saleLines: SaleLinesService,
     private readonly salePayments: SalePaymentsService,
     private readonly receipts: ReceiptsService,
+    private readonly ticketBuilder: TicketBuilderService,
   ) {}
 
   @Get()
@@ -127,6 +129,74 @@ export class SalesController {
         `No se pudo generar el recibo de venta (${(err as Error)?.message ?? 'error interno'}).`,
       );
     }
+  }
+
+  /** Ticket térmico JSON para la venta completa (Fase 7.7 — ver work-orders). */
+  @Get(':id/receipt-ticket.json')
+  @RequirePermissions('sales:read')
+  async receiptTicket(@Param('id') id: string, @CurrentUser() actor: JwtUserPayload) {
+    const detail = await this.sales.findOne(id, actor);
+    let payments: unknown[] = [];
+    try {
+      payments = (await this.salePayments.list(id, actor)) as unknown[];
+    } catch {
+      payments = [];
+    }
+    const payload: SaleForReceipt = {
+      ...(detail as unknown as SaleForReceipt),
+      payments: payments as unknown as SaleForReceipt['payments'],
+    };
+    return this.ticketBuilder.buildSaleTicket(payload);
+  }
+
+  /** Ticket térmico JSON para un cobro de venta puntual (reimpresión incluida). */
+  @Get(':id/payments/:paymentId/receipt-ticket.json')
+  @RequirePermissions('sales:read')
+  async paymentReceiptTicket(
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+    @CurrentUser() actor: JwtUserPayload,
+  ) {
+    const detail = (await this.sales.findOne(id, actor)) as unknown as SaleForReceipt;
+    const payments = (await this.salePayments.list(id, actor)) as Array<{
+      id: string;
+      amount: { toString(): string };
+      createdAt: Date | string;
+      note?: string | null;
+      cashMovement?: {
+        category?: { name?: string | null; slug?: string | null } | null;
+        tenderAmount?: { toString(): string } | null;
+        changeAmount?: { toString(): string } | null;
+      } | null;
+      recordedBy?: { fullName?: string | null; email?: string | null } | null;
+    }>;
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) {
+      throw new InternalServerErrorException('El cobro no existe o no pertenece a esta venta.');
+    }
+    const paidSoFar = payments
+      .filter(
+        (p) =>
+          new Date(p.createdAt as string).getTime() <=
+          new Date(payment.createdAt as string).getTime(),
+      )
+      .reduce((acc, p) => acc + Number(p.amount.toString()), 0);
+    const grand = Number(detail.totals?.grandTotal ?? 0);
+    const dueAfter = Math.max(0, grand - paidSoFar);
+    return this.ticketBuilder.buildSalePaymentTicket(
+      {
+        publicCode: detail.publicCode,
+        customerName: detail.customerName,
+        customerDocumentId: detail.customerDocumentId ?? null,
+        lines: detail.lines,
+        totals: detail.totals,
+      },
+      payment,
+      {
+        totalPaidAfter: paidSoFar.toString(),
+        amountDueAfter: dueAfter.toString(),
+      },
+    );
   }
 
   @Patch(':id')

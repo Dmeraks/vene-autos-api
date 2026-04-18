@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Smoke test del renderizador de recibos (Fase 7.5): no verifica pixel-perfect HTML,
  * sólo garantiza que (a) el encabezado incluye los datos del taller activos, (b) las
  * líneas, totales y pagos se imprimen y (c) la leyenda fiscal cambia según el régimen.
  */
 import { ReceiptsService, type WorkOrderForReceipt, type SaleForReceipt } from './receipts.service';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { WorkshopLogoService } from './workshop-logo.service';
 
 type WorkshopRow = { key: string; value: unknown };
 
@@ -14,6 +15,14 @@ function makePrismaStub(rows: WorkshopRow[]): PrismaService {
       findMany: jest.fn(async () => rows),
     },
   } as unknown as PrismaService;
+}
+
+/** Stub que siempre devuelve null: los recibos se renderizan sin logo en los tests. */
+function makeLogosStub(): WorkshopLogoService {
+  return {
+    getLogo: jest.fn(async () => null),
+    getDataUrl: jest.fn(async () => null),
+  } as unknown as WorkshopLogoService;
 }
 
 describe('ReceiptsService', () => {
@@ -29,7 +38,7 @@ describe('ReceiptsService', () => {
 
   it('incluye encabezado del taller, leyenda de persona natural, líneas y totales en el recibo de OT', async () => {
     const prisma = makePrismaStub(workshopRows);
-    const service = new ReceiptsService(prisma);
+    const service = new ReceiptsService(prisma, makeLogosStub());
 
     const wo: WorkOrderForReceipt = {
       id: 'wo1',
@@ -87,7 +96,12 @@ describe('ReceiptsService', () => {
     expect(html).toContain('Juan Pérez');
     expect(html).toContain('ABC123');
     expect(html).toContain('Filtro de aceite');
-    expect(html).toContain('Mano de obra cambio de aceite');
+    // Política Fase 8+: las líneas LABOR en el recibo se rotulan siempre como
+    // "Mano de obra" (las notas del concepto, p. ej. "cambio de aceite", quedan
+    // solo en la OT). Validamos que el label fijo sale y que la descripción
+    // general del servicio sigue apareciendo en el encabezado del recibo.
+    expect(html).toContain('Mano de obra');
+    expect(html).not.toContain('Mano de obra cambio de aceite');
     expect(html).toContain('Cambio de aceite y revisión general');
     expect(html).toContain('$110.000');
     expect(html).toContain('Abono caja');
@@ -101,7 +115,7 @@ describe('ReceiptsService', () => {
       ...workshopRows.filter((r) => r.key !== 'workshop.regime'),
       { key: 'workshop.regime', value: 'juridica_responsable_iva' },
     ]);
-    const service = new ReceiptsService(prisma);
+    const service = new ReceiptsService(prisma, makeLogosStub());
 
     const sale: SaleForReceipt = {
       id: 's1',
@@ -135,7 +149,7 @@ describe('ReceiptsService', () => {
 
   it('usa un nombre por defecto "Taller" si no hay razón social configurada', async () => {
     const prisma = makePrismaStub([]);
-    const service = new ReceiptsService(prisma);
+    const service = new ReceiptsService(prisma, makeLogosStub());
 
     const sale: SaleForReceipt = {
       id: 's2',

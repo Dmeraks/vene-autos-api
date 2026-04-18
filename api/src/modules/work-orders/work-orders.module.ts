@@ -13,6 +13,6 @@ import { WorkOrdersService } from './work-orders.service';
   imports: [AuditModule, ReceiptsModule],
   controllers: [WorkOrdersController],
   providers: [WorkOrdersService, WorkOrderPaymentsService, WorkOrderLinesService],
-  exports: [WorkOrdersService],
+  exports: [WorkOrdersService, WorkOrderPaymentsService],
 })
 export class WorkOrdersModule {}

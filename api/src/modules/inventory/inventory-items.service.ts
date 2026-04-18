@@ -86,6 +86,7 @@ export class InventoryItemsService {
         category: dto.category?.trim() ?? '',
         itemKind: dto.itemKind ?? undefined,
         name: dto.name.trim(),
+        reference: dto.reference?.trim() ?? '',
         measurementUnitId: mu.id,
         quantityOnHand: initial,
         averageCost: dto.averageCost ? decimalFromMoneyApiString(dto.averageCost) : null,
@@ -128,6 +129,7 @@ export class InventoryItemsService {
       where: { id },
       data: {
         name: dto.name?.trim(),
+        reference: dto.reference !== undefined ? dto.reference.trim() : undefined,
         supplier: dto.supplier !== undefined ? dto.supplier.trim() : undefined,
         category: dto.category !== undefined ? dto.category.trim() : undefined,
         itemKind: dto.itemKind,

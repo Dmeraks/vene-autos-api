@@ -42,6 +42,8 @@ export type InventoryItem = {
   /** `PART` por defecto para filas heredadas sin especificar. */
   itemKind?: InventoryItemKind
   name: string
+  /** Referencia del fabricante/número de parte, separada del nombre (opcional). */
+  reference?: string
   quantityOnHand: string
   trackStock: boolean
   isActive: boolean

@@ -24,6 +24,8 @@ import {
 } from '../inventory/inventory.constants';
 import {
   assertOtQuantityWholeQuartersForOilGallon,
+  inventoryItemUsesQuarterGallonOtQuantity,
+  oilOtQuarterUnitPriceToStoredGallonUnitPrice,
   otPartQuantityToInventoryGallons,
 } from '../inventory/oil-gallon-ot';
 import type { CreateWorkOrderLineDto } from './dto/create-work-order-line.dto';
@@ -33,7 +35,13 @@ import {
   actorMayViewWorkOrderCosts,
   actorMayViewWorkOrderFinancials,
 } from './work-orders.visibility';
-import { computeWorkOrderTotals, serializeWorkOrderTotals } from './work-order-totals';
+import {
+  computeLineTotals,
+  computeWorkOrderTotals,
+  serializeLineTotals,
+  serializeWorkOrderTotals,
+  type LineForTotals,
+} from './work-order-totals';
 
 /** Solo estos perfiles pueden editar o quitar líneas PART (repuesto) ya agregadas a la OT. */
 const WORK_ORDER_PART_LINE_MANAGER_ROLE_SLUGS = new Set([
@@ -47,6 +55,8 @@ const lineInclude = {
   inventoryItem: {
     include: { measurementUnit: { select: { id: true, slug: true, name: true } } },
   },
+  taxRate: { select: { id: true, slug: true, name: true, kind: true, ratePercent: true } },
+  service: { select: { id: true, code: true, name: true } },
 } as const;
 
 function assertPartQuantityMatchesMeasurementUnit(qty: Prisma.Decimal, measurementUnitSlug: string): void {
@@ -74,7 +84,7 @@ export class WorkOrderLinesService {
    * (cantidad/precio/quitar) salvo cajero, administrador o dueño.
    */
   /** Quien ve importes en OT y puede fijar o cambiar `unitPrice` en líneas (técnicos no). */
-  private redactLineForActor<T extends { unitPrice: unknown; inventoryItem: unknown }>(
+  private redactLineForActor<T extends { unitPrice: unknown; inventoryItem: unknown; totals?: unknown }>(
     actor: JwtUserPayload,
     line: T,
   ): T {
@@ -85,6 +95,7 @@ export class WorkOrderLinesService {
     return {
       ...line,
       unitPrice: null,
+      totals: null,
       inventoryItem: inv ? { ...inv, averageCost: null } : null,
     } as T;
   }
@@ -121,7 +132,27 @@ export class WorkOrderLinesService {
       orderBy: { sortOrder: 'asc' },
       include: lineInclude,
     });
-    return rows.map((ln) => this.redactLineForActor(actor, ln));
+    const mayFin = actorMayViewWorkOrderFinancials(actor);
+    return rows.map((ln) => {
+      if (!mayFin) {
+        return this.redactLineForActor(actor, ln);
+      }
+      const linesForTotals: LineForTotals = {
+        id: ln.id,
+        lineType: ln.lineType,
+        quantity: ln.quantity,
+        unitPrice: ln.unitPrice,
+        discountAmount: ln.discountAmount,
+        costSnapshot: ln.costSnapshot,
+        taxRateId: ln.taxRateId,
+        taxRatePercentSnapshot: ln.taxRatePercentSnapshot,
+        taxRate: ln.taxRate ? { kind: ln.taxRate.kind } : null,
+      };
+      return this.redactLineForActor(actor, {
+        ...ln,
+        totals: serializeLineTotals(computeLineTotals(linesForTotals)),
+      });
+    });
   }
 
   /**
@@ -230,7 +261,7 @@ export class WorkOrderLinesService {
     }
 
     const mayFinancials = actorMayViewWorkOrderFinancials(actor);
-    const unitPriceForSave =
+    let unitPriceForSave =
       mayFinancials && dto.unitPrice?.trim()
         ? decimalFromMoneyApiString(dto.unitPrice)
         : mayFinancials && resolvedServiceUnitPrice
@@ -291,6 +322,9 @@ export class WorkOrderLinesService {
       }
       if (!item.trackStock) {
         throw new BadRequestException('Este ítem no descuenta stock');
+      }
+      if (unitPriceForSave !== null && inventoryItemUsesQuarterGallonOtQuantity(item)) {
+        unitPriceForSave = oilOtQuarterUnitPriceToStoredGallonUnitPrice(unitPriceForSave);
       }
       assertOtQuantityWholeQuartersForOilGallon(qty, item);
       const consumptionGallons = otPartQuantityToInventoryGallons(qty, item);
@@ -454,16 +488,28 @@ export class WorkOrderLinesService {
         quantityPatch = newStoredQty;
       }
 
+      let unitPriceResolved: Prisma.Decimal | null | undefined = undefined;
+      if (dto.unitPrice !== undefined) {
+        if (dto.unitPrice === null) {
+          unitPriceResolved = null;
+        } else {
+          let p = decimalFromMoneyApiString(dto.unitPrice);
+          if (
+            before.lineType === WorkOrderLineType.PART &&
+            before.inventoryItem &&
+            inventoryItemUsesQuarterGallonOtQuantity(before.inventoryItem)
+          ) {
+            p = oilOtQuarterUnitPriceToStoredGallonUnitPrice(p);
+          }
+          unitPriceResolved = p;
+        }
+      }
+
       return tx.workOrderLine.update({
         where: { id: lineId },
         data: {
           quantity: quantityPatch,
-          unitPrice:
-            dto.unitPrice === undefined
-              ? undefined
-              : dto.unitPrice === null
-                ? null
-                : decimalFromMoneyApiString(dto.unitPrice),
+          unitPrice: unitPriceResolved,
           discountAmount:
             dto.discountAmount === undefined
               ? undefined

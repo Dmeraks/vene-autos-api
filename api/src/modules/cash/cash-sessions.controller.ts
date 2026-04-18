@@ -26,7 +26,14 @@ import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
 import {
   type CashSessionForReceipt,
   ReceiptsService,
+  type SaleForReceipt,
+  type WorkOrderForReceipt,
 } from '../receipts/receipts.service';
+import { TicketBuilderService } from '../receipts/ticket-builder.service';
+import { SalePaymentsService } from '../sales/sale-payments.service';
+import { SalesService } from '../sales/sales.service';
+import { WorkOrderPaymentsService } from '../work-orders/work-order-payments.service';
+import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { CashSessionsService } from './cash-sessions.service';
 import { CloseCashSessionDto } from './dto/close-cash-session.dto';
 import { OpenCashSessionDto } from './dto/open-cash-session.dto';
@@ -38,7 +45,16 @@ export class CashSessionsController {
   constructor(
     private readonly sessions: CashSessionsService,
     private readonly receipts: ReceiptsService,
+    private readonly ticketBuilder: TicketBuilderService,
     private readonly prisma: PrismaService,
+    // Fase 7.7 · Al reimprimir un movimiento desde caja, si el movimiento proviene
+    // de un cobro de OT o de venta, queremos regenerar el MISMO ticket completo
+    // (con detalle, cliente, vehículo, saldo...) en lugar del mini-ticket de
+    // movimiento. Esto requiere consultar la OT/venta y la lista de cobros.
+    private readonly workOrders: WorkOrdersService,
+    private readonly workOrderPayments: WorkOrderPaymentsService,
+    private readonly sales: SalesService,
+    private readonly salePayments: SalePaymentsService,
   ) {}
 
   /** Solo `{ open: boolean }` — sin permiso extra; sirve para ocultar UI que exige caja abierta. */
@@ -113,6 +129,218 @@ export class CashSessionsController {
         `No se pudo generar el arqueo (${(err as Error)?.message ?? 'error interno'}).`,
       );
     }
+  }
+
+  /**
+   * Ticket térmico JSON del arqueo de caja (Fase 7.7). Versión resumida (aperturas, totales y
+   * desglose por origen). El detalle completo de movimientos va al HTML/PDF: el papel de
+   * 58 mm no alcanza para listar 50+ movimientos de forma legible.
+   */
+  @Get(':id/receipt-ticket.json')
+  @RequirePermissions('cash_sessions:read')
+  async receiptTicket(@Param('id') id: string) {
+    const detail = await this.sessions.findOne(id);
+    let openingNote: string | null = null;
+    try {
+      const openEntry = await this.prisma.auditLog.findFirst({
+        where: {
+          entityType: 'CashSession',
+          entityId: id,
+          action: 'cash_sessions.open',
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { nextPayload: true },
+      });
+      const payload = openEntry?.nextPayload as { note?: unknown } | null | undefined;
+      if (payload && typeof payload.note === 'string' && payload.note.trim().length > 0) {
+        openingNote = payload.note.trim();
+      }
+    } catch {
+      openingNote = null;
+    }
+    const payload: CashSessionForReceipt = {
+      ...(detail as unknown as CashSessionForReceipt),
+      openingNote,
+    };
+    return this.ticketBuilder.buildCashSessionSummaryTicket(payload);
+  }
+
+  /**
+   * Ticket térmico JSON para un movimiento individual (ingreso o egreso manual de caja).
+   * Permite reimprimir desde el historial del día en CashPage sin recalcular nada en el front.
+   */
+  @Get(':id/movements/:movementId/receipt-ticket.json')
+  @RequirePermissions('cash_sessions:read')
+  async movementTicket(
+    @Param('id') id: string,
+    @Param('movementId') movementId: string,
+    @CurrentUser() actor: JwtUserPayload,
+  ) {
+    const movement = await this.prisma.cashMovement.findFirst({
+      where: { id: movementId, sessionId: id },
+      include: {
+        category: true,
+        createdBy: { select: { id: true, email: true, fullName: true } },
+        // Si el movimiento corresponde a un cobro de OT/venta, hay un registro
+        // 1:1 en `workOrderPayment`/`salePayment`. Lo usamos para redirigir a
+        // los builders completos de pago (con detalle, cliente, saldo, etc.).
+        workOrderPayment: { select: { id: true, workOrderId: true } },
+        salePayment: { select: { id: true, saleId: true } },
+      },
+    });
+    if (!movement) {
+      throw new InternalServerErrorException(
+        'El movimiento no existe o no pertenece a esta sesión.',
+      );
+    }
+
+    // Caso 1 · Cobro de una OT → mismo ticket que imprimió el cajero al registrar el pago.
+    // Replica exacta de `WorkOrdersController.paymentReceiptTicket`.
+    if (movement.workOrderPayment) {
+      return this.buildWorkOrderPaymentReprint(
+        movement.workOrderPayment.workOrderId,
+        movement.workOrderPayment.id,
+        actor,
+      );
+    }
+
+    // Caso 2 · Cobro de una venta → mismo ticket que imprimió el cajero al cobrarla.
+    // Replica exacta de `SalesController.paymentReceiptTicket`.
+    if (movement.salePayment) {
+      return this.buildSalePaymentReprint(
+        movement.salePayment.saleId,
+        movement.salePayment.id,
+        actor,
+      );
+    }
+
+    // Caso 3 · Ingreso/egreso manual (sin vínculo) → mini-ticket tradicional.
+    return this.ticketBuilder.buildCashMovementTicket(
+      {
+        direction: movement.direction,
+        amount: movement.amount,
+        tenderAmount: movement.tenderAmount,
+        changeAmount: movement.changeAmount,
+        note: movement.note,
+        createdAt: movement.createdAt,
+        category: movement.category,
+        referenceType: movement.referenceType,
+        referenceId: movement.referenceId,
+        createdBy: movement.createdBy,
+      },
+      id,
+    );
+  }
+
+  /**
+   * Recompone el ticket de un cobro de OT leyendo el estado actual de la OT y
+   * la lista de pagos. El saldo se calcula al corte del `paymentId` (paidSoFar
+   * hasta ese pago inclusive) para que la reimpresión refleje el contexto real
+   * del momento en que se registró el cobro.
+   */
+  private async buildWorkOrderPaymentReprint(
+    workOrderId: string,
+    paymentId: string,
+    actor: JwtUserPayload,
+  ) {
+    const detail = await this.workOrders.findOne(workOrderId, actor);
+    const payments = (await this.workOrderPayments.list(workOrderId, actor)) as Array<{
+      id: string;
+      amount: { toString(): string };
+      createdAt: Date | string;
+      note?: string | null;
+      cashMovement?: {
+        category?: { name?: string | null; slug?: string | null } | null;
+        tenderAmount?: { toString(): string } | null;
+        changeAmount?: { toString(): string } | null;
+      } | null;
+      recordedBy?: { fullName?: string | null; email?: string | null } | null;
+    }>;
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) {
+      throw new InternalServerErrorException(
+        'El cobro vinculado ya no existe en la OT.',
+      );
+    }
+    const summary = await this.workOrderPayments.summary(workOrderId, actor);
+    const paidSoFar = payments
+      .filter(
+        (p) =>
+          new Date(p.createdAt as string).getTime() <=
+          new Date(payment.createdAt as string).getTime(),
+      )
+      .reduce((acc, p) => acc + Number(p.amount.toString()), 0);
+    const grand = Number(summary.authorizedAmount ?? summary.linesSubtotal ?? 0);
+    const dueAfter = Math.max(0, grand - paidSoFar);
+    const d = detail as unknown as WorkOrderForReceipt;
+    return this.ticketBuilder.buildWorkOrderPaymentTicket(
+      {
+        publicCode: d.publicCode,
+        customerName: d.customerName,
+        customerPhone: d.customerPhone,
+        customerDocumentId: d.customerDocumentId ?? null,
+        vehicle: d.vehicle,
+        vehiclePlate: d.vehiclePlate ?? null,
+        vehicleBrand: d.vehicleBrand ?? null,
+        vehicleModel: d.vehicleModel ?? null,
+        authorizedAmount: d.authorizedAmount ?? null,
+        lines: d.lines,
+        totals: d.totals,
+        totalPaidAfter: paidSoFar.toString(),
+        amountDueAfter: dueAfter.toString(),
+      },
+      payment,
+    );
+  }
+
+  /** Análogo a `buildWorkOrderPaymentReprint` pero para ventas. */
+  private async buildSalePaymentReprint(
+    saleId: string,
+    paymentId: string,
+    actor: JwtUserPayload,
+  ) {
+    const detail = (await this.sales.findOne(saleId, actor)) as unknown as SaleForReceipt;
+    const payments = (await this.salePayments.list(saleId, actor)) as Array<{
+      id: string;
+      amount: { toString(): string };
+      createdAt: Date | string;
+      note?: string | null;
+      cashMovement?: {
+        category?: { name?: string | null; slug?: string | null } | null;
+        tenderAmount?: { toString(): string } | null;
+        changeAmount?: { toString(): string } | null;
+      } | null;
+      recordedBy?: { fullName?: string | null; email?: string | null } | null;
+    }>;
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) {
+      throw new InternalServerErrorException(
+        'El cobro vinculado ya no existe en la venta.',
+      );
+    }
+    const paidSoFar = payments
+      .filter(
+        (p) =>
+          new Date(p.createdAt as string).getTime() <=
+          new Date(payment.createdAt as string).getTime(),
+      )
+      .reduce((acc, p) => acc + Number(p.amount.toString()), 0);
+    const grand = Number(detail.totals?.grandTotal ?? 0);
+    const dueAfter = Math.max(0, grand - paidSoFar);
+    return this.ticketBuilder.buildSalePaymentTicket(
+      {
+        publicCode: detail.publicCode,
+        customerName: detail.customerName,
+        customerDocumentId: detail.customerDocumentId ?? null,
+        lines: detail.lines,
+        totals: detail.totals,
+      },
+      payment,
+      {
+        totalPaidAfter: paidSoFar.toString(),
+        amountDueAfter: dueAfter.toString(),
+      },
+    );
   }
 
   @Post('open')

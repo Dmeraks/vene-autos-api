@@ -58,6 +58,7 @@ const saleLineInclude = {
       id: true,
       sku: true,
       name: true,
+      reference: true,
       itemKind: true,
       averageCost: true,
       measurementUnit: { select: { id: true, slug: true, name: true } },

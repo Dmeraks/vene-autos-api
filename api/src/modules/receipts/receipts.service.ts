@@ -15,6 +15,8 @@
  */
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { inventoryItemUsesQuarterGallonOtQuantity } from '../inventory/oil-gallon-ot';
+import { WorkshopLogoService } from './workshop-logo.service';
 
 export type WorkshopInfo = {
   legalName: string | null;
@@ -40,6 +42,21 @@ type WorkOrderLineForReceipt = {
   unitPrice: { toString(): string } | null;
   /** `WorkOrderLine.discountAmount` es opcional en la schema; puede llegar como `null`. */
   discountAmount: { toString(): string } | null;
+  /** Presente en líneas PART del detalle de OT: para mostrar aceite en galón por cuartos en el recibo. */
+  inventoryItem?: {
+    sku: string;
+    name: string;
+    /** Referencia de fabricante separada del nombre (opcional). Se anexa como "Nombre — Ref" en el recibo. */
+    reference?: string | null;
+    category: string | null;
+    measurementUnit: { slug: string };
+  } | null;
+  /** Presente en líneas LABOR con un servicio predefinido seleccionado. */
+  service?: {
+    id?: string;
+    code?: string | null;
+    name?: string | null;
+  } | null;
   totals?: {
     lineTotal?: string | null;
     taxAmount?: string | null;
@@ -102,6 +119,14 @@ type SaleLineForReceipt = {
   discountAmount: { toString(): string } | null;
   lineTotal?: { toString(): string } | null;
   taxAmount?: { toString(): string } | null;
+  /** Presente en líneas PART: fallback para el nombre visible cuando `description` está vacío. */
+  inventoryItem?: {
+    sku?: string | null;
+    name?: string | null;
+    reference?: string | null;
+    category?: string | null;
+    measurementUnit?: { slug?: string | null } | null;
+  } | null;
 };
 
 type SalePaymentForReceipt = {
@@ -199,9 +224,33 @@ const WORKSHOP_SETTING_KEYS = [
 
 @Injectable()
 export class ReceiptsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly logos: WorkshopLogoService,
+  ) {}
+
+  /**
+   * Cache en memoria del workshop info por instancia del servicio. Las impresiones
+   * seriadas (ej. varias copias o una ronda de cobros) no vuelven a pegar a la DB
+   * en este tiempo; los cambios hechos en Configuración se reflejan automáticamente
+   * en <= WORKSHOP_CACHE_MS o inmediatamente si `SettingsService` invalida.
+   */
+  private workshopInfoCache: {
+    value: WorkshopInfo;
+    expiresAt: number;
+  } | null = null;
+  private readonly WORKSHOP_CACHE_MS = 30_000;
+
+  invalidateWorkshopInfoCache(): void {
+    this.workshopInfoCache = null;
+  }
 
   async getWorkshopInfo(): Promise<WorkshopInfo> {
+    const now = Date.now();
+    const cached = this.workshopInfoCache;
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
+    }
     const rows = await this.prisma.workshopSetting.findMany({
       where: { key: { in: [...WORKSHOP_SETTING_KEYS] } },
     });
@@ -225,7 +274,7 @@ export class ReceiptsService {
         ? (rawRegime as WorkshopInfo['regime'])
         : 'natural_no_obligado';
 
-    return {
+    const value: WorkshopInfo = {
       legalName,
       documentKind,
       documentId: str('workshop.document_id'),
@@ -237,10 +286,19 @@ export class ReceiptsService {
       receiptFooter: str('workshop.receipt_footer'),
       displayName: legalName ?? commonName ?? 'Taller',
     };
+    this.workshopInfoCache = {
+      value,
+      expiresAt: now + this.WORKSHOP_CACHE_MS,
+    };
+    return value;
   }
 
   async renderWorkOrderReceipt(wo: WorkOrderForReceipt): Promise<string> {
     const workshop = await this.getWorkshopInfo();
+    const [logoDataUrl, watermarkDataUrl] = await Promise.all([
+      this.logos.getDataUrl('invoice'),
+      this.logos.getDataUrl('watermark'),
+    ]);
     const title = `Comprobante OT ${wo.publicCode}`;
     const plate =
       wo.vehicle?.plate ?? wo.vehiclePlate ?? null;
@@ -256,11 +314,11 @@ export class ReceiptsService {
         const discountNum = toNumberSafe(ln.discountAmount);
         return `
           <tr>
-            <td>${escapeHtml(ln.description ?? (ln.lineType === 'LABOR' ? 'Mano de obra' : 'Ítem'))}
+            <td>${escapeHtml(resolveReceiptLineLabel(ln))}
               <span class="muted">${ln.lineType === 'LABOR' ? 'servicio' : 'repuesto/insumo'}</span>
             </td>
-            <td class="num">${formatQty(ln.quantity)}</td>
-            <td class="num">${formatCop(ln.unitPrice ?? '0')}</td>
+            <td class="num">${workOrderReceiptQuantityLabel(ln)}</td>
+            <td class="num">${workOrderReceiptUnitPriceLabel(ln)}</td>
             <td class="num">${discountNum > 0 ? '-' + formatCop(ln.discountAmount) : '—'}</td>
             <td class="num">${formatCop(total)}</td>
           </tr>`;
@@ -358,11 +416,15 @@ export class ReceiptsService {
       }
     `;
 
-    return renderPage({ title, workshop, body });
+    return renderPage({ title, workshop, body, logoDataUrl, watermarkDataUrl });
   }
 
   async renderSaleReceipt(sale: SaleForReceipt): Promise<string> {
     const workshop = await this.getWorkshopInfo();
+    const [logoDataUrl, watermarkDataUrl] = await Promise.all([
+      this.logos.getDataUrl('invoice'),
+      this.logos.getDataUrl('watermark'),
+    ]);
     const title = `Recibo de venta ${sale.publicCode}`;
 
     const lineRows = sale.lines
@@ -373,7 +435,7 @@ export class ReceiptsService {
         const discountNum = toNumberSafe(ln.discountAmount);
         return `
           <tr>
-            <td>${escapeHtml(ln.description ?? ln.lineType)}</td>
+            <td>${escapeHtml(resolveReceiptLineLabel(ln))}</td>
             <td class="num">${formatQty(ln.quantity)}</td>
             <td class="num">${formatCop(ln.unitPrice ?? '0')}</td>
             <td class="num">${discountNum > 0 ? '-' + formatCop(ln.discountAmount) : '—'}</td>
@@ -461,7 +523,7 @@ export class ReceiptsService {
       }
     `;
 
-    return renderPage({ title, workshop, body });
+    return renderPage({ title, workshop, body, logoDataUrl, watermarkDataUrl });
   }
 
   /**
@@ -470,6 +532,7 @@ export class ReceiptsService {
    */
   async renderCashSessionReceipt(session: CashSessionForReceipt): Promise<string> {
     const workshop = await this.getWorkshopInfo();
+    const logoDataUrl = await this.logos.getDataUrl('invoice');
     const isClosed = session.status === 'CLOSED';
     const title = `Arqueo de caja ${shortId(session.id)}`;
 
@@ -601,6 +664,7 @@ export class ReceiptsService {
       title,
       workshop,
       body,
+      logoDataUrl,
       overrideFiscalLegend:
         'Ticket interno de arqueo de caja. No tiene validez fiscal ni sustituye factura de venta. Se conserva como soporte operativo firmado por cajero y supervisor.',
     });
@@ -614,6 +678,59 @@ export class ReceiptsService {
 function shortId(id: string): string {
   if (!id) return '—';
   return id.length > 10 ? id.slice(-8).toUpperCase() : id.toUpperCase();
+}
+
+/**
+ * Nombre visible para el HTML del recibo (PDF). Unifica la lógica entre OT y venta:
+ *   - LABOR → "Mano de obra".
+ *   - PART  → "{inventoryItem.name} — {reference}" si hay ambos, o solo `name`.
+ *   - Fallbacks: `description` libre, luego `lineType`.
+ */
+function resolveReceiptLineLabel(ln: {
+  lineType?: string | null;
+  description?: string | null;
+  inventoryItem?: { name?: string | null; reference?: string | null } | null;
+}): string {
+  if (ln.lineType === 'LABOR') return 'Mano de obra';
+  const inv = ln.inventoryItem;
+  if (inv) {
+    const name = (inv.name ?? '').trim();
+    const ref = (inv.reference ?? '').trim();
+    if (name) return ref ? `${name} — ${ref}` : name;
+  }
+  const desc = (ln.description ?? '').trim();
+  if (desc) return desc;
+  return ln.lineType ?? 'Ítem';
+}
+
+function workOrderReceiptOilPartHint(ln: WorkOrderLineForReceipt): boolean {
+  if (ln.lineType !== 'PART' || !ln.inventoryItem) return false;
+  const inv = ln.inventoryItem;
+  return inventoryItemUsesQuarterGallonOtQuantity({
+    sku: inv.sku,
+    name: inv.name,
+    category: inv.category ?? '',
+    measurementUnit: inv.measurementUnit,
+  });
+}
+
+function workOrderReceiptQuantityLabel(ln: WorkOrderLineForReceipt): string {
+  const base = formatQty(ln.quantity);
+  if (!workOrderReceiptOilPartHint(ln)) return base;
+  const g = Number(ln.quantity.toString());
+  if (!Number.isFinite(g)) return base;
+  const q = Math.round(g * 4);
+  if (Math.abs(g * 4 - q) > 1e-6) return base;
+  return `${base} <span class="muted">(${q}×¼)</span>`;
+}
+
+/** Precio unitario mostrado: en aceite por cuartos el valor guardado es por galón → se muestra COP por ¼ gal. */
+function workOrderReceiptUnitPriceLabel(ln: WorkOrderLineForReceipt): string {
+  const up = ln.unitPrice;
+  if (up == null) return formatCop('0');
+  if (!workOrderReceiptOilPartHint(ln)) return formatCop(up);
+  const n = toNumberSafe(up);
+  return `${formatCop(String(Math.round(n / 4)))} <span class="muted">/¼ gal</span>`;
 }
 
 function computeLineTotalFallback(ln: {
@@ -642,8 +759,15 @@ function renderPage(input: {
   body: string;
   /** Si se provee, reemplaza la leyenda fiscal por régimen (útil para tickets internos). */
   overrideFiscalLegend?: string;
+  /** Data URL del logo a mostrar arriba-izquierda (logo_factura). */
+  logoDataUrl?: string | null;
+  /**
+   * Marca de agua opcional al centro del documento (`marca_de_agua.png`). El archivo
+   * ya trae transparencia → se imprime tal cual sin aplicar `opacity` extra.
+   */
+  watermarkDataUrl?: string | null;
 }): string {
-  const { title, workshop, body } = input;
+  const { title, workshop, body, logoDataUrl, watermarkDataUrl } = input;
   const regimeLegend = input.overrideFiscalLegend ?? regimeLegendFor(workshop.regime);
   const contactBits = [
     workshop.address,
@@ -657,6 +781,12 @@ function renderPage(input: {
     workshop.documentId != null
       ? `${workshop.documentKind} ${escapeHtml(workshop.documentId)}`
       : '';
+  const logoBlock = logoDataUrl
+    ? `<img src="${logoDataUrl}" alt="Logo" class="ws-logo" />`
+    : '';
+  const watermarkBlock = watermarkDataUrl
+    ? `<img src="${watermarkDataUrl}" alt="" class="watermark" aria-hidden="true" />`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -676,25 +806,60 @@ function renderPage(input: {
       font-size: 13px;
     }
     .sheet {
+      position: relative;
+      isolation: isolate;
       max-width: 820px;
       margin: 0 auto;
       background: white;
       padding: 28px 32px;
       border: 1px solid #e2e8f0;
       box-shadow: 0 1px 3px rgba(15,23,42,.06);
+      overflow: hidden;
+    }
+    /* Marca de agua centrada sobre el contenido. El archivo fuente ya
+       contiene su transparencia configurada → no aplicamos opacity aquí.
+       pointer-events:none evita que interfiera con botones/enlaces. */
+    .sheet .watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60%;
+      max-width: 520px;
+      height: auto;
+      z-index: 0;
+      pointer-events: none;
+      user-select: none;
+    }
+    .sheet-content {
+      position: relative;
+      z-index: 1;
     }
     header.ws {
       display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 20px;
+      flex-direction: column;
+      gap: 8px;
       border-bottom: 2px solid #0f172a;
       padding-bottom: 10px;
       margin-bottom: 14px;
     }
-    header.ws .name { font-size: 18px; font-weight: 700; letter-spacing: .3px; }
+    header.ws .ws-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    header.ws .ws-title {
+      text-align: center;
+    }
+    header.ws .ws-logo {
+      width: 90px; height: 90px; object-fit: contain;
+      border-radius: 6px; background: white;
+      flex-shrink: 0;
+    }
+    header.ws .name { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
     header.ws .tagline { font-size: 12px; color: #475569; margin-top: 2px; }
-    header.ws .contact { font-size: 11px; color: #475569; margin-top: 6px; max-width: 360px; line-height: 1.4; }
+    header.ws .contact { font-size: 11px; color: #475569; margin-top: 6px; line-height: 1.4; }
     header.ws .doc-id { font-size: 11px; color: #334155; margin-top: 3px; }
     .doc-meta {
       display: flex; justify-content: space-between; gap: 16px;
@@ -738,9 +903,10 @@ function renderPage(input: {
     .legend .stamp { display: inline-block; padding: 4px 10px; border: 1.5px dashed #b45309; color: #9a3412; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; font-size: 10px; margin-bottom: 8px; }
     .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; font-size: 11px; color: #475569; }
     .signatures .sig { border-top: 1px solid #0f172a; padding-top: 6px; text-align: center; }
+    @page { size: letter; margin: 10mm 12mm; }
     @media print {
       body { background: white; padding: 0; }
-      .sheet { border: none; box-shadow: none; padding: 10mm 12mm; max-width: none; }
+      .sheet { border: none; box-shadow: none; padding: 0; max-width: none; }
       .no-print { display: none !important; }
     }
     .no-print {
@@ -760,26 +926,32 @@ function renderPage(input: {
     <button type="button" onclick="window.close()">Cerrar</button>
   </div>
   <div class="sheet">
-    <header class="ws">
-      <div>
-        <div class="name">${escapeHtml(workshop.displayName)}</div>
-        ${workshop.legalName && workshop.legalName !== workshop.displayName ? `<div class="tagline">${escapeHtml(workshop.legalName)}</div>` : ''}
-        ${docLine ? `<div class="doc-id">${docLine}</div>` : ''}
-        ${contactBits ? `<div class="contact">${escapeHtml(contactBits)}</div>` : ''}
+    ${watermarkBlock}
+    <div class="sheet-content">
+      <header class="ws">
+        <div class="ws-top">
+          ${logoBlock}
+          <div style="text-align:right; font-size:11px; color:#475569;">
+            <div>Emitido ${formatDate(new Date())}</div>
+          </div>
+        </div>
+        <div class="ws-title">
+          <div class="name">${escapeHtml(workshop.displayName)} - TALLER AUTOMOTRIZ</div>
+          ${workshop.legalName && workshop.legalName !== workshop.displayName ? `<div class="tagline">${escapeHtml(workshop.legalName)}</div>` : ''}
+          ${docLine ? `<div class="doc-id">${docLine}</div>` : ''}
+          ${contactBits ? `<div class="contact">${escapeHtml(contactBits)}</div>` : ''}
+        </div>
+      </header>
+      ${body}
+      <div class="legend">
+        <div class="stamp">Documento no fiscal</div>
+        <div>${regimeLegend}</div>
+        ${workshop.receiptFooter ? `<div style="margin-top:6px;">${escapeHtml(workshop.receiptFooter)}</div>` : ''}
       </div>
-      <div style="text-align:right; font-size:11px; color:#475569;">
-        <div>Emitido ${formatDate(new Date())}</div>
+      <div class="signatures">
+        <div class="sig">Firma del cliente</div>
+        <div class="sig">Firma del taller</div>
       </div>
-    </header>
-    ${body}
-    <div class="legend">
-      <div class="stamp">Documento no fiscal</div>
-      <div>${regimeLegend}</div>
-      ${workshop.receiptFooter ? `<div style="margin-top:6px;">${escapeHtml(workshop.receiptFooter)}</div>` : ''}
-    </div>
-    <div class="signatures">
-      <div class="sig">Firma del cliente</div>
-      <div class="sig">Firma del taller</div>
     </div>
   </div>
   <script>

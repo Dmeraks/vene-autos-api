@@ -38,6 +38,7 @@ const lineInclude = {
       id: true,
       sku: true,
       name: true,
+      reference: true,
       itemKind: true,
       averageCost: true,
       trackStock: true,

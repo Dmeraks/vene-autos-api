@@ -12,6 +12,19 @@ export function inventoryItemUsesQuarterGallonOtQuantity(item: OilOtItem): boole
   return /\baceite\b/.test(blob) || /\blubricante\b/.test(blob) || /\boil\b/.test(blob)
 }
 
+/**
+ * `WorkOrderLine.unitPrice` en API se guarda en COP **por galón**; en pantalla el usuario
+ * trabaja con COP **por ¼ galón** para aceite en galón.
+ */
+export function workOrderOilStoredGallonUnitPriceToQuarterPriceString(
+  unitPriceStored: string | null | undefined,
+): string {
+  if (unitPriceStored == null || String(unitPriceStored).trim() === '') return ''
+  const n = Number(String(unitPriceStored).replace(',', '.'))
+  if (!Number.isFinite(n)) return String(unitPriceStored).trim()
+  return String(Math.round(n / 4))
+}
+
 /** Texto auxiliar en filas de tabla (cantidad ya en galones en API). */
 export function partLineQuantityDisplayWithQuarters(
   quantityStr: string,

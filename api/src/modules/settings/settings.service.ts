@@ -3,12 +3,14 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NOTES_MIN_LENGTH_SETTING_KEYS } from '../../common/notes-policy/notes-policy.service';
 import { AuditService } from '../audit/audit.service';
+import { ReceiptsService } from '../receipts/receipts.service';
 
 @Injectable()
 export class SettingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly receipts: ReceiptsService,
   ) {}
 
   async getMap() {
@@ -34,6 +36,12 @@ export class SettingsService {
     }
 
     const after = await this.getMap();
+
+    // Si se tocaron datos del taller (encabezado, teléfono, NIT, etc.) forzamos
+    // que el próximo ticket/PDF lea los valores nuevos sin esperar al TTL.
+    if (keys.some((k) => k.startsWith('workshop.'))) {
+      this.receipts.invalidateWorkshopInfoCache();
+    }
 
     await this.audit.recordDomain({
       actorUserId,

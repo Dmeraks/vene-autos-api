@@ -14,7 +14,10 @@ import type {
 import { useAuth } from '../auth/AuthContext'
 import { PageHeader } from '../components/layout/PageHeader'
 import { formatCopFromString, normalizeMoneyDecimalStringForApi } from '../utils/copFormat'
-import { successMessageWithDrawerPulse } from '../utils/cashDrawerBridge'
+import {
+  printTicketFromApi,
+  successMessageWithTicketAndPulse,
+} from '../utils/cashDrawerBridge'
 
 type CashCategory = { id: string; slug: string; name: string; direction: string }
 
@@ -89,6 +92,7 @@ export function SaleDetailPage() {
   const [payTender, setPayTender] = useState('')
   const [payBusy, setPayBusy] = useState(false)
   const [payMsg, setPayMsg] = useState<string | null>(null)
+  const [payTwoCopies, setPayTwoCopies] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -313,20 +317,26 @@ export function SaleDetailPage() {
         categorySlug: payCat || undefined,
       }
       if (payTender.trim()) payload.tenderAmount = normalizeMoneyDecimalStringForApi(payTender)
-      await api(`/sales/${sale.id}/payments`, {
+      /**
+       * Fase 7.7 · Capturamos el id del cobro para imprimir ticket térmico (58 mm, ESC/POS)
+       * desde el puente local y, en el mismo viaje, abrir el cajón. Si se marcó "2 copias",
+       * se envía copies=2 al puente.
+       */
+      const created = await api<{ id: string }>(`/sales/${sale.id}/payments`, {
         method: 'POST',
         body: JSON.stringify(payload),
       })
       setPayAmt('')
       setPayNote('')
       setPayTender('')
-      /**
-       * Fase 7.6 · Misma convención que `WorkOrderDetailPage`: todo cobro en panel dispara
-       * el pulso al cajón físico (mismo paso: cajero abre el cajón para guardar efectivo).
-       * Si el bridge local no responde, `successMessageWithDrawerPulse` agrega un hint al
-       * mensaje en lugar de interrumpir el flujo.
-       */
-      setPayMsg(await successMessageWithDrawerPulse('Cobro registrado'))
+      const ticketPath = `/sales/${sale.id}/payments/${created.id}/receipt-ticket.json`
+      setPayMsg(
+        await successMessageWithTicketAndPulse(ticketPath, 'Cobro registrado', {
+          copies: payTwoCopies ? 2 : 1,
+          openDrawer: true,
+        }),
+      )
+      setPayTwoCopies(false)
       await load()
     } catch (err) {
       setPayMsg(err instanceof ApiError ? err.message : 'No se pudo registrar el cobro')
@@ -385,7 +395,7 @@ export function SaleDetailPage() {
               type="button"
               onClick={() => {
                 void openAuthenticatedHtml(
-                  `/sales/${sale.id}/receipt`,
+                  `/sales/${sale.id}/receipt?autoprint=1`,
                   `Recibo venta ${sale.publicCode}`,
                 ).catch((err) => {
                   setMsg(
@@ -757,8 +767,8 @@ export function SaleDetailPage() {
           ) : (
             <ul className="mb-3 space-y-1 text-xs">
               {sale.payments.map((p) => (
-                <li key={p.id} className="flex items-center justify-between border-b border-slate-100 py-1 dark:border-slate-800">
-                  <span>
+                <li key={p.id} className="flex items-center justify-between gap-2 border-b border-slate-100 py-1 dark:border-slate-800">
+                  <span className="min-w-0 flex-1 truncate">
                     {new Date(p.createdAt).toLocaleString('es-CO')} ·{' '}
                     <span className="font-medium">
                       {p.amount != null ? formatCopFromString(p.amount) : '—'}
@@ -771,6 +781,22 @@ export function SaleDetailPage() {
                   <span className="text-slate-500 dark:text-slate-400">
                     {p.cashMovement.category.name}
                   </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const res = await printTicketFromApi(
+                        `/sales/${sale.id}/payments/${p.id}/receipt-ticket.json`,
+                        { copies: 1, openDrawer: false },
+                      )
+                      setPayMsg(
+                        res.ok ? 'Ticket reimpreso' : `No se pudo imprimir: ${res.hint}`,
+                      )
+                    }}
+                    className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                    title="Reimprimir ticket térmico"
+                  >
+                    Reimprimir
+                  </button>
                 </li>
               ))}
             </ul>
@@ -841,6 +867,14 @@ export function SaleDetailPage() {
                   required
                   className="mt-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
                 />
+              </label>
+              <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={payTwoCopies}
+                  onChange={(e) => setPayTwoCopies(e.target.checked)}
+                />
+                Imprimir 2 copias del ticket
               </label>
               {payMsg ? (
                 <div className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1.5 text-xs text-rose-800 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-200">

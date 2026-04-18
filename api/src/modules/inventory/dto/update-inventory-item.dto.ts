@@ -9,6 +9,12 @@ export class UpdateInventoryItemDto {
   @MaxLength(200)
   name?: string;
 
+  /** Referencia de fabricante / número de parte. Pasar `""` para limpiarla. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  reference?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(200)

@@ -17,7 +17,12 @@ import {
   SETTINGS_UI_CONTEXT_PATH,
   type SettingsUiContextResponse,
 } from '../config/operationalNotes'
-import { successMessageWithDrawerPulse, triggerCashDrawerPulse } from '../utils/cashDrawerBridge'
+import {
+  printTicketFromApi,
+  successMessageWithDrawerPulse,
+  successMessageWithTicketAndPulse,
+  triggerCashDrawerPulse,
+} from '../utils/cashDrawerBridge'
 import {
   API_MONEY_DECIMAL_REGEX,
   formatCopFromString,
@@ -125,6 +130,7 @@ export function CashPage() {
   const [movTender, setMovTender] = useState('')
   const [movNote, setMovNote] = useState('')
   const [movAck, setMovAck] = useState(false)
+  const [movTwoCopies, setMovTwoCopies] = useState(false)
 
   const movVueltoHint = useMemo(() => {
     if (tab !== 'ingreso' && tab !== 'egreso') return null
@@ -369,7 +375,7 @@ export function CashPage() {
       if (arqueoAutoprintEnabled) {
         try {
           await openAuthenticatedHtml(
-            `/cash/sessions/${closedSessionId}/receipt`,
+            `/cash/sessions/${closedSessionId}/receipt?autoprint=1`,
             'Arqueo de caja',
           )
         } catch (printErr) {
@@ -393,7 +399,10 @@ export function CashPage() {
    */
   async function printCashSessionReceipt(sessionId: string) {
     try {
-      await openAuthenticatedHtml(`/cash/sessions/${sessionId}/receipt`, 'Arqueo de caja')
+      await openAuthenticatedHtml(
+        `/cash/sessions/${sessionId}/receipt?autoprint=1`,
+        'Arqueo de caja',
+      )
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'No se pudo abrir el arqueo.')
     }
@@ -494,7 +503,11 @@ export function CashPage() {
     })
     if (!okMov) return
     try {
-      await api(`/cash/movements/${dir}`, {
+      /**
+       * Fase 7.7 · Capturamos `id` (movimiento) y `sessionId` para imprimir el ticket
+       * térmico del movimiento desde el puente local. El cajón siempre se abre.
+       */
+      const created = await api<{ id: string; sessionId: string }>(`/cash/movements/${dir}`, {
         method: 'POST',
         body: JSON.stringify({
           categorySlug,
@@ -510,10 +523,41 @@ export function CashPage() {
       setMovAck(false)
       await loadCore()
       await refreshCashOpen()
-      setMsg(await successMessageWithDrawerPulse(successLabel))
+      const ticketPath = `/cash/sessions/${created.sessionId}/movements/${created.id}/receipt-ticket.json`
+      setMsg(
+        await successMessageWithTicketAndPulse(ticketPath, successLabel, {
+          copies: movTwoCopies ? 2 : 1,
+          openDrawer: true,
+        }),
+      )
+      setMovTwoCopies(false)
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error')
     }
+  }
+
+  /**
+   * Fase 7.7 · Reimprime el ticket térmico de un movimiento existente (sin abrir cajón).
+   * Usado desde el panel de movimientos para repetir un comprobante sin alterar saldos.
+   */
+  async function reprintMovementTicket(sessionId: string, movementId: string) {
+    const res = await printTicketFromApi(
+      `/cash/sessions/${sessionId}/movements/${movementId}/receipt-ticket.json`,
+      { copies: 1, openDrawer: false },
+    )
+    setMsg(res.ok ? 'Ticket reimpreso' : `No se pudo imprimir: ${res.hint}`)
+  }
+
+  /**
+   * Fase 7.7 · Imprime un resumen térmico (58 mm) del arqueo. Es la versión condensada
+   * para grapar al efectivo; la versión completa sigue disponible vía PDF Carta.
+   */
+  async function printCashSessionThermal(sessionId: string) {
+    const res = await printTicketFromApi(
+      `/cash/sessions/${sessionId}/receipt-ticket.json`,
+      { copies: 1, openDrawer: false },
+    )
+    setMsg(res.ok ? 'Arqueo térmico impreso' : `No se pudo imprimir: ${res.hint}`)
   }
 
   async function saveDelegates(e: React.FormEvent) {
@@ -671,14 +715,24 @@ export function CashPage() {
             {current != null && current.status !== 'OPEN' && 'Sesión cerrada'}
           </p>
           {current != null && can('cash_sessions:read') && (
-            <button
-              type="button"
-              onClick={() => void printCashSessionReceipt(current.id)}
-              className="va-btn-secondary ml-auto shrink-0 text-xs"
-              title="Abre el ticket de arqueo en una pestaña nueva para imprimirlo o guardarlo en PDF."
-            >
-              Imprimir arqueo
-            </button>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void printCashSessionThermal(current.id)}
+                className="va-btn-secondary text-xs"
+                title="Imprime un resumen del arqueo (58 mm) en la térmica para grapar al efectivo."
+              >
+                Ticket arqueo
+              </button>
+              <button
+                type="button"
+                onClick={() => void printCashSessionReceipt(current.id)}
+                className="va-btn-secondary text-xs"
+                title="Abre el arqueo completo en una pestaña nueva (Carta) para imprimirlo o guardarlo como PDF."
+              >
+                Arqueo PDF
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -807,8 +861,26 @@ export function CashPage() {
                     className="flex min-h-0 flex-row items-center justify-between gap-2 py-1.5 first:pt-0 last:pb-0"
                   >
                     <span className="shrink-0 font-medium text-slate-900 dark:text-slate-100">{sessionStatusEs(s.status)}</span>
-                    <span className="min-w-0 truncate text-right font-medium tabular-nums text-slate-600 dark:text-slate-300">
+                    <span className="min-w-0 flex-1 truncate text-right font-medium tabular-nums text-slate-600 dark:text-slate-300">
                       {new Date(s.openedAt).toLocaleString()}
+                    </span>
+                    <span className="shrink-0 inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => void printCashSessionThermal(s.id)}
+                        className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                        title="Imprimir ticket térmico de arqueo (58 mm)"
+                      >
+                        Ticket
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void printCashSessionReceipt(s.id)}
+                        className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                        title="Abrir arqueo completo (Carta) en pestaña nueva"
+                      >
+                        PDF
+                      </button>
                     </span>
                   </li>
                 ))}
@@ -846,7 +918,14 @@ export function CashPage() {
       />
 
       {tab === 'movimientos' && can('cash_sessions:read') && isCashOperable && (
-        <CashSessionMovementsPanel current={current} />
+        <CashSessionMovementsPanel
+          current={current}
+          onReprintMovement={
+            current?.id
+              ? (movementId) => void reprintMovementTicket(current.id, movementId)
+              : undefined
+          }
+        />
       )}
 
       {tab === 'ingreso' && can('cash_movements:create_income') && isCashOperable && (
@@ -923,6 +1002,15 @@ export function CashPage() {
               onChange={(e) => setMovAck(e.target.checked)}
             />
             <span>Confirmo categoría, importe, efectivo recibido (si aplica) y nota.</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 dark:border-slate-500"
+              checked={movTwoCopies}
+              onChange={(e) => setMovTwoCopies(e.target.checked)}
+            />
+            <span>Imprimir 2 copias del ticket</span>
           </label>
           <button type="submit" className={btnPrimary}>
             Registrar ingreso
@@ -1007,6 +1095,15 @@ export function CashPage() {
               onChange={(e) => setMovAck(e.target.checked)}
             />
             <span>Confirmo categoría, importe, efectivo usado (si aplica) y nota.</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 dark:border-slate-500"
+              checked={movTwoCopies}
+              onChange={(e) => setMovTwoCopies(e.target.checked)}
+            />
+            <span>Imprimir 2 copias del ticket</span>
           </label>
           <button type="submit" className={btnDark}>
             Registrar egreso

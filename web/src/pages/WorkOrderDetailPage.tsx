@@ -34,10 +34,14 @@ import {
   formatMoneyInputDisplayFromNormalized,
   normalizeMoneyDecimalStringForApi,
 } from '../utils/copFormat'
-import { successMessageWithDrawerPulse } from '../utils/cashDrawerBridge'
+import {
+  printTicketFromApi,
+  successMessageWithTicketAndPulse,
+} from '../utils/cashDrawerBridge'
 import {
   inventoryItemUsesQuarterGallonOtQuantity,
   partLineQuantityDisplayWithQuarters,
+  workOrderOilStoredGallonUnitPriceToQuarterPriceString,
 } from '../utils/oilQuarterGallonOt'
 import {
   allowsFractionalWorkOrderPartQuantity,
@@ -243,16 +247,25 @@ const FACTURACION_CONSENT_BTN =
   'rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-amber-800 shadow-sm hover:bg-slate-900 hover:text-amber-900 focus:outline-none focus:ring-2 focus:ring-slate-500/40 dark:bg-slate-700 dark:text-amber-200 dark:hover:bg-slate-600 dark:hover:text-amber-100'
 
 function lineMoney(ln: WorkOrderLine): string {
+  if (ln.totals?.grossAmount != null) {
+    const g = Number(ln.totals.grossAmount)
+    if (!Number.isNaN(g)) return formatCopInteger(g)
+  }
   const q = Number(ln.quantity)
   const p = ln.unitPrice != null ? Number(ln.unitPrice) : 0
   if (Number.isNaN(q) || Number.isNaN(p)) return '—'
   return formatCopInteger(q * p)
 }
 
-/** Misma idea que el subtotal de líneas en la API (cantidad × precio; sin precio cuenta 0). */
+/** Suma de brutos por línea (alineado con `computeWorkOrderTotals` cuando hay `totals` por línea). */
 function linesSubtotalFromLines(lines: WorkOrderLine[]): string {
   let sum = 0
   for (const ln of lines) {
+    if (ln.totals?.grossAmount != null) {
+      const g = Number(ln.totals.grossAmount)
+      if (!Number.isNaN(g)) sum += g
+      continue
+    }
     const q = Number(ln.quantity)
     const p = ln.unitPrice != null ? Number(ln.unitPrice) : 0
     if (!Number.isNaN(q) && !Number.isNaN(p)) sum += q * p
@@ -342,6 +355,7 @@ export function WorkOrderDetailPage() {
   const [payKind, setPayKind] = useState<'partial' | 'full'>('partial')
   const [payCat, setPayCat] = useState('ingreso_cobro')
   const [payAck, setPayAck] = useState(false)
+  const [payTwoCopies, setPayTwoCopies] = useState(false)
   const [incomeCats, setIncomeCats] = useState<CashCat[]>([])
   const [notesMinPayment, setNotesMinPayment] = useState(70)
   const [notesMinGeneral, setNotesMinGeneral] = useState(50)
@@ -1250,7 +1264,11 @@ export function WorkOrderDetailPage() {
 
     setPaymentBusy(true)
     try {
-      await api(`/work-orders/${id}/payments`, {
+      /**
+       * Guardamos el pago en el API y capturamos su `id` para imprimir el ticket asociado.
+       * El ticket se manda al puente local con pulso al cajón en el mismo viaje.
+       */
+      const created = await api<{ id: string }>(`/work-orders/${id}/payments`, {
         method: 'POST',
         body: JSON.stringify({
           paymentKind: payKind,
@@ -1265,7 +1283,14 @@ export function WorkOrderDetailPage() {
       setPayNote('')
       setPayAck(false)
       setPayFormError(null)
-      setMsg(await successMessageWithDrawerPulse('Cobro registrado'))
+      const ticketPath = `/work-orders/${id}/payments/${created.id}/receipt-ticket.json`
+      setMsg(
+        await successMessageWithTicketAndPulse(ticketPath, 'Cobro registrado', {
+          copies: payTwoCopies ? 2 : 1,
+          openDrawer: true,
+        }),
+      )
+      setPayTwoCopies(false)
       await load()
       await refreshCashOpen()
     } catch (err) {
@@ -1337,7 +1362,17 @@ export function WorkOrderDetailPage() {
     } else {
       setEditQty(ln.quantity)
     }
-    setEditPrice(ln.unitPrice != null ? normalizeMoneyDecimalStringForApi(String(ln.unitPrice)) : '')
+    setEditPrice(
+      ln.unitPrice != null
+        ? normalizeMoneyDecimalStringForApi(
+            ln.lineType === 'PART' &&
+              ln.inventoryItem &&
+              inventoryItemUsesQuarterGallonOtQuantity(ln.inventoryItem)
+              ? workOrderOilStoredGallonUnitPriceToQuarterPriceString(String(ln.unitPrice))
+              : String(ln.unitPrice),
+          )
+        : '',
+    )
     setEditDesc(ln.description ?? '')
     setEditDiscount(ln.discountAmount ? normalizeMoneyDecimalStringForApi(String(ln.discountAmount)) : '')
     setEditTaxRateId(ln.taxRateId ?? '')
@@ -1587,7 +1622,7 @@ export function WorkOrderDetailPage() {
           type="button"
           onClick={() => {
             void openAuthenticatedHtml(
-              `/work-orders/${wo.id}/receipt`,
+              `/work-orders/${wo.id}/receipt?autoprint=1`,
               `Comprobante OT ${wo.publicCode}`,
             ).catch((err) => {
               setMsg(
@@ -2138,7 +2173,7 @@ export function WorkOrderDetailPage() {
           </p>
         )}
         <div className="va-table-scroll">
-          <table className="va-table min-w-[480px]">
+          <table className="va-table min-w-[560px]">
             <thead>
               <tr className="va-table-head-row">
                 <th className="va-table-th">Fecha</th>
@@ -2147,13 +2182,14 @@ export function WorkOrderDetailPage() {
                 <th className="va-table-th">Efectivo / vuelto</th>
                 <th className="va-table-th">Categoría</th>
                 <th className="va-table-th">Registró</th>
+                <th className="va-table-th" aria-label="Acciones" />
               </tr>
             </thead>
             <tbody>
               {payments.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="border-b border-slate-50 px-4 py-8 text-center text-sm text-slate-500 last:border-0 sm:px-6 dark:border-slate-800/80 dark:text-slate-300"
                   >
                     Sin cobros registrados.
@@ -2178,6 +2214,22 @@ export function WorkOrderDetailPage() {
                   </td>
                   <td className="va-table-td text-slate-600 dark:text-slate-300">{p.cashMovement.category.name}</td>
                   <td className="va-table-td text-slate-600 dark:text-slate-300">{p.recordedBy.fullName}</td>
+                  <td className="va-table-td text-right">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await printTicketFromApi(
+                          `/work-orders/${id}/payments/${p.id}/receipt-ticket.json`,
+                          { copies: 1, openDrawer: false },
+                        )
+                        setMsg(res.ok ? 'Ticket reimpreso' : `No se pudo imprimir: ${res.hint}`)
+                      }}
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                      title="Reimprimir ticket térmico"
+                    >
+                      Reimprimir
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2312,13 +2364,24 @@ export function WorkOrderDetailPage() {
                   nota y saldo pendiente antes de registrar el cobro.
                 </span>
               </label>
-              <button
-                type="submit"
-                disabled={paymentBusy || !canSubmitWorkOrderPayment}
-                className="va-btn-primary w-full shrink-0 px-5 disabled:opacity-60 sm:w-auto sm:self-center"
-              >
-                {paymentBusy ? 'Procesando…' : 'Registrar cobro'}
-              </button>
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-brand-600 dark:border-slate-500"
+                    checked={payTwoCopies}
+                    onChange={(e) => setPayTwoCopies(e.target.checked)}
+                  />
+                  Imprimir 2 copias del ticket
+                </label>
+                <button
+                  type="submit"
+                  disabled={paymentBusy || !canSubmitWorkOrderPayment}
+                  className="va-btn-primary w-full shrink-0 px-5 disabled:opacity-60 sm:w-auto sm:self-center"
+                >
+                  {paymentBusy ? 'Procesando…' : 'Registrar cobro'}
+                </button>
+              </div>
             </div>
           </form>
         )}
@@ -2391,7 +2454,29 @@ export function WorkOrderDetailPage() {
                   {canViewWoFinancials ? (
                     <>
                       <td className="va-table-td font-mono text-slate-600 dark:text-slate-300">
-                        {ln.unitPrice != null ? `$${formatCopFromString(String(ln.unitPrice))}` : '—'}
+                        {ln.unitPrice != null ? (
+                          <>
+                            $
+                            {formatCopFromString(
+                              ln.lineType === 'PART' &&
+                                ln.inventoryItem &&
+                                inventoryItemUsesQuarterGallonOtQuantity(ln.inventoryItem)
+                                ? normalizeMoneyDecimalStringForApi(
+                                    workOrderOilStoredGallonUnitPriceToQuarterPriceString(String(ln.unitPrice)),
+                                  )
+                                : normalizeMoneyDecimalStringForApi(String(ln.unitPrice)),
+                            )}
+                            {ln.lineType === 'PART' &&
+                            ln.inventoryItem &&
+                            inventoryItemUsesQuarterGallonOtQuantity(ln.inventoryItem) ? (
+                              <span className="ml-1 text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                                /¼ gal
+                              </span>
+                            ) : null}
+                          </>
+                        ) : (
+                          '—'
+                        )}
                         {ln.discountAmount && Number(ln.discountAmount) > 0 ? (
                           <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-300">
                             −${formatCopFromString(String(ln.discountAmount))}
@@ -2477,18 +2562,24 @@ export function WorkOrderDetailPage() {
                   <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{editQtyIssue}</p>
                 ) : null}
               </label>
-            {canViewWoFinancials ? (
-              <label className="block text-sm">
-                <span className="va-label">Precio unitario</span>
-                <input
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={formatMoneyInputDisplayFromNormalized(normalizeMoneyDecimalStringForApi(editPrice))}
-                  onChange={(e) => setEditPrice(normalizeMoneyDecimalStringForApi(e.target.value))}
-                  className="va-field mt-1"
-                  placeholder="Opcional"
-                />
-              </label>
+              {canViewWoFinancials ? (
+                <label className="block text-sm">
+                  <span className="va-label">
+                    {editLine.lineType === 'PART' &&
+                    editLine.inventoryItem &&
+                    inventoryItemUsesQuarterGallonOtQuantity(editLine.inventoryItem)
+                      ? 'Precio unitario por ¼ gal'
+                      : 'Precio unitario'}
+                  </span>
+                  <input
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={formatMoneyInputDisplayFromNormalized(normalizeMoneyDecimalStringForApi(editPrice))}
+                    onChange={(e) => setEditPrice(normalizeMoneyDecimalStringForApi(e.target.value))}
+                    className="va-field mt-1"
+                    placeholder="Opcional"
+                  />
+                </label>
             ) : (
               <p className="block text-sm text-slate-500 dark:text-slate-300">
                 Precio unitario: tu perfil no muestra importes en la orden; lo cargan caja o administración.
@@ -2627,7 +2718,11 @@ export function WorkOrderDetailPage() {
               </label>
               {canViewWoFinancials ? (
                 <label className="block text-sm sm:col-span-3">
-                  <span className="va-label">Precio al cliente (opcional)</span>
+                  <span className="va-label">
+                    {selectedPartItem && inventoryItemUsesQuarterGallonOtQuantity(selectedPartItem)
+                      ? 'Precio al cliente por ¼ gal (opcional)'
+                      : 'Precio al cliente (opcional)'}
+                  </span>
                   <input
                     inputMode="decimal"
                     autoComplete="off"
@@ -2636,6 +2731,12 @@ export function WorkOrderDetailPage() {
                     className="va-field mt-1 max-w-xs"
                     placeholder="ej. 25.000 o 25.000,50"
                   />
+                  {selectedPartItem && inventoryItemUsesQuarterGallonOtQuantity(selectedPartItem) ? (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      La cantidad va en cuartos (1 = ¼ gal). El importe se calcula como cuartos × este precio; el
+                      sistema guarda el equivalente por galón para stock y totales.
+                    </p>
+                  ) : null}
                 </label>
               ) : (
                 <p className="text-sm text-slate-500 sm:col-span-3 dark:text-slate-300">

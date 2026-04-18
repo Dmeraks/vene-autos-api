@@ -22,10 +22,12 @@ export function InventoryPage() {
   const [open, setOpen] = useState(false)
   const [sku, setSku] = useState('')
   const [name, setName] = useState('')
+  const [newReference, setNewReference] = useState('')
   const [slug, setSlug] = useState('unit')
   const [initialQty, setInitialQty] = useState('0')
   const [editItem, setEditItem] = useState<InventoryItem | null>(null)
   const [editName, setEditName] = useState('')
+  const [editReference, setEditReference] = useState('')
   const [editSupplier, setEditSupplier] = useState('')
   const [editCategory, setEditCategory] = useState('')
   const [editAvgCost, setEditAvgCost] = useState('')
@@ -98,6 +100,7 @@ export function InventoryPage() {
   function openEdit(r: InventoryItem) {
     setEditItem(r)
     setEditName(r.name)
+    setEditReference(r.reference ?? '')
     setEditSupplier(r.supplier ?? '')
     setEditCategory(r.category ?? '')
     setEditAvgCost(r.averageCost != null ? normalizeMoneyDecimalStringForApi(String(r.averageCost)) : '')
@@ -120,6 +123,7 @@ export function InventoryPage() {
         method: 'PATCH',
         body: JSON.stringify({
           name: editName.trim(),
+          reference: editReference.trim(),
           supplier: editSupplier.trim(),
           category: editCategory.trim(),
           averageCost: costNorm === '' ? null : costNorm,
@@ -144,6 +148,7 @@ export function InventoryPage() {
         body: JSON.stringify({
           sku: sku.trim(),
           name: name.trim(),
+          reference: newReference.trim() || undefined,
           supplier: newSupplier.trim() || undefined,
           category: newCategory.trim() || undefined,
           measurementUnitSlug: slug,
@@ -153,6 +158,7 @@ export function InventoryPage() {
       setOpen(false)
       setSku('')
       setName('')
+      setNewReference('')
       setNewSupplier('')
       setNewCategory('')
       setInitialQty('0')
@@ -192,12 +198,13 @@ export function InventoryPage() {
             En móvil, table-fixed + w-full aplasta columnas; ancho mínimo + scroll horizontal evita solapamiento.
           */}
           <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
-            <table className="va-table va-table-inv w-full min-w-[44rem]">
+            <table className="va-table va-table-inv w-full min-w-[48rem]">
             <colgroup>
               <col className="w-[8%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className={showInvActions ? 'w-[22%]' : 'w-[27%]'} />
               <col className="w-[10%]" />
-              <col className="w-[10%]" />
-              <col className={showInvActions ? 'w-[28%]' : 'w-[34%]'} />
               <col className="w-[7%]" />
               <col className="w-[6%]" />
               <col className="w-[11%]" />
@@ -218,6 +225,9 @@ export function InventoryPage() {
                 </th>
                 <th className="va-table-th min-w-0" title="Nombre">
                   Nombre
+                </th>
+                <th className="va-table-th min-w-0" title="Referencia del fabricante / número de parte">
+                  Referencia
                 </th>
                 <th className="va-table-th min-w-0" title="Unidad de medida">
                   Ud.
@@ -262,6 +272,12 @@ export function InventoryPage() {
                       title={r.name}
                     >
                       {r.name}
+                    </td>
+                    <td
+                      className="va-table-td min-w-0 max-w-0 truncate font-mono text-sm text-slate-600 dark:text-slate-300"
+                      title={r.reference || ''}
+                    >
+                      {r.reference || '—'}
                     </td>
                     <td
                       className="va-table-td min-w-0 max-w-0 truncate text-slate-600 dark:text-slate-300"
@@ -344,6 +360,16 @@ export function InventoryPage() {
                 />
               </label>
               <label className="block text-sm">
+                <span className="va-label">Referencia (nº de parte, opcional)</span>
+                <input
+                  value={editReference}
+                  onChange={(e) => setEditReference(e.target.value)}
+                  maxLength={120}
+                  placeholder="Ej. # 00, K-2015"
+                  className="va-field mt-1 font-mono"
+                />
+              </label>
+              <label className="block text-sm">
                 <span className="va-label">Costo unitario promedio (vacío = sin costo)</span>
                 <input
                   inputMode="decimal"
@@ -422,6 +448,16 @@ export function InventoryPage() {
               <label className="block text-sm">
                 <span className="va-label">Nombre</span>
                 <input required value={name} onChange={(e) => setName(e.target.value)} className="va-field mt-1" />
+              </label>
+              <label className="block text-sm">
+                <span className="va-label">Referencia (nº de parte, opcional)</span>
+                <input
+                  value={newReference}
+                  onChange={(e) => setNewReference(e.target.value)}
+                  maxLength={120}
+                  placeholder="Ej. # 00, K-2015"
+                  className="va-field mt-1 font-mono"
+                />
               </label>
               <label className="block text-sm">
                 <span className="va-label">Unidad</span>

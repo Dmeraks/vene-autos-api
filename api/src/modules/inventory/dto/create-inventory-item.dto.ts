@@ -14,6 +14,12 @@ export class CreateInventoryItemDto {
   @MaxLength(200)
   name!: string;
 
+  /** Referencia de fabricante / número de parte. Opcional, libre. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  reference?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(200)

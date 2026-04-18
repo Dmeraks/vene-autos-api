@@ -13,6 +13,6 @@ import { SalesService } from './sales.service';
   imports: [AuditModule, ReceiptsModule],
   controllers: [SalesController],
   providers: [SalesService, SaleLinesService, SalePaymentsService],
-  exports: [SalesService],
+  exports: [SalesService, SalePaymentsService],
 })
 export class SalesModule {}

@@ -140,56 +140,56 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
   return (
     <div className="bg-black text-white">
       {/* Navegación + acceso al panel integrado (carril derecho en escritorio, franja en móvil) */}
-      <nav className="sticky top-0 z-40 border-b border-slate-200/90 bg-white text-slate-900 shadow-[0_1px_0_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:shadow-[0_1px_0_rgba(0,0,0,0.35)]">
+      <nav className="sticky top-0 z-40 border-b border-zinc-200 bg-white text-black shadow-[0_1px_0_rgba(0,0,0,0.04)] dark:border-zinc-800 dark:bg-black dark:text-white dark:shadow-[0_1px_0_rgba(0,0,0,0.35)]">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div
-            className={`grid grid-cols-1 md:items-stretch md:gap-0 md:py-3 ${
-              accessSlot ? 'md:grid-cols-[auto_minmax(0,1fr)_auto]' : 'md:grid-cols-[auto_minmax(0,1fr)]'
+            className={`grid grid-cols-1 lg:items-center lg:gap-0 lg:py-3 ${
+              accessSlot ? 'lg:grid-cols-[auto_minmax(0,1fr)_auto]' : 'lg:grid-cols-[auto_minmax(0,1fr)]'
             }`}
           >
             {/* Marca */}
-            <div className="flex min-h-[52px] items-center border-b border-slate-100 py-3 md:min-h-[52px] md:border-b-0 md:py-0 md:pr-5 lg:pr-7 dark:border-slate-800">
+            <div className="flex min-h-[52px] items-center border-b border-zinc-200 py-3 lg:border-b-0 lg:py-0 lg:pr-6 dark:border-zinc-800">
               <a href="#inicio" className="font-black italic tracking-tight text-brand-600 transition hover:text-brand-700">
-                VENE <span className="text-slate-900 not-italic dark:text-slate-100">AUTOS</span>
+                VENE <span className="text-black not-italic dark:text-white">AUTOS</span>
               </a>
             </div>
 
             {/* Menú: visible en móvil (scroll horizontal); escritorio centrado en la columna */}
-            <div className="flex min-h-[48px] w-full min-w-0 items-center border-b border-slate-100 py-2 md:border-b-0 md:border-x md:py-0 md:px-3 lg:px-5 dark:border-slate-800">
+            <div className="flex min-h-[48px] w-full min-w-0 items-center border-b border-zinc-200 py-2 lg:border-b-0 lg:border-x lg:py-0 lg:px-5 dark:border-zinc-800">
               <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <div
-                  className="flex min-w-min flex-nowrap items-center justify-start gap-x-5 px-1 pb-0.5 md:min-w-full md:justify-center md:px-2"
+                  className="flex min-w-min flex-nowrap items-center justify-start gap-x-5 px-1 pb-0.5 lg:min-w-full lg:justify-center lg:px-2"
                   role="navigation"
                   aria-label="Secciones"
                 >
                   <a
                     href="#inicio"
-                    className="shrink-0 border-b-2 border-brand-600 pb-0.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-900 transition hover:text-brand-700 dark:text-slate-100"
+                    className="shrink-0 border-b-2 border-brand-600 pb-0.5 text-xs font-semibold uppercase tracking-[0.12em] text-black transition hover:text-brand-700 dark:text-white"
                   >
                     Inicio
                   </a>
                   <a
                     href="#servicios"
-                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600 transition hover:text-brand-600 dark:text-slate-300"
+                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
                   >
                     Servicios
                   </a>
                   <a
                     href="#nosotros"
-                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600 transition hover:text-brand-600 dark:text-slate-300"
+                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
                   >
                     Nosotros
                   </a>
                   <a
                     href="#contacto"
-                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600 transition hover:text-brand-600 dark:text-slate-300"
+                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
                   >
                     Contacto
                   </a>
                   <Link
                     to="/consultar-ot"
                     title="Consultar orden de trabajo"
-                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-slate-600 transition hover:text-brand-600 dark:text-slate-300"
+                    className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
                   >
                     Consultar OT
                   </Link>
@@ -200,7 +200,7 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
             {accessSlot ? (
               <aside
                 id="acceso-panel"
-                className="border-t border-slate-200/90 bg-gradient-to-b from-[#fafbfc] to-white px-4 py-3 text-slate-900 sm:px-5 md:flex md:min-h-[48px] md:items-center md:border-l md:border-t-0 md:border-slate-200/90 md:bg-gradient-to-br md:from-white md:via-[#fafbfc] md:to-slate-50/90 md:py-3 md:pl-5 md:pr-4 lg:pl-6 lg:pr-5 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 dark:text-slate-100"
+                className="border-t border-zinc-200 bg-white px-4 py-3 text-black sm:px-5 lg:flex lg:min-h-[48px] lg:items-center lg:border-l lg:border-t-0 lg:border-zinc-200 lg:py-0 lg:pl-6 lg:pr-4 dark:border-zinc-800 dark:bg-black dark:text-white"
                 aria-label="Acceso al panel del taller"
               >
                 {accessSlot}

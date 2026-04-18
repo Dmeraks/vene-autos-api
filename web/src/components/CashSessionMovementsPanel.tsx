@@ -48,12 +48,18 @@ function movementRefLabel(m: SessionMovementRow): { text: string; to?: string } 
 
 type Props = {
   current: CashSessionMovementsCurrent
+  /**
+   * Fase 7.7 · Si está provisto, muestra una columna «Acciones» con un botón
+   * «Reimprimir» que llama al puente local para emitir nuevamente el ticket
+   * térmico del movimiento.
+   */
+  onReprintMovement?: (movementId: string) => void
 }
 
 /**
  * Listado de movimientos de la sesión de caja abierta (misma data que `GET /cash/sessions/current`).
  */
-export function CashSessionMovementsPanel({ current }: Props) {
+export function CashSessionMovementsPanel({ current, onReprintMovement }: Props) {
   const surfaceClass = usePanelTheme() === 'saas_light' ? 'va-saas-page-section' : 'va-card'
 
   if (current === undefined) {
@@ -94,6 +100,7 @@ export function CashSessionMovementsPanel({ current }: Props) {
                 <th className="va-table-th">Efectivo / vuelto</th>
                 <th className="va-table-th">Vínculo</th>
                 <th className="va-table-th">Registró</th>
+                {onReprintMovement ? <th className="va-table-th"> </th> : null}
               </tr>
             </thead>
             <tbody>
@@ -136,6 +143,18 @@ export function CashSessionMovementsPanel({ current }: Props) {
                       )}
                     </td>
                     <td className="va-table-td text-xs text-slate-600 dark:text-slate-300">{m.createdBy.fullName}</td>
+                    {onReprintMovement ? (
+                      <td className="va-table-td">
+                        <button
+                          type="button"
+                          onClick={() => onReprintMovement(m.id)}
+                          className="text-xs font-semibold text-brand-700 underline dark:text-brand-300"
+                          title="Reimprimir ticket térmico de este movimiento"
+                        >
+                          Reimprimir
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 )
               })}

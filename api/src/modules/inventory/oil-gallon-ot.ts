@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 
 const QUARTER = new Prisma.Decimal('0.25');
 const ONE = new Prisma.Decimal(1);
+const FOUR = new Prisma.Decimal(4);
 
 /**
  * Repuestos en **galones** de aceite/lubricante: en OT la cantidad se informa en **cuartos de galón**
@@ -26,6 +27,14 @@ export function otPartQuantityToInventoryGallons(
 ): Prisma.Decimal {
   if (!inventoryItemUsesQuarterGallonOtQuantity(item)) return qtyOtInput;
   return qtyOtInput.mul(QUARTER);
+}
+
+/**
+ * En OT el usuario informa **precio unitario por ¼ galón** (COP); en BD `unit_price` se guarda
+ * como COP **por galón** para que `cantidad_gal × precio_gal` coincida con el cobro por cuartos.
+ */
+export function oilOtQuarterUnitPriceToStoredGallonUnitPrice(quarterCOP: Prisma.Decimal): Prisma.Decimal {
+  return quarterCOP.mul(FOUR);
 }
 
 /**

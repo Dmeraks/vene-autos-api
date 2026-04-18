@@ -330,6 +330,9 @@ model InventoryItem {
   /// Clasificación fiscal/operativa: repuesto, insumo interno o producto de mostrador.
   itemKind           InventoryItemKind @default(PART) @map("item_kind")
   name               String   @db.VarChar(200)
+  /// Referencia corta del fabricante o número de parte (p. ej. "# 00", "K-2015").
+  /// Campo opcional que se muestra en tabla/recibo separado del nombre cuando está presente.
+  reference          String   @default("") @db.VarChar(120) @map("reference")
   measurementUnitId  String   @map("measurement_unit_id")
   quantityOnHand     Decimal  @default(0) @map("quantity_on_hand") @db.Decimal(18, 4)
   averageCost        Decimal? @map("average_cost") @db.Decimal(18, 2)
