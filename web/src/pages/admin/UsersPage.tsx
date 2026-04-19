@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api/client'
 import { useAuth } from '../../auth/AuthContext'
 import { useConfirm } from '../../components/confirm/ConfirmProvider'
@@ -29,12 +29,18 @@ export function UsersPage() {
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [roleIds, setRoleIds] = useState<Set<string>>(new Set())
+  /** Un solo rol por defecto; los permisos vienen del rol en BD, no se editan acá. */
+  const [primaryRoleId, setPrimaryRoleId] = useState('')
+  /** Combinar varios roles (casos excepcionales). */
+  const [multiRoleMode, setMultiRoleMode] = useState(false)
   const [isActive, setIsActive] = useState(true)
   const [editInitial, setEditInitial] = useState<{ roleIds: string[]; isActive: boolean } | null>(null)
   const createBtnClass = 'va-btn-primary'
   const tableCardClass = isSaas
     ? 'va-saas-page-section va-saas-page-section--flush overflow-hidden'
     : 'va-card-flush overflow-hidden'
+
+  const rolesSorted = useMemo(() => [...roles].sort((a, b) => a.name.localeCompare(b.name, 'es')), [roles])
 
   async function load() {
     const [u, r] = await Promise.all([
@@ -57,6 +63,8 @@ export function UsersPage() {
     setPassword('')
     setFullName('')
     setRoleIds(new Set())
+    setPrimaryRoleId('')
+    setMultiRoleMode(false)
     setIsActive(true)
   }
 
@@ -68,6 +76,13 @@ export function UsersPage() {
     setFullName(u.fullName)
     const rids = u.roles.map((x) => x.role.id)
     setRoleIds(new Set(rids))
+    if (rids.length > 1) {
+      setMultiRoleMode(true)
+      setPrimaryRoleId(rids[0] ?? '')
+    } else {
+      setMultiRoleMode(false)
+      setPrimaryRoleId(rids[0] ?? '')
+    }
     setIsActive(u.isActive)
     setEditInitial({ roleIds: [...rids], isActive: u.isActive })
   }
@@ -81,6 +96,24 @@ export function UsersPage() {
     })
   }
 
+  function setPrimaryRoleSimple(id: string) {
+    setPrimaryRoleId(id)
+    setRoleIds(id ? new Set([id]) : new Set())
+  }
+
+  function enableMultiRoleMode() {
+    const seed = primaryRoleId ? new Set<string>([primaryRoleId]) : new Set(roleIds)
+    setRoleIds(seed.size > 0 ? seed : new Set())
+    setMultiRoleMode(true)
+  }
+
+  function disableMultiRoleMode() {
+    const pick = [...roleIds][0] ?? primaryRoleId
+    setPrimaryRoleId(pick)
+    setRoleIds(pick ? new Set([pick]) : new Set())
+    setMultiRoleMode(false)
+  }
+
   function sameRoleSet(a: string[], b: string[]) {
     if (a.length !== b.length) return false
     const sa = [...a].sort()
@@ -91,9 +124,9 @@ export function UsersPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
-    const rids = [...roleIds]
+    const rids = multiRoleMode ? [...roleIds] : primaryRoleId ? [primaryRoleId] : []
     if (rids.length === 0) {
-      setMsg('Elegí al menos un rol')
+      setMsg(multiRoleMode ? 'Elegí al menos un rol' : 'Elegí el rol del usuario')
       return
     }
     const roleNames = rids
@@ -103,7 +136,7 @@ export function UsersPage() {
     if (modal === 'create') {
       const okCreate = await confirm({
         title: 'Crear usuario',
-        message: `¿Crear usuario?\n\nCorreo: ${email.trim()}\nNombre: ${fullName.trim()}\nRoles: ${roleNames}\n\nRevisá el correo y los permisos antes de confirmar.`,
+        message: `¿Crear usuario?\n\nCorreo: ${email.trim()}\nNombre: ${fullName.trim()}\nRol(es): ${roleNames}\n\nRevisá el correo antes de confirmar.`,
         confirmLabel: 'Crear usuario',
       })
       if (!okCreate) return
@@ -114,9 +147,9 @@ export function UsersPage() {
         const parts = ['¿Guardar cambios en el usuario?', '', `Nombre: ${fullName.trim()}`, `Correo: ${email}`]
         if (deactivate) parts.push('', '⚠ El usuario quedará INACTIVO y no podrá ingresar.')
         if (rolesChanged) parts.push('', `Roles nuevos: ${roleNames}`)
-        parts.push('', 'Los permisos afectan acceso a caja, órdenes y administración.')
+        parts.push('', 'Los roles definen acceso a caja, órdenes y administración.')
         const okEdit = await confirm({
-          title: 'Cambios sensibles en el usuario',
+          title: 'Cambios en el usuario',
           message: parts.join('\n'),
           confirmLabel: 'Guardar',
           variant: deactivate ? 'danger' : 'default',
@@ -158,7 +191,7 @@ export function UsersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Usuarios"
-        description="Alta, roles y estado de acceso."
+        description="Alta con un rol predefinido (recomendado). Los permisos los define cada rol en Administración → Roles."
         actions={
           can('users:create') ? (
             <button type="button" onClick={openCreate} className={createBtnClass}>
@@ -212,67 +245,139 @@ export function UsersPage() {
 
       {modal && (
         <div className="va-modal-overlay" role="presentation">
-          <div className="va-modal-panel" onClick={(e) => e.stopPropagation()} role="dialog">
+          <div className="va-modal-panel max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} role="dialog">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
               {modal === 'create' ? 'Nuevo usuario' : 'Editar usuario'}
             </h2>
+            {modal === 'create' && (
+              <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
+                Elegí <strong className="text-slate-800 dark:text-slate-100">un rol</strong> (ej. Cajero). Los permisos ya
+                están definidos en ese rol; acá no se editan permisos sueltos.
+              </p>
+            )}
             <form className="mt-4 space-y-3" onSubmit={submit}>
               {modal === 'create' && (
-                <label className="block text-sm">
-                  <span className="va-label">Correo</span>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="va-field mt-1"
-                  />
-                </label>
-              )}
-              {modal === 'create' && (
-                <label className="block text-sm">
-                  <span className="va-label">Contraseña (mín. 8)</span>
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="va-field mt-1"
-                  />
-                </label>
+                <>
+                  <label className="block text-sm">
+                    <span className="va-label">Nombre completo</span>
+                    <input
+                      required
+                      autoComplete="name"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="va-field mt-1"
+                      placeholder="Ej. José Pérez"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="va-label">Correo (usuario para entrar)</span>
+                    <input
+                      type="email"
+                      required
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="va-field mt-1"
+                      placeholder="pepito@empresa.com"
+                    />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="va-label">Contraseña inicial (mín. 8 caracteres)</span>
+                    <input
+                      type="password"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="va-field mt-1"
+                      placeholder="La cambia después al entrar si querés"
+                    />
+                  </label>
+                </>
               )}
               {modal === 'edit' && (
                 <p className="text-sm text-slate-500 dark:text-slate-300">
+                  Correo:{' '}
                   <span className="font-medium text-slate-700 dark:text-slate-200">{email}</span>
                 </p>
               )}
-              <label className="block text-sm">
-                <span className="va-label">Nombre completo</span>
-                <input
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="va-field mt-1"
-                />
-              </label>
-              <fieldset className="text-sm">
-                <legend className="va-label mb-2">Roles</legend>
-                <div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-slate-100 p-2 dark:border-slate-700 dark:bg-slate-800/40">
-                  {roles.map((r) => (
-                    <label key={r.id} className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={roleIds.has(r.id)}
-                        onChange={() => toggleRole(r.id)}
-                        className="rounded border-slate-300 dark:border-slate-500"
-                      />
-                      <span>{r.name}</span>
-                      <span className="text-xs text-slate-400 dark:text-slate-500">({r.slug})</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              {modal === 'edit' && (
+                <label className="block text-sm">
+                  <span className="va-label">Nombre completo</span>
+                  <input
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="va-field mt-1"
+                  />
+                </label>
+              )}
+
+              {!multiRoleMode ? (
+                <label className="block text-sm">
+                  <span className="va-label">Rol del usuario</span>
+                  <select
+                    required={!multiRoleMode}
+                    value={primaryRoleId}
+                    onChange={(e) => setPrimaryRoleSimple(e.target.value)}
+                    className="va-field mt-1"
+                  >
+                    <option value="">— Elegí un rol —</option>
+                    {rolesSorted.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                    Equivale a “Pepito es cajero”: hereda todo lo definido para ese rol en Administración → Roles.
+                  </span>
+                </label>
+              ) : null}
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-600 dark:bg-slate-800/50">
+                {!multiRoleMode ? (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
+                    onClick={enableMultiRoleMode}
+                  >
+                    Necesito combinar varios roles (avanzado)…
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-slate-700 dark:text-slate-200">Varios roles a la vez</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Solo si una persona debe sumar perfiles (ej. caja + recepción). Si podés, usá un solo rol.
+                    </p>
+                    <fieldset className="text-sm">
+                      <div className="max-h-40 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-600 dark:bg-slate-900/60">
+                        {rolesSorted.map((r) => (
+                          <label key={r.id} className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
+                            <input
+                              type="checkbox"
+                              checked={roleIds.has(r.id)}
+                              onChange={() => toggleRole(r.id)}
+                              className="rounded border-slate-300 dark:border-slate-500"
+                            />
+                            <span>{r.name}</span>
+                            <span className="font-mono text-xs text-slate-400 dark:text-slate-500">{r.slug}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                    <button
+                      type="button"
+                      className="text-xs text-slate-600 underline-offset-2 hover:underline dark:text-slate-400"
+                      onClick={disableMultiRoleMode}
+                    >
+                      Volver a un solo rol
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {modal === 'edit' && can('users:deactivate') && (
                 <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                   <input
@@ -286,7 +391,7 @@ export function UsersPage() {
               )}
               <div className="flex gap-2 pt-2">
                 <button type="submit" className="va-btn-primary">
-                  Guardar
+                  {modal === 'create' ? 'Crear usuario' : 'Guardar'}
                 </button>
                 <button
                   type="button"
