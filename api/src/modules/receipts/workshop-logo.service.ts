@@ -1,9 +1,9 @@
 /**
  * Carga y cachea los logos del taller (factura Carta + ticket térmico) desde el disco.
  *
- * Los logos se esperan en la raíz del repo/monorepo (`G:\Vene Autos\logo_factura.png` y
- * `logo_ticket.png` según la instalación). La ruta se puede sobrescribir por entorno
- * (`WORKSHOP_LOGOS_DIR`) para facilitar el arranque en otras máquinas. Si falta el
+ * Los logos se leen desde `api/assets/workshop-logos/` (`logo_factura`, `marca_de_agua`,
+ * `logo_ticket`; extensiones .png/.jpg/.jpeg/.webp). La ruta se puede sobrescribir con
+ * `WORKSHOP_LOGOS_DIR` (directorio absoluto). Si falta el
  * archivo, el servicio devuelve `null` y el consumidor sigue adelante sin logo.
  *
  * Motivos para que esto viva en el API y no en el puente:
@@ -34,8 +34,8 @@ export class WorkshopLogoService {
   private logosDir(): string {
     const envDir = process.env.WORKSHOP_LOGOS_DIR?.trim();
     if (envDir) return envDir;
-    // El api se ejecuta desde `api/`. Subimos un nivel al root del monorepo.
-    return path.resolve(process.cwd(), '..');
+    // El proceso Nest suele tener `cwd` en `api/`; los PNG viven en `api/assets/workshop-logos/`.
+    return path.resolve(process.cwd(), 'assets', 'workshop-logos');
   }
 
   private async candidatePaths(kind: LogoKind): Promise<string[]> {

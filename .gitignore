@@ -18,3 +18,6 @@ api/*.log
 .vscode/
 Thumbs.db
 Desktop.ini
+
+# Credenciales pegadas por error en la raíz (no versionar)
+dmeraksauriojagalosaurio6963.txt
