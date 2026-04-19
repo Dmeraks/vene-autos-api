@@ -179,7 +179,7 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
             {accessSlot ? (
               <aside
                 id="acceso-panel"
-                className="hidden lg:flex lg:min-h-[48px] lg:items-center lg:pl-6"
+                className="hidden min-w-0 flex-1 lg:flex lg:min-h-[48px] lg:items-start lg:justify-end lg:py-2 lg:pl-6"
                 aria-label="Acceso al panel del taller"
               >
                 {accessSlot}

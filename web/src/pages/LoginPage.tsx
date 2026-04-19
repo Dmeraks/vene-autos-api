@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
+import { ClientPortalLandingAside } from '../components/portal/ClientPortalLandingAside'
 
 function loginFailureMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -15,8 +17,6 @@ function loginFailureMessage(err: unknown): string {
   }
   return 'No se pudo iniciar sesión'
 }
-import { useAuth } from '../auth/AuthContext'
-import { ClientPortalLandingAside } from '../components/portal/ClientPortalLandingAside'
 
 export function LoginPage() {
   const { user, ready, login } = useAuth()
@@ -45,55 +45,64 @@ export function LoginPage() {
   const fieldClass =
     'h-9 min-w-0 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-black shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] placeholder:text-zinc-500 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/25 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder:text-zinc-400 dark:focus:border-brand-500 dark:focus:ring-brand-500/35'
 
+  /**
+   * El error va en una segunda fila (flex-col). Si va en la misma fila lg:flex-row que el formulario,
+   * el espacio junto al logo es tan justo que los controles se solapan.
+   */
   const accessSlot = (
-    <div className="relative flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:gap-3">
-      <div className="flex shrink-0 items-center gap-2 border-l-2 border-brand-600 pl-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-black dark:text-white">
-          Acceso
-        </p>
+    <div className="flex w-full min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:gap-3">
+        <div className="flex shrink-0 items-center gap-2 border-l-2 border-brand-600 pl-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-black dark:text-white">
+            Acceso
+          </p>
+        </div>
+
+        <form
+          className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:gap-2"
+          onSubmit={onSubmit}
+        >
+          <label htmlFor="email" className="sr-only">
+            Correo
+          </label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="username"
+            required
+            placeholder="Correo"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={`${fieldClass} lg:max-w-[12rem]`}
+          />
+          <label htmlFor="password" className="sr-only">
+            Contraseña
+          </label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            placeholder="Contraseña"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={`${fieldClass} lg:max-w-[10rem]`}
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="va-btn-primary h-9 !min-h-0 shrink-0 rounded-lg px-4 py-0 text-xs font-semibold tracking-tight disabled:opacity-50 lg:px-5"
+          >
+            {loading ? '…' : 'Entrar'}
+          </button>
+        </form>
       </div>
 
-      <form
-        className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-2"
-        onSubmit={onSubmit}
-      >
-        <label htmlFor="email" className="sr-only">
-          Correo
-        </label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="username"
-          required
-          placeholder="Correo"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className={`${fieldClass} lg:max-w-[12rem]`}
-        />
-        <label htmlFor="password" className="sr-only">
-          Contraseña
-        </label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          placeholder="Contraseña"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className={`${fieldClass} lg:max-w-[10rem]`}
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="va-btn-primary h-9 !min-h-0 shrink-0 rounded-lg px-4 py-0 text-xs font-semibold tracking-tight disabled:opacity-50 lg:px-5"
-        >
-          {loading ? '…' : 'Entrar'}
-        </button>
-      </form>
-
       {err ? (
-        <p className="order-last w-full va-alert-error text-[11px] leading-snug" role="alert">
+        <p
+          className="va-alert-error max-w-full text-[11px] leading-snug lg:text-xs"
+          role="alert"
+        >
           {err}
         </p>
       ) : null}
