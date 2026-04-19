@@ -32,9 +32,18 @@ export function LoginPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setErr(null)
+    const em = email.trim()
+    if (!em) {
+      setErr('Ingresá el correo.')
+      return
+    }
+    if (password.length < 8) {
+      setErr('La contraseña debe tener al menos 8 caracteres.')
+      return
+    }
     setLoading(true)
     try {
-      await login(email.trim(), password)
+      await login(em, password)
     } catch (e) {
       setErr(loginFailureMessage(e))
     } finally {
@@ -46,11 +55,11 @@ export function LoginPage() {
     'h-9 min-w-0 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-black shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] placeholder:text-zinc-500 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/25 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder:text-zinc-400 dark:focus:border-brand-500 dark:focus:ring-brand-500/35'
 
   /**
-   * El error va en una segunda fila (flex-col). Si va en la misma fila lg:flex-row que el formulario,
-   * el espacio junto al logo es tan justo que los controles se solapan.
+   * Bloque acotado en ancho (no w-full del header) para que el aviso de error no sea una franja
+   * de borde a borde. Segunda fila solo para el mensaje, alineado con el formulario.
    */
   const accessSlot = (
-    <div className="flex w-full min-w-0 flex-col gap-2">
+    <div className="ml-auto flex w-full min-w-0 max-w-[min(100%,22rem)] flex-col gap-1.5 sm:max-w-[26rem] lg:max-w-[28rem]">
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:gap-3">
         <div className="flex shrink-0 items-center gap-2 border-l-2 border-brand-600 pl-3">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-black dark:text-white">
@@ -59,8 +68,9 @@ export function LoginPage() {
         </div>
 
         <form
-          className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:gap-2"
+          className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-2"
           onSubmit={onSubmit}
+          noValidate
         >
           <label htmlFor="email" className="sr-only">
             Correo
@@ -100,7 +110,7 @@ export function LoginPage() {
 
       {err ? (
         <p
-          className="va-alert-error max-w-full text-[11px] leading-snug lg:text-xs"
+          className="va-alert-error text-[11px] leading-snug shadow-sm lg:text-xs"
           role="alert"
         >
           {err}
