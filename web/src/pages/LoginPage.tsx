@@ -1,6 +1,20 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
+
+function loginFailureMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return 'Correo o contraseña incorrectos.'
+    if (err.status === 0)
+      return 'No pudimos contactar al servidor. Comprobá tu conexión e intentá de nuevo.'
+    if (err.status === 502 || err.status === 503 || err.status === 504)
+      return 'El servidor no respondió a tiempo. Intentá de nuevo en unos momentos.'
+    if (/npm run|PostgreSQL en Docker|localhost/i.test(err.message))
+      return 'No pudimos validar el acceso. Si el problema continúa, avisá al administrador.'
+    return err.message
+  }
+  return 'No se pudo iniciar sesión'
+}
 import { useAuth } from '../auth/AuthContext'
 import { ClientPortalLandingAside } from '../components/portal/ClientPortalLandingAside'
 
@@ -22,7 +36,7 @@ export function LoginPage() {
     try {
       await login(email.trim(), password)
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'No se pudo iniciar sesión')
+      setErr(loginFailureMessage(e))
     } finally {
       setLoading(false)
     }

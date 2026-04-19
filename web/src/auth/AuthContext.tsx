@@ -72,12 +72,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const res = await api<LoginResponse>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      })
-      applyAuthResponse(res)
-      navigate(getStoredLastModulePath() ?? '/', { replace: true })
+      const ctrl = new AbortController()
+      const t = window.setTimeout(() => ctrl.abort(), 25_000)
+      try {
+        const res = await api<LoginResponse>('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+          signal: ctrl.signal,
+        })
+        applyAuthResponse(res)
+        navigate(getStoredLastModulePath() ?? '/', { replace: true })
+      } finally {
+        window.clearTimeout(t)
+      }
     },
     [applyAuthResponse, navigate],
   )

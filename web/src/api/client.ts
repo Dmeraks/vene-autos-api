@@ -45,6 +45,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set('Content-Type', 'application/json')
   }
 
+  const isLoginAttempt = path.startsWith('/auth/login')
+
   let res: Response
   try {
     res = await fetch(`${API_PREFIX}${path}`, {
@@ -53,7 +55,17 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       /** Evita que el navegador sirva JSON viejo (p. ej. líneas de OT tras DELETE) desde caché HTTP. */
       cache: init.cache ?? 'no-store',
     })
-  } catch {
+  } catch (err) {
+    const isAbort = err instanceof DOMException && err.name === 'AbortError'
+    if (isLoginAttempt) {
+      throw new ApiError(
+        isAbort
+          ? 'La solicitud tardó demasiado. Comprobá tu conexión e intentá de nuevo.'
+          : 'No pudimos contactar al servidor. Comprobá tu conexión e intentá de nuevo.',
+        0,
+        null,
+      )
+    }
     throw new ApiError(
       'No se pudo contactar al servidor. En desarrollo, desde la raíz del repo: npm run db:up (PostgreSQL en Docker), npm run api:dev, y esperá a ver en consola la línea que empieza con «Vene Autos API —». Recargá esta página.',
       0,
@@ -61,9 +73,13 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     )
   }
 
+  /**
+   * 401 en /auth/login = credenciales incorrectas: no borrar el JWT existente
+   * (evita cerrar sesión en otra pestaña y efectos raros). El resto de 401 sí limpian sesión.
+   */
   if (res.status === 401) {
-    setToken(null)
-    if (!path.startsWith('/auth/login')) {
+    if (!isLoginAttempt) {
+      setToken(null)
       window.dispatchEvent(new Event('vene:unauthorized'))
     }
   }
@@ -78,8 +94,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       Array.isArray(rawMsg) ? rawMsg.map((x) => String(x)).filter(Boolean).join(' ') : String(rawMsg ?? res.statusText)
 
     if (res.status === 502 || res.status === 503 || res.status === 504) {
-      msg =
-        'La API no respondió correctamente (502/503/504). Suele ocurrir si el backend no está en marcha o PostgreSQL no está accesible. Desde la raíz del repo: npm run db:up, luego npm run api:dev, y comprobar en la consola del servidor la línea «Vene Autos API — http://localhost:…».'
+      msg = isLoginAttempt
+        ? 'El servidor no respondió a tiempo. Intentá de nuevo en unos momentos.'
+        : 'La API no respondió correctamente (502/503/504). Suele ocurrir si el backend no está en marcha o PostgreSQL no está accesible. Desde la raíz del repo: npm run db:up, luego npm run api:dev, y comprobar en la consola del servidor la línea «Vene Autos API — http://localhost:…».'
     }
 
     throw new ApiError(msg || 'Error de API', res.status, body)
