@@ -1,6 +1,9 @@
 /**
- * Iconos de marca vía Simple Icons CDN (SVG, color configurable).
- * https://github.com/simple-icons/simple-icons — uso de logo sujeto a marca registrada del titular.
+ * Iconos de marca para comprobantes y consulta OT.
+ *
+ * - **Preferencia**: SVG multicolor donde hay URL curada en Wikimedia Commons (logos “reales”).
+ * - **Fallback**: Simple Icons CDN (silueta monocromática teñida con hex de marca).
+ *   https://github.com/simple-icons/simple-icons — uso sujeto a marca registrada del titular.
  */
 
 const CDN_BASE = 'https://cdn.simpleicons.org';
@@ -69,7 +72,51 @@ const NORMALIZED_TO_SLUG: Record<string, string> = {
   volvo: 'volvo',
 }
 
-/** Color por slug (hex sin #) para “logo a color” reconocible en impresión */
+/**
+ * SVG multicolor por slug (clave = valor devuelto por {@link resolveVehicleBrandIconSlug}).
+ * Rutas públicas verificadas en Commons; si falta una marca → Simple Icons monocromo.
+ */
+const SLUG_FULLCOLOR_COMMONS_SVG: Record<string, string> = {
+  audi: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Audi_logo.svg',
+  bmw: 'https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg',
+  chevrolet: 'https://upload.wikimedia.org/wikipedia/commons/a/a8/Chevrolet_bowtie_2023.svg',
+  'citroën': 'https://upload.wikimedia.org/wikipedia/commons/d/dd/Citroen_2022.svg',
+  ferrari: 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Ferrari_wordmark.svg',
+  fiat: 'https://upload.wikimedia.org/wikipedia/commons/f/f8/Fiat_logo.svg',
+  ford: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Ford-Logo-Vector.svg',
+  honda: 'https://upload.wikimedia.org/wikipedia/commons/7/7b/Honda_Logo.svg',
+  hyundai: 'https://upload.wikimedia.org/wikipedia/commons/4/44/Hyundai_Motor_Company_logo.svg',
+  jaguar: 'https://upload.wikimedia.org/wikipedia/commons/a/ac/Jaguar_wordmark_2021.svg',
+  jeep: 'https://upload.wikimedia.org/wikipedia/commons/0/0d/Jeep_logo.svg',
+  kia: 'https://upload.wikimedia.org/wikipedia/commons/b/b6/KIA_logo3.svg',
+  lexus: 'https://upload.wikimedia.org/wikipedia/commons/7/75/Lexus.svg',
+  mazda: 'https://upload.wikimedia.org/wikipedia/commons/4/43/Mazda_logo_2024_%28vertical%29.svg',
+  mercedes: 'https://upload.wikimedia.org/wikipedia/commons/4/48/Mercedes-Benz_logo.svg',
+  mitsubishi: 'https://upload.wikimedia.org/wikipedia/commons/5/5a/Mitsubishi_logo.svg',
+  nissan: 'https://upload.wikimedia.org/wikipedia/commons/0/0f/Nissan_logo.svg',
+  peugeot: 'https://upload.wikimedia.org/wikipedia/commons/2/28/Peugeot_logo.svg',
+  porsche: 'https://upload.wikimedia.org/wikipedia/commons/1/12/Porsche_wordmark.svg',
+  renault: 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Renault_2021.svg',
+  subaru: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Subaru_logo.svg',
+  suzuki: 'https://upload.wikimedia.org/wikipedia/commons/b/be/Suzuki_logo.svg',
+  tesla: 'https://upload.wikimedia.org/wikipedia/commons/b/bb/Tesla_T_symbol.svg',
+  toyota: 'https://upload.wikimedia.org/wikipedia/commons/e/e7/Toyota.svg',
+  volkswagen: 'https://upload.wikimedia.org/wikipedia/commons/6/6d/Volkswagen_logo_2019.svg',
+  volvo: 'https://upload.wikimedia.org/wikipedia/commons/5/54/Volvo_logo.svg',
+}
+
+/** Path permitido para logos multicolor (solo estos se inyectan desde Commons). */
+const ALLOWED_FULLCOLOR_COMMONS_PATHS = new Set(
+  Object.values(SLUG_FULLCOLOR_COMMONS_SVG).map((href) => {
+    try {
+      return new URL(href).pathname;
+    } catch {
+      return '';
+    }
+  }).filter(Boolean),
+)
+
+/** Color por slug (hex sin #) fallback Simple Icons */
 const SLUG_HEX: Record<string, string> = {
   acura: '000000',
   alfaromeo: '981E32',
@@ -147,11 +194,13 @@ export function resolveVehicleBrandIconSlug(brandRaw: string | null | undefined)
 }
 
 /**
- * URL PNG/SVG servida por Simple Icons CDN (liviana; sin dependencias en el servidor).
+ * URL de logo para `<img>`: Commons multicolor si existe; si no, Simple Icons monocromo teñido.
  */
 export function vehicleBrandLogoUrl(brandRaw: string | null | undefined): string | null {
   const slug = resolveVehicleBrandIconSlug(brandRaw);
   if (!slug) return null;
+  const commons = SLUG_FULLCOLOR_COMMONS_SVG[slug];
+  if (commons) return commons;
   const hex = SLUG_HEX[slug] ?? '242424';
   return `${CDN_BASE}/${encodeURIComponent(slug)}/${hex}`;
 }
@@ -159,7 +208,8 @@ export function vehicleBrandLogoUrl(brandRaw: string | null | undefined): string
 export function isTrustedVehicleBrandIconUrl(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.origin === 'https://cdn.simpleicons.org';
+    if (u.origin === 'https://cdn.simpleicons.org') return true;
+    return u.origin === 'https://upload.wikimedia.org' && ALLOWED_FULLCOLOR_COMMONS_PATHS.has(u.pathname);
   } catch {
     return false;
   }

@@ -648,7 +648,9 @@ describe('WorkOrdersService', () => {
         publicCode: 'VEN-0041',
         plate: 'EKP-112',
       });
-      expect(r.vehicleBrandLogoUrl).toMatch(/^https:\/\/cdn\.simpleicons\.org\/toyota\//i);
+      expect(r.vehicleBrandLogoUrl).toBe(
+        'https://upload.wikimedia.org/wikipedia/commons/e/e7/Toyota.svg',
+      );
     });
   });
 });
