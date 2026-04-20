@@ -16,6 +16,7 @@ import type {
   VoidInvoicePayload,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { formatCopFromString, normalizeMoneyDecimalStringForApi } from '../utils/copFormat'
 
@@ -410,7 +411,7 @@ export function InvoiceDetailPage() {
           <div className="flex items-center gap-2">
             <StatusBadge status={invoice.status} />
             <button
-              onClick={() => navigate('/facturacion')}
+              onClick={() => navigate(portalPath('/facturacion'))}
               className="text-sm text-sky-600 hover:underline dark:text-sky-300"
             >
               ← Lista
@@ -452,7 +453,7 @@ export function InvoiceDetailPage() {
                 <dt className="text-slate-500">Venta origen</dt>
                 <dd>
                   <Link
-                    to={`/ventas/${invoice.sale.id}`}
+                    to={portalPath(`/ventas/${invoice.sale.id}`)}
                     className="text-sky-600 hover:underline dark:text-sky-300"
                   >
                     {invoice.sale.publicCode}
@@ -465,7 +466,7 @@ export function InvoiceDetailPage() {
                 <dt className="text-slate-500">OT origen</dt>
                 <dd>
                   <Link
-                    to={`/ordenes/${invoice.workOrder.id}`}
+                    to={portalPath(`/ordenes/${invoice.workOrder.id}`)}
                     className="text-sky-600 hover:underline dark:text-sky-300"
                   >
                     {invoice.workOrder.publicCode}

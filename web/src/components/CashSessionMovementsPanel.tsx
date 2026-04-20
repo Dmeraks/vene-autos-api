@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { portalPath } from '../constants/portalPath'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import { formatCopFromString } from '../utils/copFormat'
 
@@ -35,7 +36,7 @@ function tenderVueltoLine(m: SessionMovementRow): string | null {
 
 function movementRefLabel(m: SessionMovementRow): { text: string; to?: string } {
   if (m.referenceType === REF_WORK_ORDER && m.referenceId) {
-    return { text: 'Cobro de orden de trabajo', to: `/ordenes/${m.referenceId}` }
+    return { text: 'Cobro de orden de trabajo', to: portalPath(`/ordenes/${m.referenceId}`) }
   }
   if (m.referenceType === REF_EXPENSE_REQUEST && m.referenceId) {
     return { text: 'Egreso por solicitud aprobada' }

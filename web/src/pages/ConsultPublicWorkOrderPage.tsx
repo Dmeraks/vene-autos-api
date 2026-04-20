@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, api } from '../api/client'
+import { portalPath } from '../constants/portalPath'
 import type { PublicWorkOrderLookupResponse, WorkOrderStatus } from '../api/types'
 
 function usePrefersColorSchemeDark(): boolean {
@@ -88,9 +89,9 @@ export function ConsultPublicWorkOrderPage() {
       <nav className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur-md dark:border-zinc-800 dark:bg-black">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <Link
-            to="/login"
+            to="/"
             className="inline-flex items-center transition hover:opacity-80"
-            aria-label="Inicio acceso Vene Autos"
+            aria-label="Inicio Vene Autos"
           >
             <img
               src="/logo_landing.png"
@@ -100,10 +101,10 @@ export function ConsultPublicWorkOrderPage() {
             />
           </Link>
           <div className="flex flex-wrap items-center gap-3 text-xs font-medium tracking-tight text-slate-600 dark:text-slate-300">
-            <Link to="/login" className="transition hover:text-brand-700 dark:hover:text-brand-300">
+            <Link to={portalPath('/login')} className="transition hover:text-brand-700 dark:hover:text-brand-300">
               Acceso taller
             </Link>
-            <Link to="/login#inicio" className="transition hover:text-brand-700 dark:hover:text-brand-300">
+            <Link to="/#inicio" className="transition hover:text-brand-700 dark:hover:text-brand-300">
               Sitio
             </Link>
           </div>

@@ -40,6 +40,7 @@ const ACTION_TITLE: Record<string, string> = {
   'inventory_items.created': 'Ítem de inventario creado',
   'inventory_items.updated': 'Ítem de inventario actualizado',
   'inventory.purchase_receipt_created': 'Recepción de compra registrada',
+  'workshop_finance.payable.deleted_settled': 'Deuda saldada eliminada del listado',
 }
 
 const ENTITY_TITLE: Record<string, string> = {
@@ -56,6 +57,7 @@ const ENTITY_TITLE: Record<string, string> = {
   Vehicle: 'Vehículo',
   InventoryItem: 'Ítem de inventario',
   PurchaseReceipt: 'Recepción de compra',
+  WorkshopPayable: 'Deuda del taller (finanzas workshop)',
 }
 
 export function auditActionTitleEs(action: string): string {
@@ -84,6 +86,7 @@ export function auditActionTone(action: string): AuditTone {
   )
     return 'cash'
   if (action.startsWith('work_order')) return 'orders'
+  if (action.startsWith('workshop_finance')) return 'cash'
   if (action.includes('inventory') || action.includes('purchase')) return 'inventory'
   if (action.startsWith('users.') || action.startsWith('customers.') || action.startsWith('vehicles.'))
     return 'people'

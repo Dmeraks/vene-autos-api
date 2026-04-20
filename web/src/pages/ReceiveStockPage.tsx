@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { useConfirm } from '../components/confirm/ConfirmProvider'
 import { NotesMinCharCounter } from '../components/NotesMinCharCounter'
+import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import {
@@ -240,7 +241,7 @@ export function ReceiveStockPage() {
                   Reintentar
                 </button>
                 <Link
-                  to="/caja"
+                  to={portalPath('/caja')}
                   className="inline-flex min-h-[44px] items-center text-sm font-medium text-brand-800 underline dark:text-brand-200"
                 >
                   Ir a Caja
@@ -262,7 +263,7 @@ export function ReceiveStockPage() {
                   Actualizar estado
                 </button>
                 <Link
-                  to="/caja"
+                  to={portalPath('/caja')}
                   className="inline-flex min-h-[44px] items-center text-sm font-medium text-amber-950 underline dark:text-amber-50"
                 >
                   Ir a Caja

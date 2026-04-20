@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { portalPath } from '../../constants/portalPath'
 import { Link } from 'react-router-dom'
 import { api } from '../../api/client'
 import type { LoginResponse } from '../../api/types'
@@ -84,7 +85,7 @@ export function RolePreviewPage() {
     <div className="space-y-6">
       <PageHeader
         beforeTitle={
-          <Link to="/" className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-300">
+          <Link to={portalPath('/')} className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-300">
             ← Inicio
           </Link>
         }

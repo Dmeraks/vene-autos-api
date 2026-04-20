@@ -1,0 +1,6 @@
+# Producción: sustituí la URL del sitemap si tu dominio canónico es otro.
+User-agent: *
+Allow: /
+Disallow: /portal-transaccional-interno/
+
+Sitemap: https://www.veneautos.com.co/sitemap.xml

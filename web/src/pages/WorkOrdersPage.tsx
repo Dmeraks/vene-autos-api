@@ -10,6 +10,7 @@ import type {
   WorkOrderStatus,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { PostCreateConsentModal } from '../components/work-order/PostCreateConsentModal'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
@@ -1109,7 +1110,7 @@ export function WorkOrdersPage() {
             const ctx = postCreateConsent
             setPostCreateConsent(null)
             emitWorkOrderChanged(ctx.id)
-            navigate(`/ordenes/${ctx.id}`)
+            navigate(portalPath(`/ordenes/${ctx.id}`))
             void loadPage(page)
           }}
           onAbandon={async () => {
@@ -1227,7 +1228,7 @@ export function WorkOrdersPage() {
             return (
               <li key={wo.id}>
                 <Link
-                  to={`/ordenes/${wo.id}`}
+                  to={portalPath(`/ordenes/${wo.id}`)}
                   className={`flex w-full items-center gap-2 border-l-4 px-3 py-2 text-left transition hover:bg-slate-50/90 dark:hover:bg-slate-800/70 ${st.listRow}`}
                 >
                   <div className="flex w-[5.5rem] shrink-0 flex-col gap-0.5">
@@ -1259,7 +1260,7 @@ export function WorkOrdersPage() {
             return (
               <li key={wo.id}>
                 <Link
-                  to={`/ordenes/${wo.id}`}
+                  to={portalPath(`/ordenes/${wo.id}`)}
                   className={`block rounded-xl border border-slate-200/90 border-l-4 p-3 shadow-sm transition hover:border-brand-200 hover:shadow-md dark:border-slate-700 dark:hover:border-brand-600 ${st.cardBody}`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-1.5">
@@ -1337,7 +1338,7 @@ export function WorkOrdersPage() {
           return (
             <li key={wo.id} className="flex min-h-0">
               <Link
-                to={`/ordenes/${wo.id}`}
+                to={portalPath(`/ordenes/${wo.id}`)}
                 className={`flex h-full min-h-[10.5rem] w-full min-w-0 flex-col rounded-xl border border-slate-200/90 border-l-4 p-3 shadow-sm transition hover:border-brand-200 hover:shadow-md dark:border-slate-700 dark:hover:border-brand-600 ${st.cardBody}`}
               >
                 <div className="flex shrink-0 items-start justify-between gap-1.5">

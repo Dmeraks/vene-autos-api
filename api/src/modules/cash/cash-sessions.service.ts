@@ -23,6 +23,7 @@ import {
   CASH_SALE_REFERENCE_TYPE,
   CASH_WORK_ORDER_REFERENCE_TYPE,
 } from './cash.constants';
+import { appendReserveContributionsForClose } from '../workshop-finance/reserve-append';
 import type { CloseCashSessionDto } from './dto/close-cash-session.dto';
 import type { OpenCashSessionDto } from './dto/open-cash-session.dto';
 
@@ -290,16 +291,20 @@ export class CashSessionsService {
       differenceNote = t ? t : null;
     }
 
-    const updated = await this.prisma.cashSession.update({
-      where: { id: sessionId },
-      data: {
-        status: CashSessionStatus.CLOSED,
-        closedAt: new Date(),
-        closedById: actorUserId,
-        closingExpected: expected,
-        closingCounted: counted,
-        differenceNote,
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.cashSession.update({
+        where: { id: sessionId },
+        data: {
+          status: CashSessionStatus.CLOSED,
+          closedAt: new Date(),
+          closedById: actorUserId,
+          closingExpected: expected,
+          closingCounted: counted,
+          differenceNote,
+        },
+      });
+      await appendReserveContributionsForClose(tx, sessionId, counted);
+      return u;
     });
 
     await this.audit.recordDomain({

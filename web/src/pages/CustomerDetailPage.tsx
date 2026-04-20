@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { WorkOrderListResponse, WorkOrderStatus, WorkOrderSummary } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 
@@ -140,7 +141,7 @@ export function CustomerDetailPage() {
       <div className="va-alert-error-block">
         Cliente no encontrado
         <Link
-          to="/clientes"
+          to={portalPath('/clientes')}
           className="mt-4 block text-sm font-medium text-brand-800 underline dark:text-brand-300"
         >
           ← Clientes
@@ -155,7 +156,7 @@ export function CustomerDetailPage() {
     <div className={pageClass}>
       <PageHeader
         beforeTitle={
-          <Link to="/clientes" className={backLinkClass}>
+          <Link to={portalPath('/clientes')} className={backLinkClass}>
             ← Clientes
           </Link>
         }
@@ -205,7 +206,7 @@ export function CustomerDetailPage() {
             {vehicles.map((v) => (
               <li key={v.id}>
                 <Link
-                  to={`/vehiculos/${v.id}`}
+                  to={portalPath(`/vehiculos/${v.id}`)}
                   className="block rounded-xl border border-slate-100 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/80"
                 >
                   <span className="font-mono font-medium text-slate-900 dark:text-slate-50">{v.plate}</span>
@@ -254,7 +255,7 @@ export function CustomerDetailPage() {
               </p>
             </div>
             <Link
-              to={`/ordenes?customerId=${encodeURIComponent(id!)}`}
+              to={portalPath(`/ordenes?customerId=${encodeURIComponent(id!)}`)}
               className="shrink-0 text-sm font-medium text-brand-700 underline hover:text-brand-800 dark:text-brand-300"
             >
               Ver en listado…
@@ -267,7 +268,7 @@ export function CustomerDetailPage() {
               {customerWorkOrders.map((wo) => (
                 <li key={wo.id} className="py-2.5 first:pt-0">
                   <Link
-                    to={`/ordenes/${wo.id}`}
+                    to={portalPath(`/ordenes/${wo.id}`)}
                     className="block text-sm font-medium text-slate-900 hover:text-brand-700 dark:text-slate-50 dark:hover:text-brand-300"
                   >
                     OT {wo.publicCode}{' '}
@@ -320,7 +321,9 @@ export function CustomerDetailPage() {
                       const v = vehicles.find((x) => x.id === newWoVehicleId)
                       const pl = v?.plate ?? ''
                       navigate(
-                        `/ordenes?openCreate=1&vehicleId=${encodeURIComponent(newWoVehicleId)}&plate=${encodeURIComponent(pl)}`,
+                        portalPath(
+                          `/ordenes?openCreate=1&vehicleId=${encodeURIComponent(newWoVehicleId)}&plate=${encodeURIComponent(pl)}`,
+                        ),
                       )
                     }}
                     className="va-btn-primary disabled:cursor-not-allowed disabled:opacity-50"

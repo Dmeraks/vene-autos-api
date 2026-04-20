@@ -699,30 +699,30 @@
   html.va-panel-theme-saas-light .va-cash-status-strip[data-led='open'] {
     @apply ring-2 ring-inset ring-emerald-400/45 dark:ring-emerald-500/40;
   }
-  /** Saldo teórico: superficie neutra + marca en el monto (menos “segunda paleta” esmeralda). */
+  /** Saldo teórico (SaaS): monto y acentos en verde esmeralda (coherente con LED caja abierta). */
   html.va-panel-theme-saas-light .va-cash-balance-panel {
-    @apply border-slate-200/90 bg-[var(--va-surface-muted)] dark:border-slate-700 dark:bg-slate-900/55;
+    @apply border-emerald-200/90 bg-emerald-50/70 dark:border-emerald-900/45 dark:bg-emerald-950/35;
   }
   html.va-panel-theme-saas-light .va-cash-balance-kicker {
-    @apply text-slate-500 dark:text-slate-300;
+    @apply text-emerald-800 dark:text-emerald-200/95;
   }
   html.va-panel-theme-saas-light .va-cash-balance-amount {
-    @apply text-brand-800 dark:text-brand-200;
+    @apply text-emerald-700 dark:text-emerald-300;
   }
   html.va-panel-theme-saas-light .va-cash-balance-note {
-    @apply text-slate-600 dark:text-slate-300;
+    @apply text-emerald-900/85 dark:text-emerald-100/90;
   }
   html.va-panel-theme-saas-light .va-cash-balance-stat-grid {
-    @apply text-slate-800 dark:text-slate-200;
+    @apply text-emerald-950 dark:text-emerald-50;
   }
   html.va-panel-theme-saas-light .va-cash-balance-stat-grid dt {
-    @apply text-slate-500 dark:text-slate-300;
+    @apply text-emerald-800/90 dark:text-emerald-200/85;
   }
   html.va-panel-theme-saas-light .va-cash-balance-stat-grid dd {
-    @apply text-slate-900 dark:text-slate-50;
+    @apply text-emerald-950 dark:text-emerald-50;
   }
   html.va-panel-theme-saas-light .va-cash-balance-foot {
-    @apply text-slate-500 dark:text-slate-300;
+    @apply text-emerald-800/80 dark:text-emerald-200/85;
   }
   /** Abrir sesión: misma familia cromática que el menú (marca), no verde aislado. */
   html.va-panel-theme-saas-light .va-saas-tab-success-btn {

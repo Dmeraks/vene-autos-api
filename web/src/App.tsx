@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { PORTAL_BASE, portalPath } from './constants/portalPath'
 import { AppShell } from './components/AppShell'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuditPage } from './pages/admin/AuditPage'
@@ -13,6 +14,7 @@ import { UsersPage } from './pages/admin/UsersPage'
 import { CashPage } from './pages/CashPage'
 import { CustomerDetailPage } from './pages/CustomerDetailPage'
 import { CustomersPage } from './pages/CustomersPage'
+import { CommercialLandingPage } from './pages/CommercialLandingPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { AceitePage } from './pages/AceitePage'
 import { InventoryPage } from './pages/InventoryPage'
@@ -27,40 +29,44 @@ import { SalesPage } from './pages/SalesPage'
 import { InvoiceDetailPage } from './pages/InvoiceDetailPage'
 import { InvoicesPage } from './pages/InvoicesPage'
 import PayrollPage from './pages/PayrollPage'
+import WorkshopFinancePage from './pages/WorkshopFinancePage'
 import { WorkOrdersPage } from './pages/WorkOrdersPage'
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<CommercialLandingPage />} />
       <Route path="/consultar-ot" element={<ConsultPublicWorkOrderPage />} />
-      <Route element={<AppShell />}>
+      <Route path="/login" element={<Navigate to={portalPath('/login')} replace />} />
+      <Route path={`${PORTAL_BASE}/login`} element={<LoginPage />} />
+      <Route path={PORTAL_BASE} element={<AppShell />}>
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/ordenes" element={<WorkOrdersPage />} />
-          <Route path="/ordenes/:id" element={<WorkOrderDetailPage />} />
-          <Route path="/inventario" element={<InventoryPage />} />
-          <Route path="/aceite" element={<AceitePage />} />
-          <Route path="/recepcion" element={<ReceiveStockPage />} />
-          <Route path="/clientes" element={<CustomersPage />} />
-          <Route path="/clientes/:id" element={<CustomerDetailPage />} />
-          <Route path="/vehiculos/:id" element={<VehicleDetailPage />} />
-          <Route path="/caja" element={<CashPage />} />
-          <Route path="/ventas" element={<SalesPage />} />
-          <Route path="/ventas/:id" element={<SaleDetailPage />} />
-          <Route path="/facturacion" element={<InvoicesPage />} />
-          <Route path="/facturacion/:id" element={<InvoiceDetailPage />} />
-          <Route path="/informes" element={<ReportsPage />} />
-          <Route path="/admin/nomina" element={<PayrollPage />} />
-          <Route path="/admin/usuarios" element={<UsersPage />} />
-          <Route path="/admin/roles" element={<RolesPage />} />
-          <Route path="/admin/roles/:id" element={<RoleDetailPage />} />
-          <Route path="/admin/servicios" element={<ServicesPage />} />
-          <Route path="/admin/impuestos" element={<TaxRatesPage />} />
-          <Route path="/admin/configuracion" element={<SettingsPage />} />
-          <Route path="/admin/resoluciones-fiscales" element={<FiscalResolutionsPage />} />
-          <Route path="/admin/auditoria" element={<AuditPage />} />
-          <Route path="/admin/vista-rol" element={<RolePreviewPage />} />
+          <Route index element={<DashboardPage />} />
+          <Route path="ordenes" element={<WorkOrdersPage />} />
+          <Route path="ordenes/:id" element={<WorkOrderDetailPage />} />
+          <Route path="inventario" element={<InventoryPage />} />
+          <Route path="aceite" element={<AceitePage />} />
+          <Route path="recepcion" element={<ReceiveStockPage />} />
+          <Route path="clientes" element={<CustomersPage />} />
+          <Route path="clientes/:id" element={<CustomerDetailPage />} />
+          <Route path="vehiculos/:id" element={<VehicleDetailPage />} />
+          <Route path="caja" element={<CashPage />} />
+          <Route path="ventas" element={<SalesPage />} />
+          <Route path="ventas/:id" element={<SaleDetailPage />} />
+          <Route path="facturacion" element={<InvoicesPage />} />
+          <Route path="facturacion/:id" element={<InvoiceDetailPage />} />
+          <Route path="informes" element={<ReportsPage />} />
+          <Route path="admin/nomina" element={<PayrollPage />} />
+          <Route path="admin/finanzas-taller" element={<WorkshopFinancePage />} />
+          <Route path="admin/usuarios" element={<UsersPage />} />
+          <Route path="admin/roles" element={<RolesPage />} />
+          <Route path="admin/roles/:id" element={<RoleDetailPage />} />
+          <Route path="admin/servicios" element={<ServicesPage />} />
+          <Route path="admin/impuestos" element={<TaxRatesPage />} />
+          <Route path="admin/configuracion" element={<SettingsPage />} />
+          <Route path="admin/resoluciones-fiscales" element={<FiscalResolutionsPage />} />
+          <Route path="admin/auditoria" element={<AuditPage />} />
+          <Route path="admin/vista-rol" element={<RolePreviewPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

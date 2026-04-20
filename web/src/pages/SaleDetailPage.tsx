@@ -12,6 +12,7 @@ import type {
   TaxRate,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 import { useConfirm } from '../components/confirm/ConfirmProvider'
 import { PageHeader } from '../components/layout/PageHeader'
 import { formatCopFromString, normalizeMoneyDecimalStringForApi } from '../utils/copFormat'
@@ -315,7 +316,7 @@ export function SaleDetailPage() {
         method: 'POST',
         body: JSON.stringify({}),
       })
-      navigate(`/facturacion/${res.id}`)
+      navigate(portalPath(`/facturacion/${res.id}`))
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : 'No se pudo generar la factura')
     } finally {
@@ -372,7 +373,7 @@ export function SaleDetailPage() {
       <div className="space-y-3">
         <button
           type="button"
-          onClick={() => navigate('/ventas')}
+          onClick={() => navigate(portalPath('/ventas'))}
           className="text-sm text-brand-700 hover:underline dark:text-brand-300"
         >
           ← Volver a ventas
@@ -400,7 +401,7 @@ export function SaleDetailPage() {
             </span>
             {sale.originWorkOrder ? (
               <Link
-                to={`/ordenes/${sale.originWorkOrder.id}`}
+                to={portalPath(`/ordenes/${sale.originWorkOrder.id}`)}
                 className="text-xs text-brand-700 hover:underline dark:text-brand-300"
               >
                 (OT {sale.originWorkOrder.publicCode})
@@ -430,7 +431,7 @@ export function SaleDetailPage() {
               Imprimir comprobante
             </button>
             <Link
-              to="/ventas"
+              to={portalPath('/ventas')}
               className="text-sm text-brand-700 hover:underline dark:text-brand-300"
             >
               ← Volver

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath, stripPortalBase } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
@@ -37,17 +38,17 @@ type DashboardSection = {
 }
 
 const MODULE_PRIORITY: Record<string, number> = {
-  '/caja': 120,
-  '/ordenes': 110,
-  '/recepcion': 95,
-  '/inventario': 90,
-  '/aceite': 85,
-  '/clientes': 70,
-  '/informes': 60,
-  '/admin/usuarios': 45,
-  '/admin/roles': 40,
-  '/admin/auditoria': 35,
-  '/admin/configuracion': 30,
+  [portalPath('/caja')]: 120,
+  [portalPath('/ordenes')]: 110,
+  [portalPath('/recepcion')]: 95,
+  [portalPath('/inventario')]: 90,
+  [portalPath('/aceite')]: 85,
+  [portalPath('/clientes')]: 70,
+  [portalPath('/informes')]: 60,
+  [portalPath('/admin/usuarios')]: 45,
+  [portalPath('/admin/roles')]: 40,
+  [portalPath('/admin/auditoria')]: 35,
+  [portalPath('/admin/configuracion')]: 30,
 }
 
 function modulePriority(module: DashboardModule): number {
@@ -73,7 +74,7 @@ export function DashboardPage() {
       description: 'Acciones principales del taller para caja, órdenes e inventario.',
       modules: [
         {
-          to: '/caja',
+          to: portalPath('/caja'),
           title: 'Caja',
           description: 'Abrir/cerrar sesión de caja y registrar movimientos.',
           icon: Wallet,
@@ -81,7 +82,7 @@ export function DashboardPage() {
           enabled: true,
         },
         {
-          to: '/ordenes',
+          to: portalPath('/ordenes'),
           title: 'Órdenes',
           description: 'Seguimiento de órdenes de trabajo y cobros por orden.',
           icon: ClipboardList,
@@ -89,7 +90,7 @@ export function DashboardPage() {
           enabled: true,
         },
         {
-          to: '/inventario',
+          to: portalPath('/inventario'),
           title: 'Repuestos',
           description: 'Consulta de ítems, stock y costos de inventario.',
           icon: Package,
@@ -97,7 +98,7 @@ export function DashboardPage() {
           enabled: true,
         },
         {
-          to: '/aceite',
+          to: portalPath('/aceite'),
           title: 'Aceite',
           description: 'Control de canecas, consumos y costos por OT.',
           icon: Droplet,
@@ -105,7 +106,7 @@ export function DashboardPage() {
           enabled: true,
         },
         {
-          to: '/recepcion',
+          to: portalPath('/recepcion'),
           title: 'Recepción',
           description: 'Registrar entradas de stock y compras del día.',
           icon: Inbox,
@@ -120,7 +121,7 @@ export function DashboardPage() {
       description: 'Gestión comercial y visibilidad de resultados del taller.',
       modules: [
         {
-          to: '/clientes',
+          to: portalPath('/clientes'),
           title: 'Clientes',
           description: 'Gestionar clientes, vehículos y su historial.',
           icon: Users,
@@ -128,7 +129,7 @@ export function DashboardPage() {
           enabled: true,
         },
         {
-          to: '/informes',
+          to: portalPath('/informes'),
           title: 'Informes',
           description: 'Métricas de actividad, ingresos y desempeño operativo.',
           icon: BarChart3,
@@ -142,7 +143,7 @@ export function DashboardPage() {
       description: 'Gestión de permisos, auditoría y parámetros globales.',
       modules: [
         {
-          to: '/admin/usuarios',
+          to: portalPath('/admin/usuarios'),
           title: 'Usuarios',
           description: 'Alta de cuentas, estado y asignación de roles.',
           icon: UsersRound,
@@ -150,7 +151,7 @@ export function DashboardPage() {
           enabled: true,
         },
         {
-          to: '/admin/roles',
+          to: portalPath('/admin/roles'),
           title: 'Roles',
           description: 'Diseñar perfiles de acceso por permisos.',
           icon: Shield,
@@ -158,7 +159,7 @@ export function DashboardPage() {
           enabled: true,
         },
         {
-          to: '/admin/auditoria',
+          to: portalPath('/admin/auditoria'),
           title: 'Auditoría',
           description: 'Revisar trazabilidad de acciones y cambios.',
           icon: ScrollText,
@@ -166,7 +167,7 @@ export function DashboardPage() {
           enabled: true,
         },
         {
-          to: '/admin/configuracion',
+          to: portalPath('/admin/configuracion'),
           title: 'Configuración',
           description: 'Parámetros del taller, políticas y soporte.',
           icon: Settings,
@@ -212,7 +213,11 @@ export function DashboardPage() {
     .filter((module) => module.enabled)
     .sort((a, b) => modulePriority(b) - modulePriority(a))
     .slice(0, 4)
-  const moduleByPath = new Map(orderedSections.flatMap((section) => section.modules).map((module) => [module.to, module]))
+  const moduleByPath = new Map(
+    orderedSections
+      .flatMap((section) => section.modules)
+      .map((module) => [stripPortalBase(module.to), module]),
+  )
   const resumeModulePath = getStoredLastModulePath()
   const resumeModule = resumeModulePath ? moduleByPath.get(resumeModulePath) ?? null : null
   const quickActionsWithoutResume = resumeModule
@@ -262,7 +267,7 @@ export function DashboardPage() {
                     to={resumeModule.to}
                     className="inline-flex max-w-full min-h-[40px] flex-wrap items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-800 shadow-sm transition hover:bg-brand-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-brand-500/60 dark:bg-brand-900/55 dark:text-brand-50 dark:hover:bg-brand-900/75 dark:focus-visible:ring-offset-slate-900"
                   >
-                    <LocateFixed className="size-4 shrink-0" strokeWidth={1.8} aria-hidden />
+                    <LocateFixed className="size-6 shrink-0" strokeWidth={1.75} aria-hidden />
                     <span className="min-w-0 break-words">Continuar: {resumeModule.title}</span>
                   </Link>
                 )}
@@ -274,7 +279,7 @@ export function DashboardPage() {
                       to={action.to}
                       className="inline-flex max-w-full min-h-[40px] flex-wrap items-center gap-2 rounded-lg border border-slate-200/90 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-brand-200 hover:text-brand-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-700 dark:hover:text-brand-200 dark:focus-visible:ring-offset-slate-900"
                     >
-                      <Icon className="size-4 shrink-0" strokeWidth={1.8} aria-hidden />
+                      <Icon className="size-6 shrink-0" strokeWidth={1.75} aria-hidden />
                       <span className="min-w-0 break-words">{action.title}</span>
                     </Link>
                   )
@@ -335,8 +340,8 @@ export function DashboardPage() {
               return (
                 <Link key={`focus-${module.to}`} to={module.to} className={cardClass}>
                   <div className="flex items-start gap-3">
-                    <div className="rounded-lg border border-brand-200/80 bg-brand-50 p-2 text-brand-700 dark:border-brand-700/70 dark:bg-brand-900/40 dark:text-brand-200">
-                      <Icon className="size-4" strokeWidth={1.8} aria-hidden />
+                    <div className="rounded-lg border border-brand-200/80 bg-brand-50 p-3 text-brand-700 dark:border-brand-700/70 dark:bg-brand-900/40 dark:text-brand-200">
+                      <Icon className="size-7" strokeWidth={1.65} aria-hidden />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{module.title}</p>
@@ -374,13 +379,15 @@ export function DashboardPage() {
                 return (
                   <div key={module.title} className={`${mutedCardClass} min-h-[9.5rem]`}>
                     <div className="flex items-start gap-3">
-                      <div className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                        <Icon className="size-4" strokeWidth={1.8} aria-hidden />
+                      <div className="rounded-lg border border-slate-200 bg-white p-3 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <Icon className="size-7" strokeWidth={1.65} aria-hidden />
                       </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{module.title}</p>
-                      <p className="mt-1 text-sm leading-snug [overflow-wrap:anywhere]">{module.description}</p>
-                        {module.hint ? <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">{module.hint}</p> : null}
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{module.title}</p>
+                        <p className="mt-1 text-sm leading-snug [overflow-wrap:anywhere]">{module.description}</p>
+                        {module.hint ? (
+                          <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">{module.hint}</p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -393,8 +400,8 @@ export function DashboardPage() {
                   className={`${cardClass} focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="rounded-lg border border-brand-200/80 bg-brand-50 p-2 text-brand-700 dark:border-brand-700/70 dark:bg-brand-900/40 dark:text-brand-200">
-                      <Icon className="size-4" strokeWidth={1.8} aria-hidden />
+                    <div className="rounded-lg border border-brand-200/80 bg-brand-50 p-3 text-brand-700 dark:border-brand-700/70 dark:bg-brand-900/40 dark:text-brand-200">
+                      <Icon className="size-7" strokeWidth={1.65} aria-hidden />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{module.title}</p>

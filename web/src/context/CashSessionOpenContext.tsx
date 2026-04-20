@@ -16,7 +16,8 @@ type CashSessionOpenContextValue = {
   /** `null` mientras carga la primera vez */
   open: boolean | null
   loadStatus: LoadStatus
-  refresh: () => Promise<void>
+  /** Devuelve si hay caja abierta tras refrescar (útil para validar justo antes de un POST). */
+  refresh: () => Promise<boolean>
 }
 
 const CashSessionOpenContext = createContext<CashSessionOpenContextValue | null>(null)
@@ -26,15 +27,18 @@ export function CashSessionOpenProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<boolean | null>(null)
   const [loadStatus, setLoadStatus] = useState<LoadStatus>('loading')
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<boolean> => {
     setLoadStatus((s) => (s === 'ready' ? s : 'loading'))
     try {
       const r = await api<{ open: boolean }>('/cash/sessions/open-status')
-      setOpen(Boolean(r.open))
+      const isOpen = Boolean(r.open)
+      setOpen(isOpen)
       setLoadStatus('ready')
+      return isOpen
     } catch {
       setOpen(false)
       setLoadStatus('error')
+      return false
     }
   }, [])
 

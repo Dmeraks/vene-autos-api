@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 
@@ -89,7 +90,7 @@ export function VehicleDetailPage() {
     return (
       <div className="va-alert-error-block">
         {msg}
-        <Link to="/clientes" className="mt-4 block text-sm underline dark:text-brand-300">
+        <Link to={portalPath('/clientes')} className="mt-4 block text-sm underline dark:text-brand-300">
           ← Clientes
         </Link>
       </div>
@@ -102,7 +103,7 @@ export function VehicleDetailPage() {
     <div className={pageClass}>
       <PageHeader
         beforeTitle={
-          <Link to={`/clientes/${v.customerId}`} className={backLinkClass}>
+          <Link to={portalPath(`/clientes/${v.customerId}`)} className={backLinkClass}>
             ← {v.customer.displayName}
           </Link>
         }
@@ -150,7 +151,7 @@ export function VehicleDetailPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <h2 className="font-semibold text-slate-800 dark:text-slate-100">Órdenes de este vehículo</h2>
             <Link
-              to={`/ordenes?vehicleId=${encodeURIComponent(v.id)}&plate=${encodeURIComponent(v.plate)}`}
+              to={portalPath(`/ordenes?vehicleId=${encodeURIComponent(v.id)}&plate=${encodeURIComponent(v.plate)}`)}
               className="shrink-0 text-sm font-medium text-brand-700 hover:underline dark:text-brand-300"
             >
               Ver en lista de órdenes →
@@ -160,7 +161,7 @@ export function VehicleDetailPage() {
             <ul className="mt-2 space-y-2">
               {orders.map((o) => (
                 <li key={o.id}>
-                  <Link to={`/ordenes/${o.id}`} className="text-sm text-brand-700 hover:underline dark:text-brand-300">
+                  <Link to={portalPath(`/ordenes/${o.id}`)} className="text-sm text-brand-700 hover:underline dark:text-brand-300">
                     {o.publicCode} — {o.description.slice(0, 60)}
                     {o.description.length > 60 ? '…' : ''}
                   </Link>

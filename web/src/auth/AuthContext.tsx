@@ -10,6 +10,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { api, setToken, getToken } from '../api/client'
 import type { AuthUser, LoginResponse } from '../api/types'
+import { portalPath } from '../constants/portalPath'
 import { getStoredLastModulePath } from '../utils/lastModule'
 import { mapMeToAuthUser, type MeApiUser } from './mapMeUser'
 
@@ -33,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const on401 = () => {
       setUser(null)
-      navigate('/login', { replace: true })
+      navigate(portalPath('/login'), { replace: true })
     }
     window.addEventListener('vene:unauthorized', on401)
     return () => window.removeEventListener('vene:unauthorized', on401)
@@ -81,7 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           signal: ctrl.signal,
         })
         applyAuthResponse(res)
-        navigate(getStoredLastModulePath() ?? '/', { replace: true })
+        const m = getStoredLastModulePath()
+        navigate(m ? portalPath(m) : portalPath('/'), { replace: true })
       } finally {
         window.clearTimeout(t)
       }
@@ -97,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setToken(null)
     setUser(null)
-    navigate('/login', { replace: true })
+    navigate(portalPath('/login'), { replace: true })
   }, [navigate])
 
   const can = useCallback(

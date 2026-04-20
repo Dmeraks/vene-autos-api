@@ -116,6 +116,11 @@ export function CashPage() {
   const [notesMin, setNotesMin] = useState(25)
 
   const [current, setCurrent] = useState<CurrentSession | null | undefined>(undefined)
+  /** Debajo de `current`: antes estaba arriba y lanzaba TDZ → pantalla Caja en blanco. */
+  const showOpenSessionButton =
+    can('cash_sessions:open') &&
+    current?.status !== 'OPEN' &&
+    !(current === undefined && cashOpen === true)
   const [sessions, setSessions] = useState<SessionRow[]>([])
   const [categories, setCategories] = useState<CashCategory[]>([])
   const [users, setUsers] = useState<UserBrief[]>([])
@@ -155,14 +160,17 @@ export function CashPage() {
 
   const loadCore = useCallback(async () => {
     if (!can('cash_sessions:read')) return
-    try {
-      const cur = await api<CurrentSession | null>('/cash/sessions/current')
-      setCurrent(cur)
-      const list = await api<SessionRow[]>('/cash/sessions')
-      setSessions(list)
-    } catch {
-      setCurrent(null)
-    }
+    /**
+     * Antes: `current` y `sessions` en serie. Si `/current` tardaba o colgaba, nunca se
+     * llamaba `/sessions` y el LED + “Estado actual” quedaban en “Cargando…” sin fin, y el
+     * botón «Abrir sesión» (`current === null`) nunca aparecía.
+     */
+    void api<CurrentSession | null>('/cash/sessions/current')
+      .then((cur) => setCurrent(cur))
+      .catch(() => setCurrent(null))
+    void api<SessionRow[]>('/cash/sessions')
+      .then((list) => setSessions(list))
+      .catch(() => setSessions([]))
   }, [can])
 
   useEffect(() => {
@@ -682,11 +690,15 @@ export function CashPage() {
         <div
           className="va-cash-status-strip"
           data-led={
-            current === undefined ? 'pending' : current != null && current.status === 'OPEN' ? 'open' : 'closed'
+            current === undefined && cashOpen !== false
+              ? 'pending'
+              : current != null && current.status === 'OPEN'
+                ? 'open'
+                : 'closed'
           }
         >
           <span className="relative flex h-3 w-3 shrink-0 items-center justify-center" aria-hidden>
-            {current === undefined ? (
+            {current === undefined && cashOpen !== false ? (
               <span className="block h-2.5 w-2.5 animate-pulse rounded-full bg-slate-400/60 ring-1 ring-slate-400/40 dark:bg-slate-600 dark:ring-slate-500/40" />
             ) : current != null && current.status === 'OPEN' ? (
               <>
@@ -698,7 +710,8 @@ export function CashPage() {
             )}
           </span>
           <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-            {current === undefined && 'Consultando estado de caja…'}
+            {current === undefined && cashOpen !== false && 'Consultando estado de caja…'}
+            {current === undefined && cashOpen === false && 'Sesión cerrada'}
             {current === null && 'Sesión cerrada'}
             {current != null && current.status === 'OPEN' && (
               <>
@@ -749,7 +762,7 @@ export function CashPage() {
               >
                 Cerrar sesión
               </button>
-            ) : can('cash_sessions:open') && current === null ? (
+            ) : showOpenSessionButton ? (
               <button
                 type="button"
                 onClick={() => setOpenSessionModalOpen(true)}
@@ -778,9 +791,14 @@ export function CashPage() {
       {tab === 'sesion' && can('cash_sessions:read') && (
         <div className={surfaceCardClass}>
             <h2 className="va-section-title">Estado actual</h2>
-            {current === undefined && (
+            {current === undefined && (cashOpen === null || cashOpen === true) ? (
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">Cargando…</p>
-            )}
+            ) : null}
+            {current === undefined && cashOpen === false ? (
+              <p className="mt-2 text-sm font-medium text-amber-800 dark:text-amber-100">
+                No hay sesión abierta (estado de caja: cerrada).
+              </p>
+            ) : null}
             {current === null && (
               <p className="mt-2 text-sm font-medium text-amber-800 dark:text-amber-100">No hay sesión abierta.</p>
             )}

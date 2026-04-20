@@ -3,7 +3,9 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  /** En producción el panel vive bajo /portal-transaccional-interno/; en dev se usa / para comodidad. */
+  base: mode === 'production' ? '/portal-transaccional-interno/' : '/',
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
@@ -16,4 +18,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

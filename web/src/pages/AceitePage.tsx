@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { OilDrumGauge } from '../components/aceite/OilDrumGauge'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import type { InventoryItem, OilDrumEconomicsItem, OilDrumEconomicsResponse } from '../api/types'
@@ -296,7 +297,7 @@ export function AceitePage() {
               de aceites que manejás en{' '}
               <strong className="font-medium text-slate-800 dark:text-slate-200">caneca o tambor de 55 galones</strong>{' '}
               (u otro bulto grande equivalente). Los datos vienen del mismo inventario que{' '}
-              <Link to="/inventario" className="font-medium text-brand-700 underline hover:text-brand-800 dark:text-brand-300">
+              <Link to={portalPath('/inventario')} className="font-medium text-brand-700 underline hover:text-brand-800 dark:text-brand-300">
                 Repuestos
               </Link>
               .
@@ -322,7 +323,7 @@ export function AceitePage() {
           </p>
           <div className="mt-4">
             <Link
-              to="/inventario"
+              to={portalPath('/inventario')}
               className="va-btn-primary inline-flex"
             >
               Ir a Repuestos
@@ -470,7 +471,7 @@ export function AceitePage() {
           {canEditInv ? (
             <p className="text-sm text-slate-600 dark:text-slate-300">
               Para <strong className="font-medium text-slate-800 dark:text-slate-200">ajustar costos, unidad o cantidad inicial</strong>, usá{' '}
-              <Link to="/inventario" className="font-medium text-brand-700 underline dark:text-brand-300">
+              <Link to={portalPath('/inventario')} className="font-medium text-brand-700 underline dark:text-brand-300">
                 Repuestos
               </Link>
               . Las salidas por órdenes de trabajo siguen descontando desde allí.

@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
-import { ClientPortalLandingAside } from '../components/portal/ClientPortalLandingAside'
+import { portalPath } from '../constants/portalPath'
 
 function loginFailureMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -26,7 +26,7 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   if (ready && user) {
-    return <Navigate to="/" replace />
+    return <Navigate to={portalPath('/')} replace />
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -52,76 +52,72 @@ export function LoginPage() {
   }
 
   const fieldClass =
-    'h-9 min-w-0 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-black shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] placeholder:text-zinc-500 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/25 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder:text-zinc-400 dark:focus:border-brand-500 dark:focus:ring-brand-500/35'
-
-  /**
-   * Bloque acotado en ancho (no w-full del header) para que el aviso de error no sea una franja
-   * de borde a borde. Segunda fila solo para el mensaje, alineado con el formulario.
-   */
-  const accessSlot = (
-    <div className="ml-auto flex w-full min-w-0 max-w-[min(100%,22rem)] flex-col gap-1.5 sm:max-w-[26rem] lg:max-w-[28rem]">
-      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:gap-3">
-        <div className="flex shrink-0 items-center gap-2 border-l-2 border-brand-600 pl-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-black dark:text-white">
-            Acceso
-          </p>
-        </div>
-
-        <form
-          className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-2"
-          onSubmit={onSubmit}
-          noValidate
-        >
-          <label htmlFor="email" className="sr-only">
-            Correo
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="username"
-            required
-            placeholder="Correo"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={`${fieldClass} lg:max-w-[12rem]`}
-          />
-          <label htmlFor="password" className="sr-only">
-            Contraseña
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            placeholder="Contraseña"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={`${fieldClass} lg:max-w-[10rem]`}
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="va-btn-primary h-9 !min-h-0 shrink-0 rounded-lg px-4 py-0 text-xs font-semibold tracking-tight disabled:opacity-50 lg:px-5"
-          >
-            {loading ? '…' : 'Entrar'}
-          </button>
-        </form>
-      </div>
-
-      {err ? (
-        <p
-          className="va-alert-error text-[11px] leading-snug shadow-sm lg:text-xs"
-          role="alert"
-        >
-          {err}
-        </p>
-      ) : null}
-    </div>
-  )
+    'h-10 min-w-0 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] placeholder:text-zinc-500 focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/15 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-400 dark:focus:ring-zinc-400/20'
 
   return (
-    <div className="va-landing-commercial-brand min-h-dvh w-full bg-white text-black dark:bg-black dark:text-white">
-      <ClientPortalLandingAside accessSlot={accessSlot} />
+    <div className="flex min-h-dvh flex-col bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <header className="border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mx-auto flex max-w-md items-center justify-between gap-3">
+          <img
+            src="/logo_landing.png"
+            alt="Vene Autos"
+            className="h-9 w-auto max-w-[200px] select-none"
+            draggable={false}
+          />
+          <Link
+            to="/"
+            className="text-xs font-semibold uppercase tracking-wide text-zinc-600 underline-offset-4 transition hover:text-zinc-950 hover:underline dark:text-zinc-400 dark:hover:text-white"
+          >
+            Volver al sitio
+          </Link>
+        </div>
+      </header>
+
+      <main className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-[min(100%,22rem)] rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+          <h1 className="text-lg font-semibold text-zinc-950 dark:text-white">Acceso al panel</h1>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Ingresá con tu correo y contraseña del taller.</p>
+
+          <form className="mt-6 flex flex-col gap-3" onSubmit={onSubmit} noValidate>
+            <label className="block text-sm">
+              <span className="text-zinc-600 dark:text-zinc-300">Correo</span>
+              <input
+                type="email"
+                autoComplete="username"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`${fieldClass} mt-1`}
+                placeholder="correo@empresa.com"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-600 dark:text-zinc-300">Contraseña</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={`${fieldClass} mt-1`}
+                placeholder="Mínimo 8 caracteres"
+              />
+            </label>
+            {err ? (
+              <p className="va-alert-error text-xs leading-snug" role="alert">
+                {err}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-1 inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-lg border border-zinc-900 bg-zinc-950 text-sm font-semibold text-white shadow-sm ring-1 ring-black/10 transition hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-300 dark:bg-zinc-100 dark:text-zinc-950 dark:ring-white/10 dark:hover:bg-white dark:focus-visible:ring-zinc-300/40 dark:focus-visible:ring-offset-zinc-900"
+            >
+              {loading ? '…' : 'Entrar'}
+            </button>
+          </form>
+        </div>
+      </main>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { api } from '../../api/client'
 import { useAuth } from '../../auth/AuthContext'
 import { CopyRolePermissionsBar, type RoleForPermissionCopy } from '../../components/CopyRolePermissionsBar'
 import { useConfirm } from '../../components/confirm/ConfirmProvider'
+import { portalPath } from '../../constants/portalPath'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { PermissionPicker } from '../../components/PermissionPicker'
 import { RoleProfileTemplatesPanel } from '../../components/RoleProfileTemplatesPanel'
@@ -106,7 +107,7 @@ export function RoleDetailPage() {
     if (!ok) return
     try {
       await api(`/roles/${id}`, { method: 'DELETE' })
-      nav('/admin/roles')
+      nav(portalPath('/admin/roles'))
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'No se pudo eliminar')
     }
@@ -117,7 +118,7 @@ export function RoleDetailPage() {
       <div className="va-alert-error-block">
         {msg}
         <div className="mt-4">
-          <Link to="/admin/roles" className="font-medium text-brand-800 underline">
+          <Link to={portalPath('/admin/roles')} className="font-medium text-brand-800 underline">
             Volver a roles
           </Link>
         </div>
@@ -131,7 +132,7 @@ export function RoleDetailPage() {
     <div className={pageClass}>
       <PageHeader
         beforeTitle={
-          <Link to="/admin/roles" className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-300">
+          <Link to={portalPath('/admin/roles')} className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-300">
             ← Roles
           </Link>
         }

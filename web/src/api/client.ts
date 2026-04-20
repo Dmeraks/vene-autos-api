@@ -103,7 +103,17 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   if (res.status === 204) return undefined as T
-  return (await res.json()) as T
+  const text = await res.text()
+  if (!text.trim()) return undefined as T
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new ApiError(
+      'La respuesta del servidor no es JSON válido. Si acabás de guardar datos, revisá la consola del API.',
+      res.status,
+      text,
+    )
+  }
 }
 
 /**

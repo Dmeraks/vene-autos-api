@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
 import type { InvoiceListResponse, InvoiceStatus } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { formatCopFromString } from '../utils/copFormat'
 
@@ -95,13 +96,13 @@ export function InvoicesPage() {
           canManageResolutions ? (
             <div className="flex gap-2">
               <Link
-                to="/admin/resoluciones-fiscales"
+                to={portalPath('/admin/resoluciones-fiscales')}
                 className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
               >
                 Resoluciones
               </Link>
               <Link
-                to="/admin/configuracion#cfg-dian"
+                to={`${portalPath('/admin/configuracion')}#cfg-dian`}
                 className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
               >
                 Configurar DIAN
@@ -172,7 +173,7 @@ export function InvoicesPage() {
                 <tr key={inv.id} className="text-sm">
                   <td className="px-4 py-3 font-medium">
                     <Link
-                      to={`/facturacion/${inv.id}`}
+                      to={portalPath(`/facturacion/${inv.id}`)}
                       className="text-sky-700 hover:underline dark:text-sky-300"
                     >
                       {inv.documentNumber}
@@ -189,12 +190,12 @@ export function InvoicesPage() {
                   </td>
                   <td className="px-4 py-3 text-xs">
                     {inv.saleId ? (
-                      <Link to={`/ventas/${inv.saleId}`} className="text-sky-600 hover:underline">
+                      <Link to={portalPath(`/ventas/${inv.saleId}`)} className="text-sky-600 hover:underline">
                         Venta
                       </Link>
                     ) : inv.workOrderId ? (
                       <Link
-                        to={`/ordenes/${inv.workOrderId}`}
+                        to={portalPath(`/ordenes/${inv.workOrderId}`)}
                         className="text-sky-600 hover:underline"
                       >
                         OT

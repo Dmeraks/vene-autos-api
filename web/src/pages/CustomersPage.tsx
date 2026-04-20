@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
+import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { useAuth } from '../auth/AuthContext'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
@@ -74,7 +75,7 @@ export function CustomersPage() {
           {rows.map((c) => (
             <li key={c.id}>
               <Link
-                to={`/clientes/${c.id}`}
+                to={portalPath(`/clientes/${c.id}`)}
                 className={customerCardClass}
               >
                 <p className="font-medium text-slate-900 dark:text-slate-50">{c.displayName}</p>

@@ -11,6 +11,7 @@ import {
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError, openAuthenticatedHtml } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 import { useAlert, useConfirm } from '../components/confirm/ConfirmProvider'
 import { ClientConsentSignModal } from '../components/work-order/ClientConsentSignModal'
 import { ClientConsentSignedModal } from '../components/work-order/ClientConsentSignedModal'
@@ -1527,7 +1528,7 @@ export function WorkOrderDetailPage() {
       <div className="va-alert-error-block">
         {err ?? 'Orden no válida'}
         <div className="mt-4">
-          <Link to="/ordenes" className="text-sm font-medium text-brand-700 underline">
+          <Link to={portalPath('/ordenes')} className="text-sm font-medium text-brand-700 underline">
             Volver al listado
           </Link>
         </div>
@@ -1623,7 +1624,7 @@ export function WorkOrderDetailPage() {
     <div className={detailRootClass}>
       <PageHeader
         beforeTitle={
-          <Link to="/ordenes" className={backLinkClass}>
+          <Link to={portalPath('/ordenes')} className={backLinkClass}>
             ← Órdenes
           </Link>
         }
@@ -1730,7 +1731,7 @@ export function WorkOrderDetailPage() {
             {' · '}
             <Link
               className="font-medium text-violet-800 underline hover:text-violet-900 dark:text-violet-200 dark:hover:text-white"
-              to={`/ordenes/${wo.parentWorkOrder.id}`}
+              to={portalPath(`/ordenes/${wo.parentWorkOrder.id}`)}
             >
               Ver orden origen {wo.parentWorkOrder.publicCode}
             </Link>
@@ -1740,7 +1741,7 @@ export function WorkOrderDetailPage() {
         {wo.status === 'DELIVERED' && can('work_orders:create') && !cashierOnly ? (
           <div className="mt-4">
             <Link
-              to={`/ordenes?warrantyFrom=${wo.id}`}
+              to={portalPath(`/ordenes?warrantyFrom=${wo.id}`)}
               className="inline-flex items-center rounded-xl border border-violet-300 bg-white px-4 py-2 text-sm font-medium text-violet-900 shadow-sm hover:bg-violet-50 dark:border-violet-700 dark:bg-slate-900 dark:text-violet-100 dark:hover:bg-violet-950/50"
             >
               Nueva orden de garantía o seguimiento…
@@ -1764,7 +1765,7 @@ export function WorkOrderDetailPage() {
                     method: 'POST',
                     body: JSON.stringify({}),
                   })
-                  navigate(`/facturacion/${res.id}`)
+                  navigate(portalPath(`/facturacion/${res.id}`))
                 } catch (err) {
                   setInvoiceMsg(
                     err instanceof ApiError ? err.message : 'No se pudo generar la factura',
@@ -1801,7 +1802,7 @@ export function WorkOrderDetailPage() {
             <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-700 dark:text-slate-200">
               {wo.warrantyFollowUps.map((w) => (
                 <li key={w.id}>
-                  <Link className="font-medium text-brand-700 underline hover:text-brand-800 dark:text-brand-300" to={`/ordenes/${w.id}`}>
+                  <Link className="font-medium text-brand-700 underline hover:text-brand-800 dark:text-brand-300" to={portalPath(`/ordenes/${w.id}`)}>
                     OT {w.publicCode}
                   </Link>
                   <span className="text-slate-500 dark:text-slate-300"> — {STATUS[w.status].label}</span>
@@ -2218,7 +2219,7 @@ export function WorkOrderDetailPage() {
                     Reintentar
                   </button>
                   <Link
-                    to="/caja"
+                    to={portalPath('/caja')}
                     className="inline-flex min-h-[44px] items-center text-sm font-medium text-brand-700 underline underline-offset-2 dark:text-brand-300"
                   >
                     Ir a Caja
@@ -2240,7 +2241,7 @@ export function WorkOrderDetailPage() {
                     Actualizar estado
                   </button>
                   <Link
-                    to="/caja"
+                    to={portalPath('/caja')}
                     className="inline-flex min-h-[44px] items-center text-sm font-medium text-amber-950 underline underline-offset-2 dark:text-amber-50"
                   >
                     Ir a Caja

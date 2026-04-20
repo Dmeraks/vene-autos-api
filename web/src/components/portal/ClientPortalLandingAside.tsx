@@ -156,7 +156,7 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
   return (
     <div className="bg-black text-white">
       {/* Navegación en dos carriles (desktop) + hamburguesa con drawer (móvil/tablet) */}
-      <nav className="sticky top-0 z-40 border-b border-zinc-200 bg-white text-black shadow-[0_1px_0_rgba(0,0,0,0.04)] dark:border-zinc-800 dark:bg-black dark:text-white dark:shadow-[0_1px_0_rgba(0,0,0,0.35)]">
+      <nav className="sticky top-0 z-40 border-b border-zinc-800 bg-black text-white shadow-[0_1px_0_rgba(0,0,0,0.35)]">
         {/* Fila 1: marca + (lg+) acceso o (lg-) hamburguesa */}
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex min-h-[56px] items-center justify-between gap-3 py-2">
@@ -193,7 +193,7 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
               aria-expanded={menuOpen}
               aria-controls="menu-drawer"
               onClick={() => setMenuOpen((v) => !v)}
-              className="inline-flex items-center gap-2 border border-zinc-300 bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-black transition hover:border-brand-600 hover:text-brand-700 lg:hidden dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:border-brand-500 dark:hover:text-brand-300"
+              className="inline-flex items-center gap-2 border border-zinc-700 bg-black px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-white transition hover:border-brand-500 hover:text-brand-300 lg:hidden"
             >
               <span className="flex h-4 w-5 flex-col justify-between" aria-hidden="true">
                 <span className="block h-0.5 w-full bg-current" />
@@ -206,7 +206,7 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
         </div>
 
         {/* Fila 2: menú horizontal centrado (solo desktop) */}
-        <div className="hidden border-t border-zinc-200 bg-white lg:block dark:border-zinc-800 dark:bg-black">
+        <div className="hidden border-t border-zinc-800 bg-black lg:block">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div
               className="flex min-h-[40px] w-full items-center justify-center gap-x-8 py-1.5"
@@ -215,32 +215,32 @@ export function ClientPortalLandingAside({ accessSlot }: ClientPortalLandingAsid
             >
               <a
                 href="#inicio"
-                className="border-b-2 border-brand-600 pb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-black transition hover:text-brand-700 dark:text-white"
+                className="border-b-2 border-brand-600 pb-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-white transition hover:text-brand-300"
               >
                 Inicio
               </a>
               <a
                 href="#servicios"
-                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400 transition hover:text-brand-400"
               >
                 Servicios
               </a>
               <a
                 href="#nosotros"
-                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400 transition hover:text-brand-400"
               >
                 Nosotros
               </a>
               <a
                 href="#contacto"
-                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400 transition hover:text-brand-400"
               >
                 Contacto
               </a>
               <Link
                 to="/consultar-ot"
                 title="Consultar orden de trabajo"
-                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-600 transition hover:text-brand-600 dark:text-zinc-300"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400 transition hover:text-brand-400"
               >
                 Consultar OT
               </Link>

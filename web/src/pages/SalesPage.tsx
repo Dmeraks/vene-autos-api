@@ -9,6 +9,7 @@ import type {
   SaleSummary,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 
 const STATUS_LABEL: Record<SaleStatus, string> = {
@@ -104,7 +105,7 @@ export function SalesPage() {
       })
       setCreateOpen(false)
       setCreateDraft({})
-      window.location.href = `/ventas/${res.id}`
+      window.location.href = portalPath(`/ventas/${res.id}`)
     } catch (err) {
       setCreateMsg(err instanceof ApiError ? err.message : 'No se pudo crear la venta')
     } finally {
@@ -194,7 +195,7 @@ export function SalesPage() {
               <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                 <td className="px-3 py-2">
                   <Link
-                    to={`/ventas/${s.id}`}
+                    to={portalPath(`/ventas/${s.id}`)}
                     className="font-medium text-brand-700 hover:underline dark:text-brand-300"
                   >
                     {s.publicCode}

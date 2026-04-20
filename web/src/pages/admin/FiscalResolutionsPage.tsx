@@ -8,6 +8,7 @@ import type {
 } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
 import { useConfirm } from '../../components/confirm/ConfirmProvider'
+import { portalPath } from '../../constants/portalPath'
 import { PageHeader } from '../../components/layout/PageHeader'
 
 const KIND_LABEL: Record<FiscalResolutionKind, string> = {
@@ -146,7 +147,7 @@ export function FiscalResolutionsPage() {
         description="Prefijos y rangos de numeración autorizados por la DIAN. El sistema usa la resolución predeterminada de cada tipo al crear facturas."
         actions={
           <Link
-            to="/facturacion"
+            to={portalPath('/facturacion')}
             className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
           >
             ← Volver a facturación

@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { portalPath } from '../constants/portalPath'
 
 export function ProtectedRoute() {
   const { user, ready } = useAuth()
@@ -14,7 +15,7 @@ export function ProtectedRoute() {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace state={{ from: loc.pathname }} />
+    return <Navigate to={portalPath('/login')} replace state={{ from: loc.pathname }} />
   }
 
   return <Outlet />

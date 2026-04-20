@@ -344,6 +344,17 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
     action: 'configure',
     description: 'Editar el % de comisión de cada técnico (default 50%).',
   },
+  {
+    resource: 'workshop_finance',
+    action: 'read',
+    description: 'Ver líneas de reserva teórica (cierre caja) y deudas del taller.',
+  },
+  {
+    resource: 'workshop_finance',
+    action: 'manage',
+    description:
+      'Gestionar líneas de reserva, registrar deudas y pagos (efectivo genera egreso en caja).',
+  },
 ];
 
 /**
@@ -441,6 +452,8 @@ const BACKEND_REQUIRED_PERMISSION_CODES: readonly string[] = [
   'payroll:calculate',
   'payroll:pay',
   'payroll:configure',
+  'workshop_finance:read',
+  'workshop_finance:manage',
 ];
 
 const CASH_CATEGORIES: Array<{
@@ -660,6 +673,9 @@ async function main() {
     'payroll:read',
     'payroll:calculate',
     'payroll:pay',
+    // Finanzas taller: reservas teóricas al cierre + deudas (misma línea operativa que caja/nómina).
+    'workshop_finance:read',
+    'workshop_finance:manage',
   ];
   const cajeroPerms = pick(...cajeroCodes);
   const cajeroRole = await prisma.role.upsert({
@@ -1003,6 +1019,16 @@ async function main() {
       where: { key: s.key },
       create: { key: s.key, value: s.value as Prisma.InputJsonValue },
       update: {},
+    });
+  }
+
+  const reserveCount = await prisma.workshopReserveLine.count();
+  if (reserveCount === 0) {
+    await prisma.workshopReserveLine.createMany({
+      data: [
+        { name: 'Capitalización', percent: new Prisma.Decimal(5), sortOrder: 0 },
+        { name: 'Reserva operativa', percent: new Prisma.Decimal(10), sortOrder: 10 },
+      ],
     });
   }
 

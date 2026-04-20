@@ -117,6 +117,8 @@ const DOMAIN_ACTION_HELP: Record<string, string> = {
   'inventory_items.created': 'Se creó un ítem en el catálogo de inventario.',
   'inventory_items.updated': 'Se modificó nombre, costo, stock u otras propiedades del ítem.',
   'inventory.purchase_receipt_created': 'Se registró una recepción de compra que actualiza stock (y costo si aplica).',
+  'workshop_finance.payable.deleted_settled':
+    'Se quitó del listado una deuda que ya estaba saldada. Los pagos y movimientos de caja ya registrados no se borran.',
 }
 
 function explainDomain(row: AuditRowForDetail): AuditDetailSection[] {

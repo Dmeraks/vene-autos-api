@@ -14,6 +14,7 @@ import {
   LogOut,
   Package,
   Percent,
+  PiggyBank,
   Receipt,
   ScrollText,
   Search,
@@ -31,6 +32,7 @@ import type { LoginResponse } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { CashSessionOpenProvider, useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { usePanelTheme, useUiSettings } from '../theme/PanelThemeProvider'
+import { portalPath } from '../constants/portalPath'
 import { setStoredLastModulePath } from '../utils/lastModule'
 import { ThemeToggle } from './ThemeToggle'
 
@@ -49,22 +51,12 @@ function initialsFromName(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-function BrandDiamond({ className }: { className?: string }) {
+/** Logo corporativo fondo negro (`public/logo_panel.png`). */
+const PANEL_BRAND_LOGO_SRC = '/logo_panel.png'
+
+function PanelBrandLogo({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden
-    >
-      <path
-        d="M12 2.5l8.5 9.5L12 21.5l-8.5-9.5L12 2.5z"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <img src={PANEL_BRAND_LOGO_SRC} alt="Vene Autos" draggable={false} className={className} decoding="async" />
   )
 }
 
@@ -112,39 +104,45 @@ const TASK_MODES: TaskMode[] = [
   {
     id: 'cash',
     label: 'Modo Caja',
-    routePrefixes: ['/caja', '/ventas'],
-    relatedRoutes: ['/caja', '/ordenes', '/ventas'],
+    routePrefixes: [portalPath('/caja'), portalPath('/ventas')],
+    relatedRoutes: [portalPath('/caja'), portalPath('/ordenes'), portalPath('/ventas')],
   },
   {
     id: 'orders',
     label: 'Modo Órdenes',
-    routePrefixes: ['/ordenes'],
-    relatedRoutes: ['/ordenes', '/clientes', '/caja'],
+    routePrefixes: [portalPath('/ordenes')],
+    relatedRoutes: [portalPath('/ordenes'), portalPath('/clientes'), portalPath('/caja')],
   },
   {
     id: 'inventory',
     label: 'Modo Inventario',
-    routePrefixes: ['/inventario', '/recepcion', '/aceite'],
-    relatedRoutes: ['/inventario', '/recepcion', '/aceite', '/ordenes'],
+    routePrefixes: [portalPath('/inventario'), portalPath('/recepcion'), portalPath('/aceite')],
+    relatedRoutes: [
+      portalPath('/inventario'),
+      portalPath('/recepcion'),
+      portalPath('/aceite'),
+      portalPath('/ordenes'),
+    ],
   },
   {
     id: 'customers',
     label: 'Modo Clientes',
-    routePrefixes: ['/clientes', '/vehiculos'],
-    relatedRoutes: ['/clientes', '/ordenes'],
+    routePrefixes: [portalPath('/clientes'), portalPath('/vehiculos')],
+    relatedRoutes: [portalPath('/clientes'), portalPath('/ordenes')],
   },
   {
     id: 'admin',
     label: 'Modo Administración',
-    routePrefixes: ['/admin'],
+    routePrefixes: [portalPath('/admin')],
     relatedRoutes: [
-      '/admin/usuarios',
-      '/admin/roles',
-      '/admin/servicios',
-      '/admin/impuestos',
-      '/admin/nomina',
-      '/admin/auditoria',
-      '/admin/configuracion',
+      portalPath('/admin/usuarios'),
+      portalPath('/admin/roles'),
+      portalPath('/admin/servicios'),
+      portalPath('/admin/impuestos'),
+      portalPath('/admin/nomina'),
+      portalPath('/admin/finanzas-taller'),
+      portalPath('/admin/auditoria'),
+      portalPath('/admin/configuracion'),
     ],
   },
 ]
@@ -204,7 +202,7 @@ function AppShellInner() {
   }, [])
 
   useEffect(() => {
-    if (location.pathname !== '/ordenes') return
+    if (location.pathname !== portalPath('/ordenes')) return
     const sp = new URLSearchParams(location.search)
     setPanelSearch(sp.get('search') ?? '')
   }, [location.pathname, location.search])
@@ -213,15 +211,16 @@ function AppShellInner() {
     (e?: FormEvent) => {
       e?.preventDefault()
       const raw = panelSearch.trim()
-      if (location.pathname === '/ordenes') {
+      const ordenesPath = portalPath('/ordenes')
+      if (location.pathname === ordenesPath) {
         const next = new URLSearchParams(location.search)
         if (raw) next.set('search', raw)
         else next.delete('search')
         next.delete('page')
         const qs = next.toString()
-        navigate({ pathname: '/ordenes', search: qs ? `?${qs}` : '' }, { replace: true })
+        navigate({ pathname: ordenesPath, search: qs ? `?${qs}` : '' }, { replace: true })
       } else {
-        navigate(raw ? `/ordenes?search=${encodeURIComponent(raw)}` : '/ordenes')
+        navigate(raw ? `${ordenesPath}?search=${encodeURIComponent(raw)}` : ordenesPath)
       }
     },
     [location.pathname, location.search, navigate, panelSearch],
@@ -291,30 +290,41 @@ function AppShellInner() {
   const links = useMemo((): NavLinkItem[] => {
     const recepcionVisible = can('purchase_receipts:create') && cashSessionOpen === true
     const all: NavLinkItem[] = [
-      { to: '/', label: 'Inicio', Icon: LayoutDashboard, show: true },
-      { to: '/caja', label: 'Caja', Icon: Wallet, show: can('cash_sessions:read') },
-      { to: '/ordenes', label: 'Órdenes', Icon: ClipboardList, show: can('work_orders:read') || can('work_orders:read_portal') },
-      { to: '/ventas', label: 'Ventas', Icon: Receipt, show: can('sales:read') },
+      { to: portalPath('/'), label: 'Inicio', Icon: LayoutDashboard, show: true },
+      { to: portalPath('/caja'), label: 'Caja', Icon: Wallet, show: can('cash_sessions:read') },
       {
-        to: '/facturacion',
+        to: portalPath('/ordenes'),
+        label: 'Órdenes',
+        Icon: ClipboardList,
+        show: can('work_orders:read') || can('work_orders:read_portal'),
+      },
+      { to: portalPath('/ventas'), label: 'Ventas', Icon: Receipt, show: can('sales:read') },
+      {
+        to: portalPath('/facturacion'),
         label: 'Facturación',
         Icon: FileText,
         // Fase 7.5: facturación electrónica desactivada por defecto mientras el taller opere
         // como persona natural. Se emite sólo cuando se activa el switch + hay resolución DIAN.
         show: can('invoices:read') && electronicInvoiceEnabled,
       },
-      { to: '/clientes', label: 'Clientes', Icon: Users, show: can('customers:read') },
-      { to: '/recepcion', label: 'Recepción', Icon: Inbox, show: recepcionVisible },
-      { to: '/inventario', label: 'Repuestos', Icon: Package, show: can('inventory_items:read') },
-      { to: '/aceite', label: 'Aceite', Icon: Droplet, show: can('inventory_items:read') },
-      { to: '/admin/usuarios', label: 'Usuarios', Icon: UsersRound, show: can('users:read') },
-      { to: '/admin/nomina', label: 'Nómina', Icon: HandCoins, show: can('payroll:read') },
-      { to: '/informes', label: 'Informes', Icon: BarChart3, show: can('reports:read') },
-      { to: '/admin/servicios', label: 'Servicios', Icon: Wrench, show: can('services:read') },
-      { to: '/admin/impuestos', label: 'Impuestos', Icon: Percent, show: can('tax_rates:read') },
-      { to: '/admin/roles', label: 'Roles', Icon: Shield, show: can('roles:read') },
-      { to: '/admin/auditoria', label: 'Auditoría', Icon: ScrollText, show: can('audit:read') },
-      { to: '/admin/configuracion', label: 'Configuración', Icon: Settings, show: can('settings:read') },
+      { to: portalPath('/clientes'), label: 'Clientes', Icon: Users, show: can('customers:read') },
+      { to: portalPath('/recepcion'), label: 'Recepción', Icon: Inbox, show: recepcionVisible },
+      { to: portalPath('/inventario'), label: 'Repuestos', Icon: Package, show: can('inventory_items:read') },
+      { to: portalPath('/aceite'), label: 'Aceite', Icon: Droplet, show: can('inventory_items:read') },
+      { to: portalPath('/admin/usuarios'), label: 'Usuarios', Icon: UsersRound, show: can('users:read') },
+      { to: portalPath('/admin/nomina'), label: 'Nómina', Icon: HandCoins, show: can('payroll:read') },
+      {
+        to: portalPath('/admin/finanzas-taller'),
+        label: 'Finanzas taller',
+        Icon: PiggyBank,
+        show: can('workshop_finance:read'),
+      },
+      { to: portalPath('/informes'), label: 'Informes', Icon: BarChart3, show: can('reports:read') },
+      { to: portalPath('/admin/servicios'), label: 'Servicios', Icon: Wrench, show: can('services:read') },
+      { to: portalPath('/admin/impuestos'), label: 'Impuestos', Icon: Percent, show: can('tax_rates:read') },
+      { to: portalPath('/admin/roles'), label: 'Roles', Icon: Shield, show: can('roles:read') },
+      { to: portalPath('/admin/auditoria'), label: 'Auditoría', Icon: ScrollText, show: can('audit:read') },
+      { to: portalPath('/admin/configuracion'), label: 'Configuración', Icon: Settings, show: can('settings:read') },
     ]
     return all.filter((l) => l.show)
   }, [can, cashSessionOpen, electronicInvoiceEnabled])
@@ -572,13 +582,12 @@ function AppShellInner() {
           >
             {!saasSidebarCollapsed ? (
               <>
-                <BrandDiamond className="size-7 shrink-0 text-brand-600 dark:text-brand-400" />
                 <NavLink
-                  to="/"
-                  className="va-app-shell-brand min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-50"
+                  to={portalPath('/')}
+                  className="va-app-shell-brand flex min-w-0 flex-1 items-center overflow-hidden rounded-md outline-offset-2"
                   end
                 >
-                  Vene Autos
+                  <PanelBrandLogo className="h-8 w-auto max-h-9 max-w-[min(100%,11rem)] shrink object-contain object-left" />
                 </NavLink>
                 <button
                   type="button"
@@ -606,13 +615,13 @@ function AppShellInner() {
                   <ChevronRight className="size-4 shrink-0" strokeWidth={2} aria-hidden />
                 </button>
                 <NavLink
-                  to="/"
-                  className="flex shrink-0 rounded-md p-1 text-brand-600 transition hover:bg-white/80 dark:text-brand-400 dark:hover:bg-slate-800/80"
+                  to={portalPath('/')}
+                  className="flex shrink-0 rounded-md p-0.5 transition hover:bg-white/80 dark:hover:bg-slate-800/80"
                   title="Inicio"
                   aria-label="Inicio"
                   end
                 >
-                  <BrandDiamond className="size-6 shrink-0" />
+                  <PanelBrandLogo className="size-8 max-h-8 w-auto max-w-[7rem] object-contain object-left" />
                 </NavLink>
               </>
             )}
@@ -651,12 +660,11 @@ function AppShellInner() {
             <div className={`mx-auto flex w-full flex-col gap-2.5 px-3 py-2.5 sm:px-4 sm:py-3 xl:px-5 xl:py-3.5 ${shellMaxClass}`}>
               <div className="flex items-center justify-between gap-2 lg:hidden">
                 <NavLink
-                  to="/"
-                  className="va-app-shell-brand flex min-w-0 items-center gap-2 text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-50"
+                  to={portalPath('/')}
+                  className="va-app-shell-brand flex min-w-0 items-center overflow-hidden rounded-md outline-offset-2"
                   end
                 >
-                  <BrandDiamond className="size-6 shrink-0 text-brand-600 dark:text-brand-400" />
-                  <span className="truncate">Vene Autos</span>
+                  <PanelBrandLogo className="h-7 w-auto max-w-[min(78vw,15rem)] object-contain object-left sm:h-8 sm:max-w-[16rem]" />
                 </NavLink>
               </div>
               <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -720,11 +728,11 @@ function AppShellInner() {
               className={`mx-auto flex w-full items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-4 xl:px-5 ${shellMaxClass} ${isSaas ? 'lg:justify-end' : ''}`}
             >
               <NavLink
-                to="/"
-                className={`va-app-shell-brand min-w-0 shrink font-semibold tracking-tight text-brand-900 dark:text-brand-100 ${isSaas && user ? 'lg:hidden' : ''}`}
+                to={portalPath('/')}
+                className={`va-app-shell-brand flex min-w-0 shrink items-center overflow-hidden rounded-md outline-offset-2 ${isSaas && user ? 'lg:hidden' : ''}`}
                 end
               >
-                Vene Autos
+                <PanelBrandLogo className="h-8 w-auto max-w-[min(72vw,13rem)] object-contain object-left sm:max-w-[15rem]" />
               </NavLink>
               {classicToolbar}
             </div>

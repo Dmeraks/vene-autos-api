@@ -6,6 +6,7 @@ import type { PermissionRow } from '../../api/types'
 import { CopyRolePermissionsBar } from '../../components/CopyRolePermissionsBar'
 import { PermissionPicker } from '../../components/PermissionPicker'
 import { RoleProfileTemplatesPanel } from '../../components/RoleProfileTemplatesPanel'
+import { portalPath } from '../../constants/portalPath'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
@@ -129,7 +130,7 @@ export function RolesPage() {
               </p>
               {can('roles:read') && (
                 <Link
-                  to={`/admin/roles/${r.id}`}
+                  to={portalPath(`/admin/roles/${r.id}`)}
                   className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline dark:text-brand-300"
                 >
                   Editar permisos →

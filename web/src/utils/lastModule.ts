@@ -1,3 +1,5 @@
+import { stripPortalBase } from '../constants/portalPath'
+
 const LAST_MODULE_STORAGE_KEY = 'vene:last-module-path'
 const RESUME_LAST_MODULE_STORAGE_KEY = 'vene:resume-last-module-enabled'
 
@@ -17,18 +19,20 @@ const MODULE_PREFIXES: Array<{ prefix: string; modulePath: string }> = [
   { prefix: '/admin/vista-rol', modulePath: '/admin/vista-rol' },
 ]
 
-function isSafeAppPath(path: string): boolean {
-  if (!path.startsWith('/')) return false
-  if (path.startsWith('//')) return false
-  if (path.includes('://')) return false
-  if (path === '/login' || path === '/consultar-ot') return false
+function isSafeAppPath(fullPath: string): boolean {
+  if (fullPath.includes('://')) return false
+  const p = stripPortalBase(fullPath)
+  if (!p.startsWith('/')) return false
+  if (p.startsWith('//')) return false
+  if (p === '/login' || p === '/consultar-ot') return false
   return true
 }
 
 export function normalizePathToModule(pathname: string): string | null {
   if (!isSafeAppPath(pathname)) return null
+  const p = stripPortalBase(pathname)
   for (const item of MODULE_PREFIXES) {
-    if (pathname === item.prefix || pathname.startsWith(`${item.prefix}/`)) {
+    if (p === item.prefix || p.startsWith(`${item.prefix}/`)) {
       return item.modulePath
     }
   }

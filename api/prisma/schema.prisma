@@ -50,6 +50,8 @@ model User {
   payrollConfig               TechnicianPayrollConfig? @relation("TechnicianPayrollConfigUser")
   payrollRunsAsTechnician     PayrollRun[]             @relation("PayrollRunTechnician")
   payrollAdjustmentsCreated   PayrollAdjustment[]      @relation("PayrollAdjustmentCreatedBy")
+  workshopPayablesCreated     WorkshopPayable[]       @relation("WorkshopPayableCreatedBy")
+  workshopPayablePaymentsCreated WorkshopPayablePayment[] @relation("WorkshopPayablePaymentCreatedBy")
   /// Cliente del taller enlazado para el rol portal (ver solo OT de vehículos de ese cliente).
   portalCustomerId String?   @map("portal_customer_id")
   portalCustomer   Customer? @relation("UserPortalCustomer", fields: [portalCustomerId], references: [id], onDelete: SetNull)
@@ -517,7 +519,8 @@ model CashSession {
 
   openedBy  User           @relation("CashSessionOpenedBy", fields: [openedById], references: [id])
   closedBy  User?          @relation("CashSessionClosedBy", fields: [closedById], references: [id])
-  movements CashMovement[]
+  movements             CashMovement[]
+  reserveContributions CashSessionReserveContribution[]
 
   @@index([status])
   @@map("cash_sessions")
@@ -565,6 +568,7 @@ model CashMovement {
   invoicePayment         InvoicePayment?
   /// Si el movimiento es un pago de nómina, enlaza 1:1 con la corrida.
   payrollRun             PayrollRun?          @relation("PayrollRunCashMovement")
+  workshopPayablePayment WorkshopPayablePayment?
 
   @@index([sessionId, createdAt])
   @@map("cash_movements")
@@ -1306,4 +1310,86 @@ model PayrollAdjustment {
   @@map("payroll_adjustments")
 }
 
+// --- Finanzas taller: reservas teóricas (cierre caja) y deudas internas ---
+
+/// Línea configurable de “reserva” (% sobre efectivo contado al cerrar caja).
+model WorkshopReserveLine {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(120)
+  percent   Decimal  @db.Decimal(5, 2)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  contributions CashSessionReserveContribution[]
+
+  @@map("workshop_reserve_lines")
+}
+
+/// Aporte diario teórico al cerrar sesión: base = `closingCounted` del arqueo.
+model CashSessionReserveContribution {
+  id                 String   @id @default(cuid())
+  cashSessionId      String   @map("cash_session_id")
+  reserveLineId      String   @map("reserve_line_id")
+  baseCashCounted    Decimal  @map("base_cash_counted") @db.Decimal(18, 2)
+  percentApplied     Decimal  @map("percent_applied") @db.Decimal(5, 2)
+  contributionAmount Decimal  @map("contribution_amount") @db.Decimal(18, 2)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  cashSession CashSession         @relation(fields: [cashSessionId], references: [id], onDelete: Cascade)
+  reserveLine WorkshopReserveLine @relation(fields: [reserveLineId], references: [id], onDelete: Restrict)
+
+  @@unique([cashSessionId, reserveLineId])
+  @@index([reserveLineId, createdAt])
+  @@map("cash_session_reserve_contributions")
+}
+
+enum WorkshopPayableStatus {
+  OPEN
+  SETTLED
+}
+
+enum WorkshopPayablePaymentMethod {
+  CASH
+  TRANSFER
+  OTHER
+}
+
+/// Deuda del taller (manual); saldo se reduce con pagos registrados.
+model WorkshopPayable {
+  id            String                @id @default(cuid())
+  creditorName  String                @map("creditor_name") @db.VarChar(200)
+  description   String?               @db.Text
+  initialAmount Decimal               @map("initial_amount") @db.Decimal(18, 2)
+  balanceAmount Decimal               @map("balance_amount") @db.Decimal(18, 2)
+  status        WorkshopPayableStatus @default(OPEN)
+  createdById   String                @map("created_by_id")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  createdBy User                     @relation("WorkshopPayableCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  payments  WorkshopPayablePayment[]
+
+  @@index([status, createdAt])
+  @@map("workshop_payables")
+}
+
+model WorkshopPayablePayment {
+  id               String                       @id @default(cuid())
+  payableId        String                       @map("payable_id")
+  amount           Decimal                      @db.Decimal(18, 2)
+  method           WorkshopPayablePaymentMethod
+  cashMovementId   String?                      @unique @map("cash_movement_id")
+  note             String?                      @db.Text
+  createdById      String                       @map("created_by_id")
+  createdAt        DateTime                     @default(now()) @map("created_at")
+
+  payable        WorkshopPayable @relation(fields: [payableId], references: [id], onDelete: Cascade)
+  cashMovement   CashMovement?   @relation(fields: [cashMovementId], references: [id], onDelete: SetNull)
+  createdBy      User            @relation("WorkshopPayablePaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([payableId, createdAt])
+  @@map("workshop_payable_payments")
+}
 
