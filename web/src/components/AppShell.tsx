@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   BarChart3,
-  Bell,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -35,6 +34,7 @@ import { panelUsesModernShell } from '../config/operationalNotes'
 import { portalPath } from '../constants/portalPath'
 import { setStoredLastModulePath } from '../utils/lastModule'
 import { ThemeToggle } from './ThemeToggle'
+import { WorkOrderStatusAlertsBell } from './WorkOrderStatusAlertsBell'
 import { useTheme } from '../theme/ThemeContext'
 
 type PreviewRoleRow = { id: string; name: string; slug: string; isSystem: boolean }
@@ -451,11 +451,7 @@ function AppShellInner() {
 
   const saasToolbar = user && (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-      {!taskMode && (
-        <button type="button" className={saasIconButtonClass()} title="Notificaciones" aria-label="Notificaciones">
-          <Bell className="size-[1.125rem]" strokeWidth={1.75} aria-hidden />
-        </button>
-      )}
+      <WorkOrderStatusAlertsBell iconButtonClassName={saasIconButtonClass()} />
       <ThemeToggle variant="icon" />
       {can('auth:assume_role_preview') && (
         <div className="flex min-w-0 max-w-[9.5rem] items-center gap-1 sm:max-w-[12rem]">
