@@ -649,7 +649,7 @@ describe('WorkOrdersService', () => {
         plate: 'EKP-112',
       });
       expect(r.vehicleBrandLogoUrl).toBe(
-        'https://upload.wikimedia.org/wikipedia/commons/e/e7/Toyota.svg',
+        'https://upload.wikimedia.org/wikipedia/commons/e/ee/Toyota_logo_%28Red%29.svg',
       );
     });
   });

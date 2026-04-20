@@ -74,7 +74,10 @@ const NORMALIZED_TO_SLUG: Record<string, string> = {
 
 /**
  * SVG multicolor por slug (clave = valor devuelto por {@link resolveVehicleBrandIconSlug}).
- * Rutas públicas verificadas en Commons; si falta una marca → Simple Icons monocromo.
+ *
+ * **Importante:** muchos SVG en Commons son solo negros (#000) por guías de marca; hay que elegir
+ * archivos con `fill`/`rgb` explícitos (p. ej. Toyota “Red”, Mazda clásico con azul).
+ * Si falta entrada → Simple Icons monocromo.
  */
 const SLUG_FULLCOLOR_COMMONS_SVG: Record<string, string> = {
   audi: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Audi_logo.svg',
@@ -90,7 +93,8 @@ const SLUG_FULLCOLOR_COMMONS_SVG: Record<string, string> = {
   jeep: 'https://upload.wikimedia.org/wikipedia/commons/0/0d/Jeep_logo.svg',
   kia: 'https://upload.wikimedia.org/wikipedia/commons/b/b6/KIA_logo3.svg',
   lexus: 'https://upload.wikimedia.org/wikipedia/commons/7/75/Lexus.svg',
-  mazda: 'https://upload.wikimedia.org/wikipedia/commons/4/43/Mazda_logo_2024_%28vertical%29.svg',
+  /** Palabra + alas en azul corporativo (el 2024 vertical en Commons suele ser solo #000). */
+  mazda: 'https://upload.wikimedia.org/wikipedia/commons/3/3f/Mazda_logo.svg',
   mercedes: 'https://upload.wikimedia.org/wikipedia/commons/4/48/Mercedes-Benz_logo.svg',
   mitsubishi: 'https://upload.wikimedia.org/wikipedia/commons/5/5a/Mitsubishi_logo.svg',
   nissan: 'https://upload.wikimedia.org/wikipedia/commons/0/0f/Nissan_logo.svg',
@@ -100,7 +104,8 @@ const SLUG_FULLCOLOR_COMMONS_SVG: Record<string, string> = {
   subaru: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Subaru_logo.svg',
   suzuki: 'https://upload.wikimedia.org/wikipedia/commons/b/be/Suzuki_logo.svg',
   tesla: 'https://upload.wikimedia.org/wikipedia/commons/b/bb/Tesla_T_symbol.svg',
-  toyota: 'https://upload.wikimedia.org/wikipedia/commons/e/e7/Toyota.svg',
+  /** Ovales + marca con `#EB0A1E`; `Toyota.svg` suele ir sin fill → se imprime negro. */
+  toyota: 'https://upload.wikimedia.org/wikipedia/commons/e/ee/Toyota_logo_%28Red%29.svg',
   volkswagen: 'https://upload.wikimedia.org/wikipedia/commons/6/6d/Volkswagen_logo_2019.svg',
   volvo: 'https://upload.wikimedia.org/wikipedia/commons/5/54/Volvo_logo.svg',
 }
