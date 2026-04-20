@@ -52,6 +52,9 @@ describe('ReceiptsService', () => {
       customerPhone: '3001112233',
       customerEmail: 'juan@example.com',
       vehicle: { plate: 'ABC123', brand: 'Mazda', model: '3', year: 2020 },
+      /** Instante de la OT: debe mandar sobre el maestro (mismo vehículo o maestro desactualizado). */
+      vehicleBrand: 'Toyota',
+      vehicleModel: 'Hilux',
       lines: [
         {
           lineType: 'LABOR',
@@ -105,7 +108,9 @@ describe('ReceiptsService', () => {
     expect(html).toContain('Cambio de aceite y revisión general');
     expect(html).toContain('$110.000');
     expect(html).toContain('Abono caja');
-    expect(html).toMatch(/cdn\.simpleicons\.org\/mazda\//i);
+    expect(html).toMatch(/cdn\.simpleicons\.org\/toyota\//i);
+    expect(html).toContain('Toyota');
+    expect(html).toContain('Hilux');
     expect(html).toContain('Documento no fiscal');
     expect(html).toContain('Persona natural no obligada a facturar');
     expect(html).toContain('Saldo pendiente');

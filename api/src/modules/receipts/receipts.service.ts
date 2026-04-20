@@ -301,10 +301,7 @@ export class ReceiptsService {
       this.logos.getDataUrl('watermark'),
     ]);
     const title = `Comprobante OT ${wo.publicCode}`;
-    const plate =
-      wo.vehicle?.plate ?? wo.vehiclePlate ?? null;
-    const brand = wo.vehicle?.brand ?? wo.vehicleBrand ?? null;
-    const model = wo.vehicle?.model ?? wo.vehicleModel ?? null;
+    const { plate, brand, model } = receiptVehicleSnapshot(wo);
     const vehicleLine = [plate, [brand, model].filter(Boolean).join(' ')]
       .filter(Boolean)
       .join(' · ');
@@ -698,6 +695,22 @@ function shortId(id: string): string {
  *   - PART  → "{inventoryItem.name} — {reference}" si hay ambos, o solo `name`.
  *   - Fallbacks: `description` libre, luego `lineType`.
  */
+/**
+ * Texto de vehículo en comprobantes: datos **congelados en la OT** tienen prioridad sobre
+ * el maestro `Vehicle`. Evita que varias órdenes enlazadas al mismo vehículo — o ediciones
+ * posteriores en maestro — muestren logo/marca de otra historia.
+ */
+export function receiptVehicleSnapshot(wo: WorkOrderForReceipt): {
+  plate: string | null;
+  brand: string | null;
+  model: string | null;
+} {
+  const plate = wo.vehiclePlate?.trim() || wo.vehicle?.plate?.trim() || null;
+  const brand = wo.vehicleBrand?.trim() || wo.vehicle?.brand?.trim() || null;
+  const model = wo.vehicleModel?.trim() || wo.vehicle?.model?.trim() || null;
+  return { plate, brand, model };
+}
+
 function resolveReceiptLineLabel(ln: {
   lineType?: string | null;
   description?: string | null;

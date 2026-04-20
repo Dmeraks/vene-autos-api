@@ -19,13 +19,14 @@
  * sin crear un segundo grafo de lecturas.
  */
 import { Injectable } from '@nestjs/common';
-import type {
-  CashSessionForReceipt,
-  SaleForReceipt,
-  WorkOrderForReceipt,
-  WorkshopInfo,
+import {
+  ReceiptsService,
+  receiptVehicleSnapshot,
+  type CashSessionForReceipt,
+  type SaleForReceipt,
+  type WorkOrderForReceipt,
+  type WorkshopInfo,
 } from './receipts.service';
-import { ReceiptsService } from './receipts.service';
 import { inventoryItemUsesQuarterGallonOtQuantity } from '../inventory/oil-gallon-ot';
 
 /** Alineación soportada por el puente (must match Go side). */
@@ -385,9 +386,7 @@ export class TicketBuilderService {
   /** Ticket completo para una OT (resumen de líneas + totales + pagos registrados). */
   async buildWorkOrderTicket(wo: WorkOrderForReceipt): Promise<TicketPayload> {
     const info = await this.receipts.getWorkshopInfo();
-    const plate = wo.vehicle?.plate ?? wo.vehiclePlate ?? null;
-    const brand = wo.vehicle?.brand ?? wo.vehicleBrand ?? null;
-    const model = wo.vehicle?.model ?? wo.vehicleModel ?? null;
+    const { plate, brand, model } = receiptVehicleSnapshot(wo);
     const vehicleLine = [plate, [brand, model].filter(Boolean).join(' ')]
       .filter(Boolean)
       .join(' · ');
@@ -487,7 +486,7 @@ export class TicketBuilderService {
     payment: PaymentForTicket,
   ): Promise<TicketPayload> {
     const info = await this.receipts.getWorkshopInfo();
-    const plate = wo.vehicle?.plate ?? wo.vehiclePlate ?? null;
+    const { plate } = receiptVehicleSnapshot(wo as WorkOrderForReceipt);
 
     const blocks: TicketBlock[] = [];
     blocks.push(

@@ -303,7 +303,7 @@ export class WorkOrdersService {
         vehicleBrand: true,
         vehicleModel: true,
         vehicleId: true,
-        vehicle: { select: { plateNorm: true, plate: true, isActive: true } },
+        vehicle: { select: { plateNorm: true, plate: true, brand: true, isActive: true } },
       },
     });
 
@@ -348,7 +348,7 @@ export class WorkOrdersService {
       vehiclePlate,
       vehicleBrand: row.vehicleBrand,
       vehicleModel: row.vehicleModel,
-      vehicleBrandLogoUrl: vehicleBrandLogoUrl(row.vehicleBrand),
+      vehicleBrandLogoUrl: vehicleBrandLogoUrl(row.vehicleBrand ?? row.vehicle?.brand),
     };
   }
 

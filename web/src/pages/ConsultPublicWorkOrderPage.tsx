@@ -180,6 +180,7 @@ export function ConsultPublicWorkOrderPage() {
                 </div>
                 {result.vehicleBrandLogoUrl ? (
                   <img
+                    key={result.publicCode}
                     src={result.vehicleBrandLogoUrl}
                     alt={result.vehicleBrand ? `Logo ${result.vehicleBrand}` : 'Marca del vehículo'}
                     className="h-14 w-14 shrink-0 object-contain sm:h-16 sm:w-16"
