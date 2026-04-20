@@ -4,7 +4,6 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
   ClipboardList,
   Droplet,
   FileText,
@@ -452,11 +451,6 @@ function AppShellInner() {
 
   const saasToolbar = user && (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-      {!taskMode && (
-        <button type="button" className={saasIconButtonClass()} title="Ayuda" aria-label="Ayuda">
-          <CircleHelp className="size-[1.125rem]" strokeWidth={1.75} aria-hidden />
-        </button>
-      )}
       {!taskMode && (
         <button type="button" className={saasIconButtonClass()} title="Notificaciones" aria-label="Notificaciones">
           <Bell className="size-[1.125rem]" strokeWidth={1.75} aria-hidden />
