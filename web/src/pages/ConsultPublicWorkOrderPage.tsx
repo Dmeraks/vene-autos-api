@@ -171,11 +171,21 @@ export function ConsultPublicWorkOrderPage() {
 
           {result && st ? (
             <div className="mt-8 border-t border-slate-200 pt-8 dark:border-zinc-800">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className={`rounded-md px-2.5 py-1 text-xs font-semibold tracking-tight ${st.tone}`}>
-                  {st.label}
-                </span>
-                <span className="font-mono text-sm text-slate-600 dark:text-slate-300">{result.publicCode}</span>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className={`rounded-md px-2.5 py-1 text-xs font-semibold tracking-tight ${st.tone}`}>
+                    {st.label}
+                  </span>
+                  <span className="font-mono text-sm text-slate-600 dark:text-slate-300">{result.publicCode}</span>
+                </div>
+                {result.vehicleBrandLogoUrl ? (
+                  <img
+                    src={result.vehicleBrandLogoUrl}
+                    alt={result.vehicleBrand ? `Logo ${result.vehicleBrand}` : 'Marca del vehículo'}
+                    className="h-14 w-14 shrink-0 object-contain sm:h-16 sm:w-16"
+                    draggable={false}
+                  />
+                ) : null}
               </div>
               <dl className="mt-6 space-y-3 text-sm text-slate-600 dark:text-slate-300">
                 <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-4">

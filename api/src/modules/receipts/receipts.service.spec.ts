@@ -105,6 +105,7 @@ describe('ReceiptsService', () => {
     expect(html).toContain('Cambio de aceite y revisión general');
     expect(html).toContain('$110.000');
     expect(html).toContain('Abono caja');
+    expect(html).toMatch(/cdn\.simpleicons\.org\/mazda\//i);
     expect(html).toContain('Documento no fiscal');
     expect(html).toContain('Persona natural no obligada a facturar');
     expect(html).toContain('Saldo pendiente');

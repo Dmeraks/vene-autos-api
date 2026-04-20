@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { Prisma, WorkOrderStatus } from '@prisma/client';
+import { vehicleBrandLogoUrl } from '../../common/vehicle-brand-icon';
 import { ceilWholeCop, decimalFromMoneyApiString } from '../../common/money/cop-money';
 import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -347,6 +348,7 @@ export class WorkOrdersService {
       vehiclePlate,
       vehicleBrand: row.vehicleBrand,
       vehicleModel: row.vehicleModel,
+      vehicleBrandLogoUrl: vehicleBrandLogoUrl(row.vehicleBrand),
     };
   }
 

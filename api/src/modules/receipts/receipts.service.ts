@@ -14,6 +14,7 @@
  * de cortesía, trabajos no facturados), y el documento legal pasa a ser la `Invoice`.
  */
 import { Injectable } from '@nestjs/common';
+import { isTrustedVehicleBrandIconUrl, vehicleBrandLogoUrl } from '../../common/vehicle-brand-icon';
 import { PrismaService } from '../../prisma/prisma.service';
 import { inventoryItemUsesQuarterGallonOtQuantity } from '../inventory/oil-gallon-ot';
 import { WorkshopLogoService } from './workshop-logo.service';
@@ -416,7 +417,18 @@ export class ReceiptsService {
       }
     `;
 
-    return renderPage({ title, workshop, body, logoDataUrl, watermarkDataUrl });
+    const brandLogoUrl = vehicleBrandLogoUrl(brand);
+    const brandLogoAlt = brand?.trim() ? brand.trim() : 'Marca del vehículo';
+
+    return renderPage({
+      title,
+      workshop,
+      body,
+      logoDataUrl,
+      watermarkDataUrl,
+      vehicleBrandLogoUrl: brandLogoUrl,
+      vehicleBrandLogoAlt: brandLogoAlt,
+    });
   }
 
   async renderSaleReceipt(sale: SaleForReceipt): Promise<string> {
@@ -766,6 +778,12 @@ function renderPage(input: {
    * ya trae transparencia → se imprime tal cual sin aplicar `opacity` extra.
    */
   watermarkDataUrl?: string | null;
+  /**
+   * Logo a color de la marca del vehículo (CDN Simple Icons), esquina superior derecha bajo “Emitido”.
+   * Solo se pinta si la URL es del origen permitido.
+   */
+  vehicleBrandLogoUrl?: string | null;
+  vehicleBrandLogoAlt?: string | null;
 }): string {
   const { title, workshop, body, logoDataUrl, watermarkDataUrl } = input;
   const regimeLegend = input.overrideFiscalLegend ?? regimeLegendFor(workshop.regime);
@@ -784,6 +802,11 @@ function renderPage(input: {
   const logoBlock = logoDataUrl
     ? `<img src="${logoDataUrl}" alt="Logo" class="ws-logo" />`
     : '';
+  const brandUrl = input.vehicleBrandLogoUrl?.trim();
+  const brandLogoBlock =
+    brandUrl && isTrustedVehicleBrandIconUrl(brandUrl)
+      ? `<img src="${escapeHtml(brandUrl)}" alt="${escapeHtml(input.vehicleBrandLogoAlt ?? 'Marca del vehículo')}" class="brand-logo-mark" />`
+      : '';
   const watermarkBlock = watermarkDataUrl
     ? `<img src="${watermarkDataUrl}" alt="" class="watermark" aria-hidden="true" />`
     : '';
@@ -856,6 +879,23 @@ function renderPage(input: {
       width: 90px; height: 90px; object-fit: contain;
       border-radius: 6px; background: white;
       flex-shrink: 0;
+    }
+    header.ws .ws-top-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+      text-align: right;
+    }
+    header.ws .ws-top-meta .issued {
+      font-size: 11px;
+      color: #475569;
+    }
+    header.ws .brand-logo-mark {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
     }
     header.ws .name { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
     header.ws .tagline { font-size: 12px; color: #475569; margin-top: 2px; }
@@ -931,8 +971,9 @@ function renderPage(input: {
       <header class="ws">
         <div class="ws-top">
           ${logoBlock}
-          <div style="text-align:right; font-size:11px; color:#475569;">
-            <div>Emitido ${formatDate(new Date())}</div>
+          <div class="ws-top-meta">
+            <div class="issued">Emitido ${formatDate(new Date())}</div>
+            ${brandLogoBlock}
           </div>
         </div>
         <div class="ws-title">
