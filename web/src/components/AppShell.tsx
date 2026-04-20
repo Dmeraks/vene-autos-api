@@ -36,6 +36,7 @@ import { panelUsesModernShell } from '../config/operationalNotes'
 import { portalPath } from '../constants/portalPath'
 import { setStoredLastModulePath } from '../utils/lastModule'
 import { ThemeToggle } from './ThemeToggle'
+import { useTheme } from '../theme/ThemeContext'
 
 type PreviewRoleRow = { id: string; name: string; slug: string; isSystem: boolean }
 
@@ -52,13 +53,14 @@ function initialsFromName(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
-/** Logo corporativo fondo negro (`public/logo_panel.png`). */
-const PANEL_BRAND_LOGO_SRC = '/logo_panel.png'
+/** Logo corporativo: claro (`public/logo_panel_light.png`) / oscuro (`public/logo_panel.png`). */
+const PANEL_BRAND_LOGO_LIGHT = '/logo_panel_light.png'
+const PANEL_BRAND_LOGO_DARK = '/logo_panel.png'
 
 function PanelBrandLogo({ className }: { className?: string }) {
-  return (
-    <img src={PANEL_BRAND_LOGO_SRC} alt="Vene Autos" draggable={false} className={className} decoding="async" />
-  )
+  const { preference } = useTheme()
+  const src = preference === 'light' ? PANEL_BRAND_LOGO_LIGHT : PANEL_BRAND_LOGO_DARK
+  return <img src={src} alt="Vene Autos" draggable={false} className={className} decoding="async" />
 }
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
