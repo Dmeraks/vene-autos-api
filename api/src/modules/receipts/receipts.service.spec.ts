@@ -108,7 +108,6 @@ describe('ReceiptsService', () => {
     expect(html).toContain('Cambio de aceite y revisión general');
     expect(html).toContain('$110.000');
     expect(html).toContain('Abono caja');
-    expect(html).toContain('upload.wikimedia.org/wikipedia/commons/e/ee/Toyota_logo_%28Red%29.svg');
     expect(html).toContain('Toyota');
     expect(html).toContain('Hilux');
     expect(html).toContain('Documento no fiscal');

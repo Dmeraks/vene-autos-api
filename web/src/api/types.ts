@@ -21,8 +21,6 @@ export type PublicWorkOrderLookupResponse = {
   vehiclePlate: string | null
   vehicleBrand: string | null
   vehicleModel: string | null
-  /** URL del logo de marca (Simple Icons CDN), si la marca se reconoce. */
-  vehicleBrandLogoUrl: string | null
 }
 
 export type WorkOrderLineType = 'PART' | 'LABOR'

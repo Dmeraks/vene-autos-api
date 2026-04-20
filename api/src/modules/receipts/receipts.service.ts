@@ -14,7 +14,6 @@
  * de cortesía, trabajos no facturados), y el documento legal pasa a ser la `Invoice`.
  */
 import { Injectable } from '@nestjs/common';
-import { isTrustedVehicleBrandIconUrl, vehicleBrandLogoUrl } from '../../common/vehicle-brand-icon';
 import { PrismaService } from '../../prisma/prisma.service';
 import { inventoryItemUsesQuarterGallonOtQuantity } from '../inventory/oil-gallon-ot';
 import { WorkshopLogoService } from './workshop-logo.service';
@@ -342,13 +341,6 @@ export class ReceiptsService {
       })
       .join('');
 
-    const brandLogoUrl = vehicleBrandLogoUrl(brand);
-    const brandLogoAlt = brand?.trim() ? brand.trim() : 'Marca del vehículo';
-    const vehicleBrandImg =
-      brandLogoUrl && isTrustedVehicleBrandIconUrl(brandLogoUrl)
-        ? `<img src="${escapeHtml(brandLogoUrl)}" alt="${escapeHtml(brandLogoAlt)}" class="vehicle-brand-img" />`
-        : '';
-
     const body = `
       <section class="doc-meta">
         <div>
@@ -370,15 +362,10 @@ export class ReceiptsService {
           ${wo.customerPhone ? `<div class="muted">Tel: ${escapeHtml(wo.customerPhone)}</div>` : ''}
           ${wo.customerEmail ? `<div class="muted">${escapeHtml(wo.customerEmail)}</div>` : ''}
         </div>
-        <div class="party party-vehicle">
-          <div class="party-vehicle-row">
-            <div class="party-vehicle-text">
-              <h4>Vehículo</h4>
-              <div>${escapeHtml(vehicleLine || '—')}</div>
-              ${wo.intakeOdometerKm != null ? `<div class="muted">Km ingreso: ${wo.intakeOdometerKm.toLocaleString('es-CO')}</div>` : ''}
-            </div>
-            ${vehicleBrandImg}
-          </div>
+        <div class="party">
+          <h4>Vehículo</h4>
+          <div>${escapeHtml(vehicleLine || '—')}</div>
+          ${wo.intakeOdometerKm != null ? `<div class="muted">Km ingreso: ${wo.intakeOdometerKm.toLocaleString('es-CO')}</div>` : ''}
         </div>
       </section>
 
@@ -910,19 +897,6 @@ function renderPage(input: {
     .doc-dates { font-size: 12px; text-align: right; color: #334155; line-height: 1.55; }
     .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
     .party h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: .8px; color: #64748b; text-transform: uppercase; }
-    .party-vehicle-row {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 14px;
-    }
-    .party-vehicle-text { flex: 1; min-width: 0; }
-    .party-vehicle-row .vehicle-brand-img {
-      width: 92px;
-      height: 92px;
-      object-fit: contain;
-      flex-shrink: 0;
-    }
     .desc { margin-bottom: 14px; }
     .desc h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: .8px; color: #64748b; text-transform: uppercase; }
     .desc p { margin: 0; white-space: pre-wrap; font-size: 12.5px; color: #1e293b; }

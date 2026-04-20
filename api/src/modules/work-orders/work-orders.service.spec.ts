@@ -609,7 +609,6 @@ describe('WorkOrdersService', () => {
         plate: 'EKP-112',
       });
       expect(r.publicCode).toBe('VEN-0041');
-      expect(r.vehicleBrandLogoUrl).toBeNull();
     });
 
     it('404 si ningún candidato coincide', async () => {
@@ -635,22 +634,6 @@ describe('WorkOrdersService', () => {
       });
       expect(r.publicCode).toBe('VEN-0041');
       expect(r.vehiclePlate).toBe('EKP112');
-    });
-
-    it('incluye URL de logo cuando la marca se reconoce', async () => {
-      prisma.workOrder.findUnique.mockResolvedValue({
-        ...baseRow,
-        vehicleBrand: 'Toyota',
-        vehiclePlate: 'EKP 112',
-        vehicle: { plateNorm: 'ABC999', plate: 'ABC999', isActive: true },
-      });
-      const r = await service.lookupPublicByCodeAndPlate({
-        publicCode: 'VEN-0041',
-        plate: 'EKP-112',
-      });
-      expect(r.vehicleBrandLogoUrl).toBe(
-        'https://upload.wikimedia.org/wikipedia/commons/e/ee/Toyota_logo_%28Red%29.svg',
-      );
     });
   });
 });
