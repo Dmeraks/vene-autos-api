@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, downloadFile } from '../api/client'
 import { PageHeader } from '../components/layout/PageHeader'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 
 type Granularity = 'day' | 'week' | 'fortnight' | 'month'
@@ -218,7 +219,7 @@ function ComparisonBlock({
   loadingB: boolean
   hintB?: string
 }) {
-  const isSaas = usePanelTheme() === 'saas_light'
+  const isSaas = panelUsesModernShell(usePanelTheme())
   const rows: Array<{ key: string; fmt: (t: EconomicSummary['totals']) => string; numA: number; numB: (t: EconomicSummary['totals']) => number }> = [
     { key: 'Ingresos caja', fmt: (t) => moneyEs(t.incomeTotal), numA: Number.parseFloat(a.incomeTotal), numB: (t) => Number.parseFloat(t.incomeTotal) },
     { key: 'Egresos caja', fmt: (t) => moneyEs(t.expenseTotal), numA: Number.parseFloat(a.expenseTotal), numB: (t) => Number.parseFloat(t.expenseTotal) },
@@ -342,7 +343,7 @@ const TABS: Array<{ id: ReportsTab; label: string }> = [
 
 export function ReportsPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const [activeTab, setActiveTab] = useState<ReportsTab>('resumen')
   const [preset, setPreset] = useState<PresetId>('7d')
   const [customFrom, setCustomFrom] = useState('')

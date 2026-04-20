@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 
 type Vehicle = {
@@ -25,7 +26,7 @@ type WoBrief = { id: string; orderNumber: number; publicCode: string; status: st
 export function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>()
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const [v, setV] = useState<Vehicle | null>(null)
   const [orders, setOrders] = useState<WoBrief[]>([])

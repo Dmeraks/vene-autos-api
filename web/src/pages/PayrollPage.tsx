@@ -9,6 +9,7 @@ import type {
 import { useAuth } from '../auth/AuthContext'
 import { useConfirm, usePrompt } from '../components/confirm/ConfirmProvider'
 import { PageHeader } from '../components/layout/PageHeader'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 
 // ---------------------------------------------------------------------------
@@ -94,7 +95,7 @@ const STATUS_LABEL: Record<PayrollRun['status'], string> = {
 export default function PayrollPage() {
   const { can } = useAuth()
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const canCalc = can('payroll:calculate')
   const canPay = can('payroll:pay')
   const canConfigure = can('payroll:configure')

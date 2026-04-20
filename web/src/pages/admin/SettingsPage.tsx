@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { useConfirm } from '../../components/confirm/ConfirmProvider'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { getSettingPresentation } from '../../config/settingsPresentation'
+import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
 import { isResumeLastModuleEnabled, setResumeLastModuleEnabled } from '../../utils/lastModule'
 
@@ -125,7 +126,13 @@ const PANEL_THEME_KEY = 'ui.panel_theme'
 function mergeSettingsFromServer(m: Record<string, unknown>): Record<string, unknown> {
   const out = { ...m }
   if (!(WORK_ORDER_PAYMENT_NOTE_KEY in out)) out[WORK_ORDER_PAYMENT_NOTE_KEY] = DEFAULT_WORK_ORDER_PAYMENT_MIN
-  if (!(PANEL_THEME_KEY in out)) out[PANEL_THEME_KEY] = 'standard'
+  if (!(PANEL_THEME_KEY in out)) out[PANEL_THEME_KEY] = 'saas_light'
+  {
+    const th = out[PANEL_THEME_KEY]
+    if (th !== 'saas_light' && th !== 'vene_autos') {
+      out[PANEL_THEME_KEY] = 'saas_light'
+    }
+  }
   // Fase 7.5: valores por defecto para facturación e identidad del taller.
   if (!('billing.electronic_invoice_enabled' in out)) out['billing.electronic_invoice_enabled'] = false
   if (!('workshop.legal_name' in out)) out['workshop.legal_name'] = ''
@@ -145,9 +152,9 @@ function mergeSettingsFromServer(m: Record<string, unknown>): Record<string, unk
 function parseValue(key: string, raw: string): unknown {
   const t = raw.trim()
   if (key === PANEL_THEME_KEY) {
-    if (t === 'commercial') return 'commercial'
+    if (t === 'vene_autos') return 'vene_autos'
     if (t === 'saas_light') return 'saas_light'
-    return 'standard'
+    return 'saas_light'
   }
   if (key === 'auth.session_idle_timeout_minutes') return parseInt(t, 10)
   if (key === 'notes.min_length_chars' || key === WORK_ORDER_PAYMENT_NOTE_KEY) return parseInt(t, 10)
@@ -280,7 +287,7 @@ function groupSettingKeys(keys: string[]): Array<{ section: (typeof SETTING_SECT
 
 export function SettingsPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const confirm = useConfirm()
   const canSaveSettings = can('settings:update')
@@ -583,20 +590,13 @@ export function SettingsPage() {
                               {key === PANEL_THEME_KEY ? (
                                 <select
                                   id={fieldId}
-                                  value={
-                                    draft[key] === 'commercial'
-                                      ? 'commercial'
-                                      : draft[key] === 'saas_light'
-                                        ? 'saas_light'
-                                        : 'standard'
-                                  }
+                                  value={draft[key] === 'vene_autos' ? 'vene_autos' : 'saas_light'}
                                   disabled={!canSaveSettings}
                                   onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
                                   className={`va-field disabled:cursor-not-allowed disabled:opacity-60 ${width}`}
                                 >
-                                  <option value="standard">Estándar (panel clásico)</option>
-                                  <option value="commercial">Comercial (estética web pública)</option>
                                   <option value="saas_light">SaaS claro (dashboard moderno)</option>
+                                  <option value="vene_autos">Vene-Autos</option>
                                 </select>
                               ) : isUserCreatePolicyKey(key) ? (
                                 <select

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { OilDrumGauge } from '../components/aceite/OilDrumGauge'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
@@ -95,7 +96,7 @@ function OilEconomicsCard({
   row: OilDrumEconomicsItem
   showOtMargin: boolean
 }) {
-  const isSaas = usePanelTheme() === 'saas_light'
+  const isSaas = panelUsesModernShell(usePanelTheme())
   const lp = row.lastPurchase
   const wo = row.workOrderPart
   const qHand = Number(row.quantityOnHand)
@@ -222,7 +223,7 @@ function OilEconomicsCard({
 
 export function AceitePage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const canEditInv = can('inventory_items:update')
   const [rows, setRows] = useState<InventoryItem[] | null>(null)

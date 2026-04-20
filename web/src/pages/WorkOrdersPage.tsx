@@ -13,6 +13,7 @@ import { useAuth } from '../auth/AuthContext'
 import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { PostCreateConsentModal } from '../components/work-order/PostCreateConsentModal'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import {
   API_MONEY_DECIMAL_REGEX,
@@ -368,7 +369,7 @@ function LoupeButton({ title, onClick }: { title: string; onClick: () => void })
 
 export function WorkOrdersPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const canViewWoFinancials = useMemo(
     () =>

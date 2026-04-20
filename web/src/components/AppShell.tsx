@@ -32,6 +32,7 @@ import type { LoginResponse } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { CashSessionOpenProvider, useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { usePanelTheme, useUiSettings } from '../theme/PanelThemeProvider'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { portalPath } from '../constants/portalPath'
 import { setStoredLastModulePath } from '../utils/lastModule'
 import { ThemeToggle } from './ThemeToggle'
@@ -180,7 +181,7 @@ function writeSidebarCollapsed(collapsed: boolean) {
 function AppShellInner() {
   const panelTheme = usePanelTheme()
   const { electronicInvoiceEnabled } = useUiSettings()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const shellMaxClass = isSaas
     ? 'max-w-[min(88rem,calc(100vw-1rem))] 2xl:max-w-[min(96rem,calc(100vw-1.5rem))]'
     : 'max-w-6xl'

@@ -18,6 +18,7 @@ import { useAuth } from '../auth/AuthContext'
 import { portalPath, stripPortalBase } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import { getStoredLastModulePath } from '../utils/lastModule'
 
@@ -66,7 +67,7 @@ export function DashboardPage() {
   const { can, user } = useAuth()
   const { open: cashSessionOpen } = useCashSessionOpen()
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
 
   const sections: DashboardSection[] = [
     {

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { portalPath } from '../constants/portalPath'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import { formatCopFromString } from '../utils/copFormat'
 
@@ -61,7 +62,7 @@ type Props = {
  * Listado de movimientos de la sesión de caja abierta (misma data que `GET /cash/sessions/current`).
  */
 export function CashSessionMovementsPanel({ current, onReprintMovement }: Props) {
-  const surfaceClass = usePanelTheme() === 'saas_light' ? 'va-saas-page-section' : 'va-card'
+  const surfaceClass = panelUsesModernShell(usePanelTheme()) ? 'va-saas-page-section' : 'va-card'
 
   if (current === undefined) {
     return (

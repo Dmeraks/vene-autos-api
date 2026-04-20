@@ -47,7 +47,11 @@ export class SettingsController {
     ]);
     const raw = themeRow?.value;
     const panelTheme =
-      raw === 'commercial' ? 'commercial' : raw === 'saas_light' ? 'saas_light' : 'standard';
+      raw === 'vene_autos'
+        ? 'vene_autos'
+        : raw === 'saas_light'
+          ? 'saas_light'
+          : 'saas_light';
     const eiRaw = electronicInvoiceRow?.value;
     const electronicInvoiceEnabled = eiRaw === true || eiRaw === 'true';
     const legalName =

@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { useConfirm } from '../components/confirm/ConfirmProvider'
 import { PageHeader } from '../components/layout/PageHeader'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { portalPath } from '../constants/portalPath'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 
@@ -77,7 +78,7 @@ export default function WorkshopFinancePage() {
   const confirmDeletePayable = useConfirm()
   const { open: cashSessionOpen, refresh: refreshCashOpen } = useCashSessionOpen()
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const canRead = can('workshop_finance:read')
   const canManage = can('workshop_finance:manage')
 

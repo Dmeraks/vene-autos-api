@@ -13,6 +13,7 @@ import { usePanelTheme, useUiSettings } from '../theme/PanelThemeProvider'
 import { NotesMinCharCounter } from '../components/NotesMinCharCounter'
 import {
   notesMinHint,
+  panelUsesModernShell,
   parseNotesUiContext,
   SETTINGS_UI_CONTEXT_PATH,
   type SettingsUiContextResponse,
@@ -99,7 +100,7 @@ function expenseRequestStatusLabel(r: ExpenseReq): string {
 export function CashPage() {
   const panelTheme = usePanelTheme()
   const { arqueoAutoprintEnabled } = useUiSettings()
-  const isSaasPanel = panelTheme === 'saas_light'
+  const isSaasPanel = panelUsesModernShell(panelTheme)
   const pageStackClass = isSaasPanel ? 'space-y-6 sm:space-y-7' : 'space-y-5 sm:space-y-6'
   const surfaceCardClass = isSaasPanel ? 'va-saas-page-section' : 'va-card'
   const narrowFormClass = isSaasPanel ? 'va-saas-page-section space-y-3 sm:max-w-md' : 'va-card space-y-3 sm:max-w-md'

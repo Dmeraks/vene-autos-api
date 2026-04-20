@@ -5,13 +5,14 @@ import { api } from '../../api/client'
 import type { LoginResponse } from '../../api/types'
 import { useAuth } from '../../auth/AuthContext'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
 type RoleRow = { id: string; name: string; slug: string; isSystem: boolean }
 
 export function RolePreviewPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { can, applyAuthResponse } = useAuth()
   const [roles, setRoles] = useState<RoleRow[]>([])
   const [selectedId, setSelectedId] = useState('')

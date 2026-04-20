@@ -3,6 +3,7 @@ import { api } from '../../api/client'
 import { useAuth } from '../../auth/AuthContext'
 import { useConfirm } from '../../components/confirm/ConfirmProvider'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
 type RoleBrief = { id: string; name: string; slug: string }
@@ -16,7 +17,7 @@ type UserRow = {
 
 export function UsersPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const confirm = useConfirm()
   const [rows, setRows] = useState<UserRow[] | null>(null)

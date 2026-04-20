@@ -5,6 +5,7 @@ import type { WorkOrderListResponse, WorkOrderStatus, WorkOrderSummary } from '.
 import { useAuth } from '../auth/AuthContext'
 import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 
 type Customer = {
@@ -39,7 +40,7 @@ export function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const [c, setC] = useState<Customer | null>(null)
   const [vehicles, setVehicles] = useState<VehicleBrief[]>([])

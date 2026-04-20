@@ -86,7 +86,7 @@ const META: Record<string, SettingFieldPresentation> = {
   'ui.panel_theme': {
     label: 'Tema visual del panel del taller',
     description:
-      'Estándar: panel clásico. Comercial: estética web pública. SaaS claro: dashboard moderno (Inter, sidebar, más ancho). El tema claro/oscuro sigue disponible.',
+      'SaaS claro: dashboard moderno (sidebar, más ancho). Vene-Autos: misma base; paleta propia cuando la definan. El interruptor claro/oscuro sigue disponible.',
   },
   'notes.min_length_chars': {
     label: 'Mínimo de caracteres — notas operativas generales',

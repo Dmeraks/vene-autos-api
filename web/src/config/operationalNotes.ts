@@ -7,7 +7,12 @@ export const SETTINGS_UI_CONTEXT_PATH = '/settings/ui-context'
 const FALLBACK_GENERAL = 50
 const FALLBACK_WORK_ORDER_PAYMENT = 70
 
-export type PanelThemeMode = 'standard' | 'commercial' | 'saas_light'
+export type PanelThemeMode = 'saas_light' | 'vene_autos'
+
+/** Shell “moderno” (sidebar SaaS, tarjetas, etc.): SaaS claro y Vene-Autos comparten layout hasta definir paleta propia. */
+export function panelUsesModernShell(theme: PanelThemeMode): boolean {
+  return theme === 'saas_light' || theme === 'vene_autos'
+}
 
 export type SettingsNotesUiContext = {
   notesMinLengthChars: number
@@ -39,12 +44,12 @@ export function parseNotesUiContext(raw: SettingsUiContextResponse): SettingsNot
   }
 }
 
-/** Tema visual del panel (solo desde configuración del taller). */
+/** Tema visual del panel (solo desde configuración del taller). Valores antiguos → `saas_light`. */
 export function parsePanelTheme(raw: SettingsUiContextResponse): PanelThemeMode {
   const v = raw.panelTheme
-  if (v === 'commercial') return 'commercial'
+  if (v === 'vene_autos') return 'vene_autos'
   if (v === 'saas_light') return 'saas_light'
-  return 'standard'
+  return 'saas_light'
 }
 
 /**

@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
 import { useAuth } from '../auth/AuthContext'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 
 type Customer = {
@@ -16,7 +17,7 @@ type Customer = {
 
 export function CustomersPage() {
   const { can } = useAuth()
-  const isSaas = usePanelTheme() === 'saas_light'
+  const isSaas = panelUsesModernShell(usePanelTheme())
   const [rows, setRows] = useState<Customer[] | null>(null)
   const [open, setOpen] = useState(false)
   const [displayName, setDisplayName] = useState('')

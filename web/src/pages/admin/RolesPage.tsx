@@ -8,6 +8,7 @@ import { PermissionPicker } from '../../components/PermissionPicker'
 import { RoleProfileTemplatesPanel } from '../../components/RoleProfileTemplatesPanel'
 import { portalPath } from '../../constants/portalPath'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
 type RoleRow = {
@@ -21,7 +22,7 @@ type RoleRow = {
 
 export function RolesPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const [rows, setRows] = useState<RoleRow[] | null>(null)
   const [perms, setPerms] = useState<PermissionRow[]>([])

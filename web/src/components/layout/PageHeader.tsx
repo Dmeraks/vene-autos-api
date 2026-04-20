@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
 type Props = {
@@ -18,7 +19,7 @@ type Props = {
  * en `saas_light` el contenedor usa `va-saas-page-hero`.
  */
 export function PageHeader({ beforeTitle, eyebrow, title, description, actions, rootClassName }: Props) {
-  const isSaas = usePanelTheme() === 'saas_light'
+  const isSaas = panelUsesModernShell(usePanelTheme())
 
   const titleClassName = beforeTitle ? 'mt-2 va-page-title' : 'va-page-title'
 

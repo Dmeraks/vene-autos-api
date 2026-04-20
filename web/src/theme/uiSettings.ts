@@ -22,13 +22,13 @@ export type UiSettingsValue = {
 }
 
 export const DEFAULT_UI_SETTINGS: UiSettingsValue = {
-  panelTheme: 'standard',
+  panelTheme: 'saas_light',
   electronicInvoiceEnabled: false,
   workshopLegalName: null,
   arqueoAutoprintEnabled: false,
 }
 
-export const PanelThemeContext = createContext<PanelThemeMode>('standard')
+export const PanelThemeContext = createContext<PanelThemeMode>('saas_light')
 export const UiSettingsContext = createContext<UiSettingsValue>(DEFAULT_UI_SETTINGS)
 
 export function usePanelTheme(): PanelThemeMode {

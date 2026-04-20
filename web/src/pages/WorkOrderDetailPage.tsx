@@ -26,6 +26,7 @@ import {
 import { PageHeader } from '../components/layout/PageHeader'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { emitWorkOrderChanged } from '../lib/workOrderEvents'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import type { ParsedTransitLicenseFields } from '../lib/parseTransitLicenseOcr'
 import {
@@ -312,7 +313,7 @@ export function WorkOrderDetailPage() {
   const [invoiceBusy, setInvoiceBusy] = useState(false)
   const [invoiceMsg, setInvoiceMsg] = useState<string | null>(null)
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   /** Evita que `load` cambie de identidad cada render si el contexto recrea `can`; sin esto el `useEffect` puede spamear `load()` y pisar el estado. */
   const canRef = useRef(can)
   canRef.current = can

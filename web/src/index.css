@@ -278,7 +278,7 @@
 }
 
 /**
- * Tema “comercial” (landing Vene Autos): rojo + zinc/negro, activado solo con `ui.panel_theme` = commercial en BD.
+ * Estilos `.va-panel-theme-commercial` (histórico): ya no se elige desde configuración del panel.
  * No cambia rutas ni lógica: solo variables de marca y capas `.va-*` / shell del panel.
  */
 @layer base {
@@ -489,7 +489,8 @@
 /**
  * Tema “SaaS claro” (Fase 0 — tokens): Inter, acento AZUL (misma familia que `@theme` marca),
  * superficies semánticas y highlight celeste para ítem activo (sidebar / pills).
- * Layout en `AppShell`; BD: `ui.panel_theme` = saas_light.
+ * Layout en `AppShell`; BD: `ui.panel_theme` = saas_light. Vene-Autos añade
+ * `html.va-panel-theme-vene-autos` (mismo shell; overrides de color en un paso aparte).
  */
 @layer base {
   html.va-panel-theme-saas-light {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { PageHeader } from '../components/layout/PageHeader'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import type { InventoryItem, MeasurementUnit } from '../api/types'
 import {
@@ -12,7 +13,7 @@ import {
 
 export function InventoryPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const showInvActions = can('inventory_items:update')
   const [rows, setRows] = useState<InventoryItem[] | null>(null)

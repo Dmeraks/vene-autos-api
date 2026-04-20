@@ -1,11 +1,12 @@
 import { Navigate } from 'react-router-dom'
 import { portalPath } from '../constants/portalPath'
 import { useAuth } from '../auth/AuthContext'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 
 export function HomeRedirect() {
   const { can } = useAuth()
-  const isSaas = usePanelTheme() === 'saas_light'
+  const isSaas = panelUsesModernShell(usePanelTheme())
   if (can('work_orders:read') || can('work_orders:read_portal')) return <Navigate to={portalPath('/ordenes')} replace />
   if (can('customers:read')) return <Navigate to={portalPath('/clientes')} replace />
   if (can('reports:read')) return <Navigate to={portalPath('/informes')} replace />

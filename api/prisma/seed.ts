@@ -891,7 +891,7 @@ async function main() {
 
   await prisma.workshopSetting.upsert({
     where: { key: 'ui.panel_theme' },
-    create: { key: 'ui.panel_theme', value: 'standard' },
+    create: { key: 'ui.panel_theme', value: 'saas_light' },
     update: {},
   });
 

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
 type Props = {
@@ -22,7 +23,7 @@ const actionsClassicClass =
  * Franja de pestañas + acción final (Fase 2). Encapsula el `isSaas` que antes repetía CashPage.
  */
 export function TabRow({ tablistLabel, children, endAction }: Props) {
-  const isSaas = usePanelTheme() === 'saas_light'
+  const isSaas = panelUsesModernShell(usePanelTheme())
 
   return (
     <div className={isSaas ? 'va-saas-tab-strip' : stripClassicClass}>

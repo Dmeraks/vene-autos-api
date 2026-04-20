@@ -9,6 +9,7 @@ import { PageHeader } from '../../components/layout/PageHeader'
 import { PermissionPicker } from '../../components/PermissionPicker'
 import { RoleProfileTemplatesPanel } from '../../components/RoleProfileTemplatesPanel'
 import type { PermissionRow } from '../../api/types'
+import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
 type RoleDetail = {
@@ -22,7 +23,7 @@ type RoleDetail = {
 
 export function RoleDetailPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const { id } = useParams<{ id: string }>()
   const { can } = useAuth()
   const confirm = useConfirm()

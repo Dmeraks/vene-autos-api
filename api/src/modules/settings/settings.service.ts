@@ -102,9 +102,9 @@ function assertKnownSettingValue(key: string, value: unknown): void {
     }
   }
   if (key === 'ui.panel_theme') {
-    if (value !== 'standard' && value !== 'commercial' && value !== 'saas_light') {
+    if (value !== 'saas_light' && value !== 'vene_autos') {
       throw new BadRequestException(
-        'ui.panel_theme debe ser "standard", "commercial" o "saas_light".',
+        'ui.panel_theme debe ser "saas_light" o "vene_autos".',
       );
     }
   }

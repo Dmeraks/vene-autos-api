@@ -6,6 +6,7 @@ import { useConfirm } from '../components/confirm/ConfirmProvider'
 import { NotesMinCharCounter } from '../components/NotesMinCharCounter'
 import { portalPath } from '../constants/portalPath'
 import { PageHeader } from '../components/layout/PageHeader'
+import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import {
   notesMinHint,
@@ -52,7 +53,7 @@ function lineMoneyAddForTotal(l: LineDraft): number | null {
 
 export function ReceiveStockPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const confirm = useConfirm()
   const { open: cashOpen, loadStatus: cashOpenLoadStatus, refresh: refreshCashOpen } = useCashSessionOpen()
   const [items, setItems] = useState<InventoryItem[]>([])

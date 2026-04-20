@@ -15,6 +15,7 @@ import {
   type AuditRowForDetail,
 } from '../../i18n/auditLogDetail'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
 
 type AuditItem = AuditRowForDetail & { id: string }
@@ -31,7 +32,7 @@ const btnDetail =
   'min-h-[44px] w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm font-semibold text-brand-800 hover:bg-brand-50 dark:border-brand-700 dark:bg-slate-900 dark:text-brand-100 dark:hover:bg-brand-950/35 sm:min-h-0 sm:w-auto'
 
 function AuditRowCard({ row, onOpenDetail }: { row: AuditItem; onOpenDetail: (row: AuditItem) => void }) {
-  const isSaas = usePanelTheme() === 'saas_light'
+  const isSaas = panelUsesModernShell(usePanelTheme())
   const actionLabel = auditActionTitleEs(row.action)
   const entityLabel = auditEntityTitleEs(row.entityType)
   const tone = auditActionTone(row.action)
@@ -100,7 +101,7 @@ function toneLabel(t: AuditTone): string {
 }
 
 function AuditDetailModal({ row, onClose }: { row: AuditItem; onClose: () => void }) {
-  const isSaas = usePanelTheme() === 'saas_light'
+  const isSaas = panelUsesModernShell(usePanelTheme())
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -200,7 +201,7 @@ function AuditDetailModal({ row, onClose }: { row: AuditItem; onClose: () => voi
 
 export function AuditPage() {
   const panelTheme = usePanelTheme()
-  const isSaas = panelTheme === 'saas_light'
+  const isSaas = panelUsesModernShell(panelTheme)
   const [entityType, setEntityType] = useState('')
   const [entityId, setEntityId] = useState('')
   const [action, setAction] = useState('')
