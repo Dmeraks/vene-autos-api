@@ -20,6 +20,10 @@
     "web:build": "cd web && npm run build",
     "build": "npm run api:compile && npm run web:build",
     "build:full": "npm run api:build && npm run web:build",
-    "backfill:legacy-vehicles": "cd api && npm run backfill:legacy-vehicles"
+    "backfill:legacy-vehicles": "cd api && npm run backfill:legacy-vehicles",
+    "docs:deploy-pdf": "node scripts/generate-deploy-pdf.cjs"
+  },
+  "devDependencies": {
+    "pdfkit": "^0.16.0"
   }
 }
