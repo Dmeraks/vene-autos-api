@@ -342,6 +342,13 @@ export class ReceiptsService {
       })
       .join('');
 
+    const brandLogoUrl = vehicleBrandLogoUrl(brand);
+    const brandLogoAlt = brand?.trim() ? brand.trim() : 'Marca del vehículo';
+    const vehicleBrandImg =
+      brandLogoUrl && isTrustedVehicleBrandIconUrl(brandLogoUrl)
+        ? `<img src="${escapeHtml(brandLogoUrl)}" alt="${escapeHtml(brandLogoAlt)}" class="vehicle-brand-img" />`
+        : '';
+
     const body = `
       <section class="doc-meta">
         <div>
@@ -363,10 +370,15 @@ export class ReceiptsService {
           ${wo.customerPhone ? `<div class="muted">Tel: ${escapeHtml(wo.customerPhone)}</div>` : ''}
           ${wo.customerEmail ? `<div class="muted">${escapeHtml(wo.customerEmail)}</div>` : ''}
         </div>
-        <div class="party">
-          <h4>Vehículo</h4>
-          <div>${escapeHtml(vehicleLine || '—')}</div>
-          ${wo.intakeOdometerKm != null ? `<div class="muted">Km ingreso: ${wo.intakeOdometerKm.toLocaleString('es-CO')}</div>` : ''}
+        <div class="party party-vehicle">
+          <div class="party-vehicle-row">
+            <div class="party-vehicle-text">
+              <h4>Vehículo</h4>
+              <div>${escapeHtml(vehicleLine || '—')}</div>
+              ${wo.intakeOdometerKm != null ? `<div class="muted">Km ingreso: ${wo.intakeOdometerKm.toLocaleString('es-CO')}</div>` : ''}
+            </div>
+            ${vehicleBrandImg}
+          </div>
         </div>
       </section>
 
@@ -414,17 +426,12 @@ export class ReceiptsService {
       }
     `;
 
-    const brandLogoUrl = vehicleBrandLogoUrl(brand);
-    const brandLogoAlt = brand?.trim() ? brand.trim() : 'Marca del vehículo';
-
     return renderPage({
       title,
       workshop,
       body,
       logoDataUrl,
       watermarkDataUrl,
-      vehicleBrandLogoUrl: brandLogoUrl,
-      vehicleBrandLogoAlt: brandLogoAlt,
     });
   }
 
@@ -791,12 +798,6 @@ function renderPage(input: {
    * ya trae transparencia → se imprime tal cual sin aplicar `opacity` extra.
    */
   watermarkDataUrl?: string | null;
-  /**
-   * Logo a color de la marca del vehículo (CDN Simple Icons), esquina superior derecha bajo “Emitido”.
-   * Solo se pinta si la URL es del origen permitido.
-   */
-  vehicleBrandLogoUrl?: string | null;
-  vehicleBrandLogoAlt?: string | null;
 }): string {
   const { title, workshop, body, logoDataUrl, watermarkDataUrl } = input;
   const regimeLegend = input.overrideFiscalLegend ?? regimeLegendFor(workshop.regime);
@@ -815,11 +816,6 @@ function renderPage(input: {
   const logoBlock = logoDataUrl
     ? `<img src="${logoDataUrl}" alt="Logo" class="ws-logo" />`
     : '';
-  const brandUrl = input.vehicleBrandLogoUrl?.trim();
-  const brandLogoBlock =
-    brandUrl && isTrustedVehicleBrandIconUrl(brandUrl)
-      ? `<img src="${escapeHtml(brandUrl)}" alt="${escapeHtml(input.vehicleBrandLogoAlt ?? 'Marca del vehículo')}" class="brand-logo-mark" />`
-      : '';
   const watermarkBlock = watermarkDataUrl
     ? `<img src="${watermarkDataUrl}" alt="" class="watermark" aria-hidden="true" />`
     : '';
@@ -894,21 +890,12 @@ function renderPage(input: {
       flex-shrink: 0;
     }
     header.ws .ws-top-meta {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 8px;
       flex-shrink: 0;
       text-align: right;
     }
     header.ws .ws-top-meta .issued {
       font-size: 11px;
       color: #475569;
-    }
-    header.ws .brand-logo-mark {
-      width: 72px;
-      height: 72px;
-      object-fit: contain;
     }
     header.ws .name { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
     header.ws .tagline { font-size: 12px; color: #475569; margin-top: 2px; }
@@ -923,6 +910,19 @@ function renderPage(input: {
     .doc-dates { font-size: 12px; text-align: right; color: #334155; line-height: 1.55; }
     .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
     .party h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: .8px; color: #64748b; text-transform: uppercase; }
+    .party-vehicle-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .party-vehicle-text { flex: 1; min-width: 0; }
+    .party-vehicle-row .vehicle-brand-img {
+      width: 92px;
+      height: 92px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
     .desc { margin-bottom: 14px; }
     .desc h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: .8px; color: #64748b; text-transform: uppercase; }
     .desc p { margin: 0; white-space: pre-wrap; font-size: 12.5px; color: #1e293b; }
@@ -986,7 +986,6 @@ function renderPage(input: {
           ${logoBlock}
           <div class="ws-top-meta">
             <div class="issued">Emitido ${formatDate(new Date())}</div>
-            ${brandLogoBlock}
           </div>
         </div>
         <div class="ws-title">
