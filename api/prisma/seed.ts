@@ -5,7 +5,24 @@
 import { CashMovementDirection, Prisma, PrismaClient, TaxRateKind } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
-const prisma = new PrismaClient();
+/**
+ * El seed debe conectarse por **conexión directa** cuando exista `DIRECT_URL`.
+ * Si solo usás `DATABASE_URL` del pooler en modo sesión (Supabase), el mismo límite
+ * de clientes cuenta para API + migrate + seed y aparece:
+ * MaxClientsInSessionMode / max clients reached — pool_size.
+ */
+const seedDatabaseUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+if (!seedDatabaseUrl?.trim()) {
+  throw new Error('Definí DATABASE_URL en .env (y DIRECT_URL en Supabase/pooler).');
+}
+
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: seedDatabaseUrl,
+    },
+  },
+});
 
 /** Catálogo de permisos (Fase 1 identidad/config + Fase 2 caja y delegados). */
 const PERMISSIONS: Array<{ resource: string; action: string; description: string }> = [
