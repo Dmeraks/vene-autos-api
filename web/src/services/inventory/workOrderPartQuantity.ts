@@ -2,7 +2,7 @@
  * Política alineada con `api/src/modules/inventory/inventory.constants.ts`:
  * solo litros y galones permiten decimales en consumo de repuestos en OT.
  */
-import type { InventoryItem } from '../api/types'
+import type { InventoryItem } from '../../api/types'
 import { inventoryItemUsesQuarterGallonOtQuantity } from './oilQuarterGallonOt'
 
 const LIQUID_MEASUREMENT_UNIT_SLUGS = new Set<string>(['liter', 'gallon'])

@@ -29,6 +29,7 @@ import { SalesModule } from './modules/sales/sales.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
 import { WorkshopFinanceModule } from './modules/workshop-finance/workshop-finance.module';
+import { QuotesModule } from './modules/quotes/quotes.module';
 import { HealthController } from './health/health.controller';
 import { RootController } from './root.controller';
 
@@ -56,6 +57,7 @@ import { RootController } from './root.controller';
     ReportsModule,
     PayrollModule,
     WorkshopFinanceModule,
+    QuotesModule,
   ],
   controllers: [RootController, HealthController],
   providers: [

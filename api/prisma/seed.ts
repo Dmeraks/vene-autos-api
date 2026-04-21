@@ -122,6 +122,12 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
   { resource: 'inventory_items', action: 'read', description: 'Ver ítems de inventario' },
   { resource: 'inventory_items', action: 'create', description: 'Crear ítems de inventario' },
   { resource: 'inventory_items', action: 'update', description: 'Actualizar ítems de inventario' },
+  {
+    resource: 'inventory_items',
+    action: 'delete',
+    description:
+      'Eliminar ítems sin uso operativo (stock cero y sin líneas en OT, ventas, compras, facturas ni cotizaciones)',
+  },
   { resource: 'purchase_receipts', action: 'read', description: 'Ver recepciones de compra' },
   { resource: 'purchase_receipts', action: 'create', description: 'Registrar recepción de compra' },
   {
@@ -355,6 +361,43 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
     description:
       'Gestionar líneas de reserva, registrar deudas y pagos (efectivo genera egreso en caja).',
   },
+  // Cotizaciones (presupuesto sin consumo de stock hasta compra/OT).
+  { resource: 'quotes', action: 'create', description: 'Crear cotizaciones / presupuestos' },
+  {
+    resource: 'quotes',
+    action: 'read',
+    description: 'Ver cotizaciones propias u operativas según reglas de visibilidad',
+  },
+  {
+    resource: 'quotes',
+    action: 'read_all',
+    description: 'Ver todas las cotizaciones del taller',
+  },
+  {
+    resource: 'quotes',
+    action: 'update',
+    description: 'Editar cotización (cabecera, estado, snapshots de cliente/vehículo)',
+  },
+  {
+    resource: 'quotes',
+    action: 'view_financials',
+    description: 'Ver y cargar importes en líneas de cotización (precios, descuentos, totales)',
+  },
+  {
+    resource: 'quote_lines',
+    action: 'create',
+    description: 'Agregar líneas de repuesto o mano de obra a una cotización editable',
+  },
+  {
+    resource: 'quote_lines',
+    action: 'update',
+    description: 'Editar líneas de cotización',
+  },
+  {
+    resource: 'quote_lines',
+    action: 'delete',
+    description: 'Eliminar líneas de cotización',
+  },
 ];
 
 /**
@@ -384,6 +427,7 @@ const BACKEND_REQUIRED_PERMISSION_CODES: readonly string[] = [
   'inventory_items:create',
   'inventory_items:read',
   'inventory_items:update',
+  'inventory_items:delete',
   'measurement_units:read',
   'permissions:read',
   'purchase_receipts:create',
@@ -454,6 +498,14 @@ const BACKEND_REQUIRED_PERMISSION_CODES: readonly string[] = [
   'payroll:configure',
   'workshop_finance:read',
   'workshop_finance:manage',
+  'quotes:create',
+  'quotes:read',
+  'quotes:read_all',
+  'quotes:update',
+  'quotes:view_financials',
+  'quote_lines:create',
+  'quote_lines:update',
+  'quote_lines:delete',
 ];
 
 const CASH_CATEGORIES: Array<{
@@ -676,6 +728,14 @@ async function main() {
     // Finanzas taller: reservas teóricas al cierre + deudas (misma línea operativa que caja/nómina).
     'workshop_finance:read',
     'workshop_finance:manage',
+    'quotes:create',
+    'quotes:read',
+    'quotes:read_all',
+    'quotes:update',
+    'quotes:view_financials',
+    'quote_lines:create',
+    'quote_lines:update',
+    'quote_lines:delete',
   ];
   const cajeroPerms = pick(...cajeroCodes);
   const cajeroRole = await prisma.role.upsert({
@@ -748,6 +808,13 @@ async function main() {
     'measurement_units:read',
     'inventory_items:read',
     'services:read',
+    'quotes:create',
+    'quotes:read',
+    'quotes:update',
+    'quote_lines:create',
+    'quote_lines:update',
+    'quote_lines:delete',
+    'tax_rates:read',
   ];
   const mecanicoPerms = pick(...mecanicoCodes);
   const mecanicoRole = await prisma.role.upsert({

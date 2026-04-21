@@ -10,11 +10,22 @@ import { MeasurementUnitsController } from './measurement-units.controller';
 import { MeasurementUnitsService } from './measurement-units.service';
 import { PurchaseReceiptsController } from './purchase-receipts.controller';
 import { PurchaseReceiptsService } from './purchase-receipts.service';
+import { InventoryAdhocSkuService } from './inventory-adhoc-sku.service';
 
 @Module({
   imports: [AuditModule, CashModule],
   controllers: [MeasurementUnitsController, InventoryItemsController, PurchaseReceiptsController],
-  providers: [MeasurementUnitsService, InventoryItemsService, PurchaseReceiptsService],
-  exports: [InventoryItemsService, PurchaseReceiptsService, MeasurementUnitsService],
+  providers: [
+    MeasurementUnitsService,
+    InventoryItemsService,
+    PurchaseReceiptsService,
+    InventoryAdhocSkuService,
+  ],
+  exports: [
+    InventoryItemsService,
+    PurchaseReceiptsService,
+    MeasurementUnitsService,
+    InventoryAdhocSkuService,
+  ],
 })
 export class InventoryModule {}

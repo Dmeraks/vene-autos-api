@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { PageHeader } from '../components/layout/PageHeader'
 import { panelUsesModernShell } from '../config/operationalNotes'
+import {
+  readInventoryHiddenDevEnabled,
+  setInventoryHiddenDevEnabled,
+} from '../constants/inventoryHiddenDev'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import type { InventoryItem, MeasurementUnit } from '../api/types'
 import {
@@ -16,6 +20,9 @@ export function InventoryPage() {
   const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const showInvActions = can('inventory_items:update')
+  const showInvDelete = can('inventory_items:delete')
+  const showStubDevTools = can('inventory_items:read')
+  const showInvActionsCol = showInvActions || showInvDelete
   const [rows, setRows] = useState<InventoryItem[] | null>(null)
   const [units, setUnits] = useState<MeasurementUnit[]>([])
   const [err, setErr] = useState<string | null>(null)
@@ -36,6 +43,9 @@ export function InventoryPage() {
   const [editActive, setEditActive] = useState(true)
   const [newSupplier, setNewSupplier] = useState('')
   const [newCategory, setNewCategory] = useState('')
+  const [hiddenDevEnabled, setHiddenDevEnabled] = useState(readInventoryHiddenDevEnabled)
+  const [hiddenRows, setHiddenRows] = useState<InventoryItem[] | null>(null)
+  const [hiddenErr, setHiddenErr] = useState<string | null>(null)
   const createBtnClass = 'va-btn-primary w-full shrink-0 sm:w-auto'
   const tableWrapClass = isSaas
     ? 'va-saas-page-section va-saas-page-section--flush min-w-0'
@@ -65,6 +75,42 @@ export function InventoryPage() {
     const data = await api<InventoryItem[]>('/inventory/items')
     setRows(data)
   }
+
+  const toggleHiddenDev = useCallback(() => {
+    const next = !hiddenDevEnabled
+    setHiddenDevEnabled(next)
+    setInventoryHiddenDevEnabled(next)
+    if (!next) {
+      setHiddenRows(null)
+      setHiddenErr(null)
+    }
+  }, [hiddenDevEnabled])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!hiddenDevEnabled || !showStubDevTools) {
+      setHiddenRows(null)
+      setHiddenErr(null)
+      return () => {
+        cancelled = true
+      }
+    }
+    ;(async () => {
+      setHiddenErr(null)
+      try {
+        const data = await api<InventoryItem[]>('/inventory/items/hidden-items')
+        if (!cancelled) setHiddenRows(data)
+      } catch {
+        if (!cancelled) {
+          setHiddenRows(null)
+          setHiddenErr('No se pudieron cargar los SKU ocultos.')
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [hiddenDevEnabled, showStubDevTools])
 
   useEffect(() => {
     let cancelled = false
@@ -140,6 +186,31 @@ export function InventoryPage() {
     }
   }
 
+  async function deleteItem(row: InventoryItem) {
+    const q = Number(row.quantityOnHand)
+    if (!Number.isFinite(q) || q !== 0) return
+    const ok = window.confirm(
+      `¿Eliminar permanentemente el ítem ${singleLineCode(row.sku)}? Solo permitido si no tiene uso en OT, ventas u otros documentos.`,
+    )
+    if (!ok) return
+    setMsg(null)
+    try {
+      await api(`/inventory/items/${row.id}`, { method: 'DELETE' })
+      await load()
+      if (hiddenDevEnabled && showStubDevTools) {
+        try {
+          const data = await api<InventoryItem[]>('/inventory/items/hidden-items')
+          setHiddenRows(data)
+        } catch {
+          /* no-op */
+        }
+      }
+      setMsg('Ítem eliminado')
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'No se pudo borrar')
+    }
+  }
+
   async function createItem(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
@@ -184,6 +255,22 @@ export function InventoryPage() {
         }
       />
 
+      {showStubDevTools ? (
+        <label className="flex cursor-pointer flex-wrap items-center gap-2 rounded-lg border border-dashed border-amber-400/70 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-100">
+          <input
+            type="checkbox"
+            checked={hiddenDevEnabled}
+            onChange={toggleHiddenDev}
+            className="rounded border-slate-300 dark:border-slate-500"
+          />
+          <span>
+            Modo desarrollador: mostrar <strong>SKU ocultos</strong> (ítems desactivados en catálogo;
+            <code className="mx-1 rounded bg-amber-100/80 px-1 font-mono text-xs dark:bg-amber-900/50">isActive=false</code>
+            ). Podés borrarlos si stock es 0 y no tienen referencias en OT u otros documentos.
+          </span>
+        </label>
+      ) : null}
+
       {err && (
         <p className="va-alert-error-lg">
           {err}
@@ -204,14 +291,14 @@ export function InventoryPage() {
               <col className="w-[8%]" />
               <col className="w-[9%]" />
               <col className="w-[9%]" />
-              <col className={showInvActions ? 'w-[22%]' : 'w-[27%]'} />
+              <col className={showInvActionsCol ? 'w-[22%]' : 'w-[27%]'} />
               <col className="w-[10%]" />
               <col className="w-[7%]" />
               <col className="w-[6%]" />
               <col className="w-[11%]" />
               <col className="w-[10%]" />
               <col className="w-[4%]" />
-              {showInvActions ? <col className="w-[6%]" /> : null}
+              {showInvActionsCol ? <col className="w-[8%]" /> : null}
             </colgroup>
             <thead>
               <tr className="va-table-head-row">
@@ -245,9 +332,9 @@ export function InventoryPage() {
                 <th className="va-table-th min-w-0 text-center" title="Activo en catálogo">
                   Act.
                 </th>
-                {showInvActions ? (
+                {showInvActionsCol ? (
                   <th className="va-table-th min-w-0 text-right" title="Acciones">
-                    Editar
+                    Acciones
                   </th>
                 ) : null}
               </tr>
@@ -298,15 +385,34 @@ export function InventoryPage() {
                     <td className="va-table-td whitespace-nowrap text-center text-slate-600 dark:text-slate-300">
                       {r.isActive ? 'Sí' : 'No'}
                     </td>
-                    {showInvActions ? (
+                    {showInvActionsCol ? (
                       <td className="va-table-td min-w-0 !px-0 py-2 pr-1 text-right sm:pr-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(r)}
-                          className="inline-flex rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          Editar
-                        </button>
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {showInvActions ? (
+                            <button
+                              type="button"
+                              onClick={() => openEdit(r)}
+                              className="inline-flex rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                            >
+                              Editar
+                            </button>
+                          ) : null}
+                          {showInvDelete ? (
+                            <button
+                              type="button"
+                              title={
+                                Number(r.quantityOnHand) !== 0
+                                  ? 'Solo se puede borrar con stock en cero'
+                                  : 'Eliminar si no está usado en OT, ventas, compras, etc.'
+                              }
+                              disabled={Number(r.quantityOnHand) !== 0}
+                              onClick={() => deleteItem(r)}
+                              className="inline-flex rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/40"
+                            >
+                              Borrar
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                     ) : null}
                   </tr>
@@ -317,6 +423,67 @@ export function InventoryPage() {
           </div>
         </div>
       )}
+
+      {hiddenDevEnabled && showStubDevTools ? (
+        <div className="space-y-2">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            SKU ocultos (desarrollo)
+          </h2>
+          {hiddenErr ? <p className="va-alert-error-lg">{hiddenErr}</p> : null}
+          {!hiddenRows && !hiddenErr ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">Cargando…</p>
+          ) : null}
+          {hiddenRows && hiddenRows.length === 0 ? (
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              No hay ítems inactivos en catálogo.
+            </p>
+          ) : null}
+          {hiddenRows && hiddenRows.length > 0 ? (
+            <div className={tableWrapClass}>
+              <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+                <table className="va-table va-table-inv w-full min-w-[42rem]">
+                  <thead>
+                    <tr className="va-table-head-row">
+                      <th className="va-table-th font-mono">SKU</th>
+                      <th className="va-table-th">Nombre</th>
+                      <th className="va-table-th text-right">Stock</th>
+                      {showInvDelete ? (
+                        <th className="va-table-th text-right">Acciones</th>
+                      ) : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hiddenRows.map((r) => (
+                      <tr key={r.id} className="va-table-body-row">
+                        <td className="va-table-td font-mono text-sm">{singleLineCode(r.sku)}</td>
+                        <td className="va-table-td">{r.name}</td>
+                        <td className="va-table-td text-right tabular-nums">{r.quantityOnHand}</td>
+                        {showInvDelete ? (
+                          <td className="va-table-td text-right">
+                            <button
+                              type="button"
+                              title={
+                                Number(r.quantityOnHand) !== 0
+                                  ? 'Solo se puede borrar con stock en cero'
+                                  : 'Eliminar si no está en líneas de cotización u otros documentos'
+                              }
+                              disabled={Number(r.quantityOnHand) !== 0}
+                              onClick={() => deleteItem(r)}
+                              className="inline-flex rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/40"
+                            >
+                              Borrar
+                            </button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {editItem && (
         <div className="va-modal-overlay" role="presentation">

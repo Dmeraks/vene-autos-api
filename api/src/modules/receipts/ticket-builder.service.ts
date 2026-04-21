@@ -140,8 +140,8 @@ type LineForTicket = {
 
 /**
  * Resuelve el nombre visible de una línea en el ticket.
- *   - LABOR → siempre "Mano de obra" (las notas del concepto quedan solo en la OT,
- *     no se imprimen como nombre del ítem en el recibo).
+ *   - LABOR → `description` de la línea (nombre del servicio o texto libre); si vacío,
+ *     nombre del servicio del catálogo (`service.name`, con código si aplica); último "Mano de obra".
  *   - PART  → si hay `inventoryItem`, construye `"{name} — {reference}"` (si hay ref).
  *            Si no, cae a `description` o nombre/servicio como fallback genérico.
  *
@@ -149,7 +149,16 @@ type LineForTicket = {
  * `name`/`reference` del catálogo (antes la referencia venía embebida con guiones).
  */
 function resolveLineLabel(ln: LineForTicket): string {
-  if (ln.lineType === 'LABOR') return 'Mano de obra';
+  if (ln.lineType === 'LABOR') {
+    const desc = (ln.description ?? '').trim();
+    if (desc) return desc;
+    const svcName = (ln.service?.name ?? '').trim();
+    if (svcName) {
+      const code = (ln.service?.code ?? '').trim();
+      return code ? `${code} · ${svcName}` : svcName;
+    }
+    return 'Mano de obra';
+  }
   const inv = ln.inventoryItem;
   if (inv) {
     const name = (inv.name ?? '').trim();

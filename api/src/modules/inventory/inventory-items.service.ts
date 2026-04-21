@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, WorkOrderLineType } from '@prisma/client';
 import { ceilWholeCop, decimalFromMoneyApiString } from '../../common/money/cop-money';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -44,6 +49,20 @@ export class InventoryItemsService {
       where: { isActive: true },
       orderBy: { sku: 'asc' },
       take: 500,
+      include: { measurementUnit: unitBrief },
+    });
+    return rows.map((r) => this.stripInventoryAverageCostIfNeeded(actor, r));
+  }
+
+  /**
+   * Ítems desactivados (`isActive=false`): no aparecen en el catálogo normal pero siguen en BD.
+   * Modo desarrollador en inventario para listarlos y poder borrarlos si aplican las reglas.
+   */
+  async listHiddenInventoryItems(actor: JwtUserPayload) {
+    const rows = await this.prisma.inventoryItem.findMany({
+      where: { isActive: false },
+      orderBy: { sku: 'asc' },
+      take: 5000,
       include: { measurementUnit: unitBrief },
     });
     return rows.map((r) => this.stripInventoryAverageCostIfNeeded(actor, r));
@@ -107,6 +126,58 @@ export class InventoryItemsService {
     });
 
     return row;
+  }
+
+  /**
+   * Borra un ítem solo si no tiene uso en documentos (OT, ventas, compras, facturas, cotizaciones)
+   * y el stock es cero. Elimina movimientos de inventario huérfanos del mismo ítem en la misma transacción.
+   */
+  async delete(
+    id: string,
+    actorUserId: string,
+    meta: { ip?: string; userAgent?: string },
+  ) {
+    const item = await this.prisma.inventoryItem.findUnique({ where: { id } });
+    if (!item) {
+      throw new NotFoundException('Ítem de inventario no encontrado');
+    }
+    if (!item.quantityOnHand.equals(new Prisma.Decimal(0)) && item.isActive) {
+      throw new BadRequestException(
+        'Solo se pueden borrar ítems activos con stock en cero. Los ítems ocultos del catálogo (`isActive=false`) se pueden borrar aunque tengan stock.',
+      );
+    }
+
+    const [wo, sale, pr, inv, quot] = await Promise.all([
+      this.prisma.workOrderLine.count({ where: { inventoryItemId: id } }),
+      this.prisma.saleLine.count({ where: { inventoryItemId: id } }),
+      this.prisma.purchaseReceiptLine.count({ where: { inventoryItemId: id } }),
+      this.prisma.invoiceLine.count({ where: { inventoryItemId: id } }),
+      this.prisma.quoteLine.count({ where: { inventoryItemId: id } }),
+    ]);
+    const refs = wo + sale + pr + inv + quot;
+    if (refs > 0) {
+      throw new ConflictException(
+        'Este ítem no se puede borrar: está referenciado en órdenes de trabajo, ventas, compras, facturas o cotizaciones. Quitá las líneas vinculadas antes.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.inventoryMovement.deleteMany({ where: { inventoryItemId: id } });
+      await tx.inventoryItem.delete({ where: { id } });
+    });
+
+    await this.audit.recordDomain({
+      actorUserId,
+      action: 'inventory_items.deleted',
+      entityType: 'InventoryItem',
+      entityId: id,
+      previousPayload: { sku: item.sku, name: item.name },
+      nextPayload: null,
+      ipAddress: meta.ip ?? null,
+      userAgent: meta.userAgent ?? null,
+    });
+
+    return { ok: true };
   }
 
   async update(

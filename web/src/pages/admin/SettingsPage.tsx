@@ -6,7 +6,7 @@ import { PageHeader } from '../../components/layout/PageHeader'
 import { getSettingPresentation } from '../../config/settingsPresentation'
 import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
-import { isResumeLastModuleEnabled, setResumeLastModuleEnabled } from '../../utils/lastModule'
+import { isResumeLastModuleEnabled, setResumeLastModuleEnabled } from '../../services/lastModuleStorage'
 
 function displayValue(v: unknown): string {
   if (v === null || v === undefined) return ''

@@ -7,6 +7,12 @@ export const INVENTORY_REF_PURCHASE_RECEIPT_LINE = 'PurchaseReceiptLine';
 /** Referencia en `InventoryMovement.referenceType` hacia una línea de venta (Fase 3). */
 export const INVENTORY_REF_SALE_LINE = 'SaleLine';
 
+/** Clave en `workshop_counters` para el siguiente SKU de repuesto creado desde cotización (sin stock). */
+export const WORKSHOP_COUNTER_AD_HOC_SKU_KEY = 'inventory_ad_hoc_sku';
+
+/** Prefijo visible del SKU automático (ej. VEN-Q-000001). Debe terminar en guion para `normalizeInventorySkuNumeracion`. */
+export const AD_HOC_QUOTE_SKU_PREFIX = 'VEN-Q';
+
 /** Cantidades en línea (hasta 4 decimales, ej. litros). */
 export const QTY_DECIMAL_REGEX = /^\d+(\.\d{1,4})?$/;
 

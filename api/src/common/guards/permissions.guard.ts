@@ -45,7 +45,7 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('Usuario no autenticado');
     }
 
-    const granted = new Set(user.permissions);
+    const granted = new Set(user.permissions ?? []);
 
     if (requiredAny && requiredAny.length > 0) {
       const ok = requiredAny.some((code) => granted.has(code));

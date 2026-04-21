@@ -9,7 +9,7 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import type { InventoryItem, OilDrumEconomicsItem, OilDrumEconomicsResponse } from '../api/types'
 import { formatCopFromString } from '../utils/copFormat'
-import { inventoryItemIsOilDrum55Gallon, OIL_DRUM_CATEGORY_HINT } from '../utils/oilDrumInventory'
+import { inventoryItemIsOilDrum55Gallon, OIL_DRUM_CATEGORY_HINT } from '../services/inventory/oilDrumInventory'
 
 /** Una caneca en la imagen = esta cantidad en la unidad del ítem (p. ej. 55 gal). */
 const DRUM_REFERENCE_QTY = 55

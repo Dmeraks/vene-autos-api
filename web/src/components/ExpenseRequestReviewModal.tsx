@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import { useConfirm } from './confirm/ConfirmProvider'
 import { NotesMinCharCounter } from './NotesMinCharCounter'
 import { formatCopFromString } from '../utils/copFormat'
-import { successMessageWithDrawerPulse } from '../utils/cashDrawerBridge'
+import { successMessageWithDrawerPulse } from '../services/cashDrawerBridge'
 
 export type ExpenseRequestDetail = {
   id: string

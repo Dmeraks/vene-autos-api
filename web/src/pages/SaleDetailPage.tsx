@@ -19,7 +19,8 @@ import { formatCopFromString, normalizeMoneyDecimalStringForApi } from '../utils
 import {
   printTicketFromApi,
   successMessageWithTicketAndPulse,
-} from '../utils/cashDrawerBridge'
+} from '../services/cashDrawerBridge'
+import { normalizeListResponse } from '../utils/normalizeListResponse'
 
 type CashCategory = { id: string; slug: string; name: string; direction: string }
 
@@ -125,15 +126,15 @@ export function SaleDetailPage() {
 
   useEffect(() => {
     if (!can('services:read')) return
-    void api<{ items: Service[] }>('/services?activeOnly=true')
-      .then((r) => setServices(Array.isArray(r.items) ? r.items : []))
+    void api<Service[] | { items: Service[] }>('/services?activeOnly=true')
+      .then((r) => setServices(normalizeListResponse<Service>(r)))
       .catch(() => undefined)
   }, [can])
 
   useEffect(() => {
     if (!can('tax_rates:read')) return
-    void api<{ items: TaxRate[] }>('/tax-rates?activeOnly=true')
-      .then((r) => setTaxRates(Array.isArray(r.items) ? r.items : []))
+    void api<TaxRate[] | { items: TaxRate[] }>('/tax-rates?activeOnly=true')
+      .then((r) => setTaxRates(normalizeListResponse<TaxRate>(r)))
       .catch(() => undefined)
   }, [can])
 

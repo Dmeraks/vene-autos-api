@@ -1,11 +1,23 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, openAuthenticatedHtml } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { useConfirm } from '../components/confirm/ConfirmProvider'
 import { CashCloseSessionModal } from '../components/CashCloseSessionModal'
 import { CashOpenSessionModal } from '../components/CashOpenSessionModal'
-import { CashSessionMovementsPanel, type SessionMovementRow } from '../components/CashSessionMovementsPanel'
+import { CashSessionMovementsPanel } from '../components/CashSessionMovementsPanel'
+import { CashMovementFormPanel } from '../features/cash/CashMovementFormPanel'
+import { expenseRequestStatusLabel, sessionStatusEs } from '../features/cash/cashLabels'
+import {
+  invalidateCashDelegates,
+  invalidateCashExpenseRequestLists,
+  invalidateCashOperationalState,
+} from '../features/cash/invalidateCashQueries'
+import { useCashCategories } from '../features/cash/hooks/useCashCategories'
+import { useCashCoreData } from '../features/cash/hooks/useCashCoreData'
+import { useCashSessionModalDraft } from '../features/cash/hooks/useCashSessionModalDraft'
+import type { CashMovementDraftValues, CashTab, ExpenseReq, UserBrief } from '../features/cash/types'
 import { ExpenseRequestReviewModal } from '../components/ExpenseRequestReviewModal'
 import { PageHeader } from '../components/layout/PageHeader'
 import { TabRow } from '../components/layout/TabRow'
@@ -18,84 +30,20 @@ import {
   SETTINGS_UI_CONTEXT_PATH,
   type SettingsUiContextResponse,
 } from '../config/operationalNotes'
+import { STALE_OPERATIONAL_MS } from '../constants/queryStaleTime'
 import {
   printTicketFromApi,
   successMessageWithDrawerPulse,
   successMessageWithTicketAndPulse,
   triggerCashDrawerPulse,
-} from '../utils/cashDrawerBridge'
+} from '../services/cashDrawerBridge'
 import {
   API_MONEY_DECIMAL_REGEX,
   formatCopFromString,
   formatMoneyInputDisplayFromNormalized,
   normalizeMoneyDecimalStringForApi,
 } from '../utils/copFormat'
-
-type Tab = 'sesion' | 'ingreso' | 'egreso' | 'delegados' | 'movimientos' | 'solicitudes'
-
-type CashCategory = { id: string; slug: string; name: string; direction: string }
-
-type SessionRow = {
-  id: string
-  status: string
-  openingAmount: string
-  openedAt: string
-  closedAt: string | null
-}
-
-/** Resumen calculado en el API (apertura + ingresos − egresos de la sesión). */
-type BalanceSummary = {
-  totalIncome: string
-  totalExpense: string
-  expectedBalance: string
-  movementCount: number
-}
-
-/** Respuesta de `GET /cash/sessions/current` cuando hay sesión abierta. */
-type CurrentSession = SessionRow & {
-  balanceSummary?: BalanceSummary
-  openedBy?: { id: string; email: string; fullName: string }
-  movements?: SessionMovementRow[]
-}
-
-type ExpenseReq = {
-  id: string
-  status: string
-  amount: string
-  category: { slug: string; name: string }
-  createdAt: string
-  note: string | null
-  requestedBy?: { id: string; email: string; fullName: string }
-  isExpired?: boolean
-  resultMovement?: { id: string; sessionId: string; amount: string; createdAt: string } | null
-}
-
-type UserBrief = { id: string; email: string; fullName: string }
-
-function sessionStatusEs(status: string): string {
-  if (status === 'OPEN') return 'Abierta'
-  if (status === 'CLOSED') return 'Cerrada'
-  return status
-}
-
-function expenseStatusEs(status: string): string {
-  const m: Record<string, string> = {
-    PENDING: 'Pendiente',
-    APPROVED: 'Aprobada',
-    REJECTED: 'Rechazada',
-    CANCELLED: 'Cancelada',
-    EXPIRED: 'Expirada',
-  }
-  return m[status] ?? status
-}
-
-function expenseRequestStatusLabel(r: ExpenseReq): string {
-  const base = expenseStatusEs(r.status)
-  if (r.status === 'APPROVED' && !r.resultMovement) {
-    return `${base} · pendiente en caja`
-  }
-  return base
-}
+import { queryKeys } from '../lib/queryKeys'
 
 export function CashPage() {
   const panelTheme = usePanelTheme()
@@ -105,81 +53,139 @@ export function CashPage() {
   const surfaceCardClass = isSaasPanel ? 'va-saas-page-section' : 'va-card'
   const narrowFormClass = isSaasPanel ? 'va-saas-page-section space-y-3 sm:max-w-md' : 'va-card space-y-3 sm:max-w-md'
   const { can, user } = useAuth()
-  const { open: cashOpen, loadStatus: cashOpenLoadStatus, refresh: refreshCashOpen } = useCashSessionOpen()
+  const { open: cashOpen, loadStatus: cashOpenLoadStatus } = useCashSessionOpen()
+  const queryClient = useQueryClient()
   /** Operaciones de ingreso/egreso/listados de movimiento solo con sesión abierta (capa global). */
   const isCashOperable = cashOpen === true
   const confirm = useConfirm()
-  const [tab, setTab] = useState<Tab>('sesion')
+  const [tab, setTab] = useState<CashTab>('sesion')
   const [msg, setMsg] = useState<string | null>(null)
   const [reviewRequestId, setReviewRequestId] = useState<string | null>(null)
-  const [closeSessionModalOpen, setCloseSessionModalOpen] = useState(false)
-  const [openSessionModalOpen, setOpenSessionModalOpen] = useState(false)
   const [notesMin, setNotesMin] = useState(25)
 
-  const [current, setCurrent] = useState<CurrentSession | null | undefined>(undefined)
+  const canReadSessions = can('cash_sessions:read')
+  const { current, sessions } = useCashCoreData(canReadSessions)
+  const categories = useCashCategories(canReadSessions)
+  const {
+    closeSessionModalOpen,
+    setCloseSessionModalOpen,
+    openSessionModalOpen,
+    setOpenSessionModalOpen,
+    openAmt,
+    setOpenAmt,
+    openNote,
+    setOpenNote,
+    closeCounted,
+    setCloseCounted,
+    closeDiff,
+    setCloseDiff,
+  } = useCashSessionModalDraft(tab)
   /** Debajo de `current`: antes estaba arriba y lanzaba TDZ → pantalla Caja en blanco. */
   const showOpenSessionButton =
     can('cash_sessions:open') &&
     current?.status !== 'OPEN' &&
     !(current === undefined && cashOpen === true)
-  const [sessions, setSessions] = useState<SessionRow[]>([])
-  const [categories, setCategories] = useState<CashCategory[]>([])
-  const [users, setUsers] = useState<UserBrief[]>([])
-
-  const [openAmt, setOpenAmt] = useState('0')
-  const [openNote, setOpenNote] = useState('')
-  const [closeCounted, setCloseCounted] = useState('')
-  const [closeDiff, setCloseDiff] = useState('')
-
-  const [movCat, setMovCat] = useState('')
-  const [movAmt, setMovAmt] = useState('')
-  const [movTender, setMovTender] = useState('')
-  const [movNote, setMovNote] = useState('')
-  const [movAck, setMovAck] = useState(false)
-  const [movTwoCopies, setMovTwoCopies] = useState(false)
-
-  const movVueltoHint = useMemo(() => {
-    if (tab !== 'ingreso' && tab !== 'egreso') return null
-    const a = Number(normalizeMoneyDecimalStringForApi(movAmt) || movAmt.trim() || 0)
-    const t = Number(normalizeMoneyDecimalStringForApi(movTender) || movTender.trim() || 0)
-    if (!movTender.trim()) return null
-    if (Number.isNaN(a) || Number.isNaN(t) || a <= 0) return 'Completá el importe del movimiento.'
-    if (t < a) return 'El efectivo indicado debe ser mayor o igual al importe del movimiento.'
-    const ch = t - a
-    if (ch === 0) return 'Sin vuelto ($0): importe y efectivo coinciden.'
-    const amt = `$${formatCopFromString(String(ch))}`
-    return tab === 'ingreso' ? `Vuelto a entregar al cliente: ${amt}.` : `Vuelto que vuelve a caja: ${amt}.`
-  }, [movAmt, movTender, tab])
 
   const [delSel, setDelSel] = useState<Set<string>>(new Set())
 
-  const [reqList, setReqList] = useState<ExpenseReq[]>([])
   const [reqStatus, setReqStatus] = useState<string>('')
   const [reqCat, setReqCat] = useState('')
   const [reqAmt, setReqAmt] = useState('')
   const [reqNote, setReqNote] = useState('')
 
-  const loadCore = useCallback(async () => {
-    if (!can('cash_sessions:read')) return
-    /**
-     * Antes: `current` y `sessions` en serie. Si `/current` tardaba o colgaba, nunca se
-     * llamaba `/sessions` y el LED + “Estado actual” quedaban en “Cargando…” sin fin, y el
-     * botón «Abrir sesión» (`current === null`) nunca aparecía.
-     */
-    void api<CurrentSession | null>('/cash/sessions/current')
-      .then((cur) => setCurrent(cur))
-      .catch(() => setCurrent(null))
-    void api<SessionRow[]>('/cash/sessions')
-      .then((list) => setSessions(list))
-      .catch(() => setSessions([]))
-  }, [can])
+  const delegatesQuery = useQuery({
+    queryKey: queryKeys.cash.delegatesBundle(),
+    queryFn: async () => {
+      const [u, d] = await Promise.all([
+        api<UserBrief[]>('/users'),
+        api<{ delegates: { user: { id: string } }[] }>('/cash/delegates').catch(() => ({
+          delegates: [] as { user: { id: string } }[],
+        })),
+      ])
+      return { users: u, delegateIds: d.delegates.map((x) => x.user.id) }
+    },
+    enabled: tab === 'delegados' && can('cash_delegates:manage'),
+    staleTime: STALE_OPERATIONAL_MS,
+  })
+
+  const expenseRequestsQuery = useQuery({
+    queryKey: queryKeys.cash.expenseRequestsList(reqStatus),
+    queryFn: async () => {
+      const q = reqStatus ? `?status=${encodeURIComponent(reqStatus)}` : ''
+      try {
+        return await api<ExpenseReq[]>(`/cash/expense-requests${q}`)
+      } catch {
+        return []
+      }
+    },
+    enabled: tab === 'solicitudes' && can('cash_expense_requests:read'),
+    staleTime: STALE_OPERATIONAL_MS,
+  })
+  const reqList = expenseRequestsQuery.data ?? []
+
+  const openSessionMutation = useMutation({
+    mutationFn: (body: { openingAmount: string; note: string }) =>
+      api('/cash/sessions/open', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateCashOperationalState(queryClient),
+  })
+
+  const closeSessionMutation = useMutation({
+    mutationFn: (args: {
+      sessionId: string
+      closingCounted: string
+      differenceNote?: string
+    }) =>
+      api(`/cash/sessions/${args.sessionId}/close`, {
+        method: 'POST',
+        body: JSON.stringify({
+          closingCounted: args.closingCounted,
+          ...(args.differenceNote ? { differenceNote: args.differenceNote } : {}),
+        }),
+      }),
+    onSuccess: () => invalidateCashOperationalState(queryClient),
+  })
+
+  const cashMovementMutation = useMutation({
+    mutationFn: (args: {
+      dir: 'income' | 'expense'
+      body: Record<string, unknown>
+    }) =>
+      api<{ id: string; sessionId: string }>(`/cash/movements/${args.dir}`, {
+        method: 'POST',
+        body: JSON.stringify(args.body),
+      }),
+    onSuccess: () => invalidateCashOperationalState(queryClient),
+  })
+
+  const saveDelegatesMutation = useMutation({
+    mutationFn: (userIds: string[]) =>
+      api('/cash/delegates', {
+        method: 'PUT',
+        body: JSON.stringify({ userIds }),
+      }),
+    onSuccess: () => invalidateCashDelegates(queryClient),
+  })
+
+  const createExpenseRequestMutation = useMutation({
+    mutationFn: (body: { categorySlug: string; amount: string; note: string }) =>
+      api('/cash/expense-requests', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateCashExpenseRequestLists(queryClient),
+  })
 
   useEffect(() => {
-    void loadCore()
-  }, [loadCore])
+    const d = delegatesQuery.data
+    if (!d) return
+    setDelSel(new Set(d.delegateIds))
+  }, [delegatesQuery.data])
 
   useEffect(() => {
-    const restricted: Tab[] = ['ingreso', 'egreso', 'delegados', 'movimientos', 'solicitudes']
+    const restricted: CashTab[] = ['ingreso', 'egreso', 'delegados', 'movimientos', 'solicitudes']
     if (!isCashOperable && restricted.includes(tab)) {
       setTab('sesion')
     }
@@ -191,84 +197,14 @@ export function CashPage() {
       .catch(() => undefined)
   }, [])
 
-  useEffect(() => {
-    if (!can('cash_sessions:read')) return
-    void api<CashCategory[]>('/cash/categories')
-      .then(setCategories)
-      .catch(() => undefined)
-  }, [can])
-
-  useEffect(() => {
-    if (tab !== 'delegados' || !can('cash_delegates:manage')) return
-    void Promise.all([
-      api<UserBrief[]>('/users'),
-      api<{ max: number; delegates: { user: { id: string } }[] }>('/cash/delegates').catch(() => ({
-        max: 3,
-        delegates: [] as { user: { id: string } }[],
-      })),
-    ])
-      .then(([u, d]) => {
-        setUsers(u)
-        setDelSel(new Set(d.delegates.map((x) => x.user.id)))
-      })
-      .catch(() => undefined)
-  }, [tab, can])
-
-  useEffect(() => {
-    if (tab !== 'solicitudes' || !can('cash_expense_requests:read')) return
-    const q = reqStatus ? `?status=${encodeURIComponent(reqStatus)}` : ''
-    void api<ExpenseReq[]>(`/cash/expense-requests${q}`)
-      .then(setReqList)
-      .catch(() => setReqList([]))
-  }, [tab, reqStatus, can])
-
-  /**
-   * Misma pieza de estado `movCat` sirve para ingreso y egreso. Sin esto, al ir a «Egreso» el
-   * `<select>` puede mostrar una categoría de egreso mientras el estado sigue con un slug INCOME;
-   * el POST falla con 400 («La categoría no corresponde al tipo de movimiento»).
-   */
-  useEffect(() => {
-    if (tab !== 'ingreso' && tab !== 'egreso') return
-    const income = categories.filter((c) => c.direction === 'INCOME')
-    const expense = categories.filter((c) => c.direction === 'EXPENSE')
-    const list = tab === 'ingreso' ? income : expense
-    if (!list.length) return
-    const ok = list.some((c) => c.slug === movCat)
-    if (!ok || !movCat.trim()) {
-      setMovCat(list[0].slug)
-    }
-  }, [tab, categories, movCat])
-
-  useEffect(() => {
-    setMovAck(false)
-    setMovTender('')
-  }, [tab, movCat])
-
-  useEffect(() => {
-    if (!closeSessionModalOpen) return
-    setCloseCounted('')
-    setCloseDiff('')
-  }, [closeSessionModalOpen])
-
-  useEffect(() => {
-    if (!openSessionModalOpen) return
-    setOpenAmt('0')
-    setOpenNote('')
-  }, [openSessionModalOpen])
-
-  useEffect(() => {
-    setCloseSessionModalOpen(false)
-    setOpenSessionModalOpen(false)
-  }, [tab])
-
-  function assertOperationalNote(label: string, raw: string): boolean {
+  const assertOperationalNote = useCallback((label: string, raw: string): boolean => {
     const t = raw.trim()
     if (t.length < notesMin) {
       setMsg(`${label}: necesitás al menos ${notesMin} caracteres (política del taller en Configuración).`)
       return false
     }
     return true
-  }
+  }, [notesMin])
 
   async function openSession(e: React.FormEvent): Promise<boolean> {
     e.preventDefault()
@@ -291,14 +227,12 @@ export function CashPage() {
     })
     if (!ok) return false
     try {
-      await api('/cash/sessions/open', {
-        method: 'POST',
-        body: JSON.stringify({ openingAmount: amtNorm, note: openNote.trim() }),
+      await openSessionMutation.mutateAsync({
+        openingAmount: amtNorm,
+        note: openNote.trim(),
       })
       setOpenAmt('0')
       setOpenNote('')
-      await loadCore()
-      await refreshCashOpen()
       /**
        * Fase 7.6 · Pulso al cajón físico al abrir la sesión: el cajero necesita depositar
        * el fondo inicial. Si el bridge no está corriendo el helper agrega un hint al mensaje.
@@ -364,18 +298,14 @@ export function CashPage() {
     if (!okClose) return false
     const closedSessionId = current.id
     try {
-      await api(`/cash/sessions/${closedSessionId}/close`, {
-        method: 'POST',
-        body: JSON.stringify({
-          closingCounted: counted,
-          differenceNote: closeDiff.trim() || undefined,
-        }),
+      await closeSessionMutation.mutateAsync({
+        sessionId: closedSessionId,
+        closingCounted: counted,
+        differenceNote: closeDiff.trim() || undefined,
       })
       setMsg(null)
       setCloseCounted('')
       setCloseDiff('')
-      await loadCore()
-      await refreshCashOpen()
       /**
        * Fase 7.6 · Si el taller activó `cash.arqueo_autoprint_enabled`, abrimos solito el
        * ticket de arqueo. Si falla (popup bloqueado, bridge caído, etc.), avisamos al cajero
@@ -417,19 +347,21 @@ export function CashPage() {
     }
   }
 
-  async function movement(dir: 'income' | 'expense') {
+  const submitCashMovement = useCallback(
+    async (dir: 'income' | 'expense', draft: CashMovementDraftValues): Promise<boolean> => {
+    const { movAck, movNote, movAmt, movTender, movCat, movTwoCopies } = draft
     setMsg(null)
     if (!movAck) {
       setMsg('Marcá la casilla de confirmación abajo: revisaste categoría, importe, efectivo (si aplica) y nota.')
-      return
+      return false
     }
-    if (!assertOperationalNote(dir === 'income' ? 'Nota del ingreso' : 'Nota del egreso', movNote)) return
+    if (!assertOperationalNote(dir === 'income' ? 'Nota del ingreso' : 'Nota del egreso', movNote)) return false
     const amt = normalizeMoneyDecimalStringForApi(movAmt)
     if (!amt || !API_MONEY_DECIMAL_REGEX.test(amt)) {
       setMsg(
         'Importe del movimiento: usá solo números (ej. 50000 o 50000.50). Podés quitar puntos de miles si los pegaste del resumen.',
       )
-      return
+      return false
     }
     const tenRaw = movTender.trim()
     const ten = tenRaw ? normalizeMoneyDecimalStringForApi(movTender) : ''
@@ -437,14 +369,14 @@ export function CashPage() {
       setMsg(
         'Efectivo en mano: usá solo números en el mismo formato que el importe (sin puntos de miles o normalizados).',
       )
-      return
+      return false
     }
     const wantDir = dir === 'income' ? 'INCOME' : 'EXPENSE'
     const catList = categories.filter((c) => c.direction === wantDir)
     const categorySlug = catList.find((c) => c.slug === movCat)?.slug ?? catList[0]?.slug
     if (!categorySlug) {
       setMsg(`No hay categoría de ${dir === 'income' ? 'ingreso' : 'egreso'} disponible. Recargá la página.`)
-      return
+      return false
     }
     const cat = categories.find((c) => c.slug === categorySlug)
     const catName = cat?.name ?? categorySlug
@@ -510,28 +442,22 @@ export function CashPage() {
       confirmLabel: dir === 'income' ? 'Registrar ingreso' : 'Registrar egreso',
       variant: dir === 'expense' ? 'danger' : 'default',
     })
-    if (!okMov) return
+    if (!okMov) return false
     try {
       /**
        * Fase 7.7 · Capturamos `id` (movimiento) y `sessionId` para imprimir el ticket
        * térmico del movimiento desde el puente local. El cajón siempre se abre.
        */
-      const created = await api<{ id: string; sessionId: string }>(`/cash/movements/${dir}`, {
-        method: 'POST',
-        body: JSON.stringify({
+      const created = await cashMovementMutation.mutateAsync({
+        dir,
+        body: {
           categorySlug,
           amount: amt,
           ...(ten ? { tenderAmount: ten } : {}),
           note: movNote.trim(),
-        }),
+        },
       })
       const successLabel = dir === 'income' ? 'Ingreso registrado' : 'Egreso registrado'
-      setMovAmt('')
-      setMovTender('')
-      setMovNote('')
-      setMovAck(false)
-      await loadCore()
-      await refreshCashOpen()
       const ticketPath = `/cash/sessions/${created.sessionId}/movements/${created.id}/receipt-ticket.json`
       setMsg(
         await successMessageWithTicketAndPulse(ticketPath, successLabel, {
@@ -539,11 +465,24 @@ export function CashPage() {
           openDrawer: true,
         }),
       )
-      setMovTwoCopies(false)
+      return true
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error')
+      return false
     }
-  }
+    },
+    [assertOperationalNote, categories, confirm, cashMovementMutation],
+  )
+
+  const submitIncomeMovement = useCallback(
+    (draft: CashMovementDraftValues) => submitCashMovement('income', draft),
+    [submitCashMovement],
+  )
+
+  const submitExpenseMovement = useCallback(
+    (draft: CashMovementDraftValues) => submitCashMovement('expense', draft),
+    [submitCashMovement],
+  )
 
   /**
    * Fase 7.7 · Reimprime el ticket térmico de un movimiento existente (sin abrir cajón).
@@ -572,7 +511,7 @@ export function CashPage() {
   async function saveDelegates(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
-    const picked = users.filter((u) => delSel.has(u.id))
+    const picked = (delegatesQuery.data?.users ?? []).filter((u) => delSel.has(u.id))
     const names = picked.map((u) => u.fullName).join(', ') || '(ninguno)'
     const okDel = await confirm({
       title: 'Guardar delegados de egreso',
@@ -581,10 +520,7 @@ export function CashPage() {
     })
     if (!okDel) return
     try {
-      await api('/cash/delegates', {
-        method: 'PUT',
-        body: JSON.stringify({ userIds: [...delSel] }),
-      })
+      await saveDelegatesMutation.mutateAsync([...delSel])
       setMsg('Delegados actualizados')
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error')
@@ -611,30 +547,24 @@ export function CashPage() {
     if (!okReq) return
     if (!assertOperationalNote('Nota de la solicitud de egreso', reqNote)) return
     try {
-      await api('/cash/expense-requests', {
-        method: 'POST',
-        body: JSON.stringify({
-          categorySlug: reqCat,
-          amount: reqNorm,
-          note: reqNote.trim(),
-        }),
+      await createExpenseRequestMutation.mutateAsync({
+        categorySlug: reqCat,
+        amount: reqNorm,
+        note: reqNote.trim(),
       })
       setReqAmt('')
       setReqNote('')
       setMsg('Solicitud creada')
-      const q = reqStatus ? `?status=${encodeURIComponent(reqStatus)}` : ''
-      setReqList(await api(`/cash/expense-requests${q}`))
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error')
     }
   }
 
-  async function refreshRequests() {
-    const q = reqStatus ? `?status=${encodeURIComponent(reqStatus)}` : ''
-    setReqList(await api(`/cash/expense-requests${q}`))
-  }
+  const refreshRequests = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.cash.expenseRequestsRoot() })
+  }, [queryClient])
 
-  const allTabs: { id: Tab; label: string; show: boolean }[] = [
+  const allTabs: { id: CashTab; label: string; show: boolean }[] = [
     { id: 'sesion', label: 'Sesión', show: can('cash_sessions:read') },
     { id: 'ingreso', label: 'Ingreso', show: can('cash_movements:create_income') && isCashOperable },
     { id: 'egreso', label: 'Egreso', show: can('cash_movements:create_expense') && isCashOperable },
@@ -644,8 +574,14 @@ export function CashPage() {
   ]
   const tabs = allTabs.filter((t) => t.show)
 
-  const incomeCats = categories.filter((c) => c.direction === 'INCOME')
-  const expenseCats = categories.filter((c) => c.direction === 'EXPENSE')
+  const incomeCats = useMemo(
+    () => categories.filter((c) => c.direction === 'INCOME'),
+    [categories],
+  )
+  const expenseCats = useMemo(
+    () => categories.filter((c) => c.direction === 'EXPENSE'),
+    [categories],
+  )
 
   const btnPrimary = 'va-btn-primary'
   /** Fondo oscuro: fuerza texto blanco (el texto del padre .va-card en oscuro no debe heredarse). */
@@ -948,186 +884,25 @@ export function CashPage() {
       )}
 
       {tab === 'ingreso' && can('cash_movements:create_income') && isCashOperable && (
-        <form
-          className={narrowFormClass}
-          onSubmit={(e) => {
-            e.preventDefault()
-            void movement('income')
-          }}
-        >
-          <h2 className="font-semibold text-slate-900 dark:text-slate-50">Registrar ingreso</h2>
-          <label className="block">
-            <span className="va-label">Categoría</span>
-            <select value={movCat} onChange={(e) => setMovCat(e.target.value)} className="va-field">
-              {incomeCats.map((c) => (
-                <option key={c.id} value={c.slug}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="va-label">Importe que queda registrado en caja</span>
-            <input
-              required
-              inputMode="decimal"
-              autoComplete="off"
-              value={formatMoneyInputDisplayFromNormalized(normalizeMoneyDecimalStringForApi(movAmt))}
-              onChange={(e) => setMovAmt(normalizeMoneyDecimalStringForApi(e.target.value))}
-              className="va-field"
-            />
-            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">
-              Ej. monto del cobro o ingreso real (lo que suma al saldo del sistema). Solo pesos enteros; miles con punto
-              (es-CO).
-            </span>
-          </label>
-          <label className="block">
-            <span className="va-label">Efectivo que te entregan (opcional)</span>
-            <input
-              inputMode="decimal"
-              autoComplete="off"
-              value={formatMoneyInputDisplayFromNormalized(normalizeMoneyDecimalStringForApi(movTender))}
-              onChange={(e) => setMovTender(normalizeMoneyDecimalStringForApi(e.target.value))}
-              className="va-field"
-              placeholder="Ej. billete de 100000 si el importe arriba es menor"
-            />
-            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">
-              Para billete grande: el vuelto se calcula solo. Dejá vacío si coincide con el importe o es transferencia.
-            </span>
-            {movVueltoHint && (
-              <p className="mt-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-900 dark:border-brand-600 dark:bg-brand-900/70 dark:text-brand-50">
-                {movVueltoHint}
-              </p>
-            )}
-          </label>
-          <label className="block">
-            <span className="va-label">Nota del ingreso</span>
-            <textarea
-              required
-              rows={2}
-              value={movNote}
-              onChange={(e) => setMovNote(e.target.value)}
-              className="va-field resize-y"
-              placeholder="Ej. cobro a cliente X por concepto…"
-            />
-            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">{notesMinHint(notesMin)}</span>
-            <NotesMinCharCounter value={movNote} minLength={notesMin} />
-          </label>
-          <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 dark:border-slate-500"
-              checked={movAck}
-              onChange={(e) => setMovAck(e.target.checked)}
-            />
-            <span>Confirmo categoría, importe, efectivo recibido (si aplica) y nota.</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-            <input
-              type="checkbox"
-              className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 dark:border-slate-500"
-              checked={movTwoCopies}
-              onChange={(e) => setMovTwoCopies(e.target.checked)}
-            />
-            <span>Imprimir 2 copias del ticket</span>
-          </label>
-          <button type="submit" className={btnPrimary}>
-            Registrar ingreso
-          </button>
-        </form>
+        <CashMovementFormPanel
+          direction="income"
+          categories={incomeCats}
+          notesMin={notesMin}
+          narrowFormClass={narrowFormClass}
+          submitButtonClass={btnPrimary}
+          onSubmit={submitIncomeMovement}
+        />
       )}
 
       {tab === 'egreso' && can('cash_movements:create_expense') && isCashOperable && (
-        <form
-          className={narrowFormClass}
-          onSubmit={(e) => {
-            e.preventDefault()
-            void movement('expense')
-          }}
-        >
-          <h2 className="font-semibold text-slate-900 dark:text-slate-50">Registrar egreso</h2>
-          <label className="block">
-            <span className="va-label">Categoría</span>
-            <select
-              value={movCat}
-              onChange={(e) => setMovCat(e.target.value)}
-              className="va-field"
-            >
-              {expenseCats.map((c) => (
-                <option key={c.id} value={c.slug}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="va-label">Importe del egreso (en caja)</span>
-            <input
-              required
-              inputMode="decimal"
-              autoComplete="off"
-              value={formatMoneyInputDisplayFromNormalized(normalizeMoneyDecimalStringForApi(movAmt))}
-              onChange={(e) => setMovAmt(normalizeMoneyDecimalStringForApi(e.target.value))}
-              className="va-field"
-            />
-            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">
-              Lo que sale del efectivo según el comprobante (neto del movimiento). Solo pesos enteros; miles con punto.
-            </span>
-          </label>
-          <label className="block">
-            <span className="va-label">Efectivo que das / billete usado (opcional)</span>
-            <input
-              inputMode="decimal"
-              autoComplete="off"
-              value={formatMoneyInputDisplayFromNormalized(normalizeMoneyDecimalStringForApi(movTender))}
-              onChange={(e) => setMovTender(normalizeMoneyDecimalStringForApi(e.target.value))}
-              className="va-field"
-              placeholder="Si pagás con billete mayor al importe, indicá cuánto entregás"
-            />
-            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">
-              Vuelto que vuelve a caja = efectivo indicado − importe del egreso.
-            </span>
-            {movVueltoHint && (
-              <p className="mt-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-900 dark:border-brand-600 dark:bg-brand-900/70 dark:text-brand-50">
-                {movVueltoHint}
-              </p>
-            )}
-          </label>
-          <label className="block">
-            <span className="va-label">Nota del egreso</span>
-            <textarea
-              required
-              rows={2}
-              value={movNote}
-              onChange={(e) => setMovNote(e.target.value)}
-              className="va-field resize-y"
-              placeholder="Ej. compra de insumos, pago a proveedor…"
-            />
-            <span className="mt-1 block text-xs text-slate-500 dark:text-slate-300">{notesMinHint(notesMin)}</span>
-            <NotesMinCharCounter value={movNote} minLength={notesMin} />
-          </label>
-          <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 dark:border-slate-500"
-              checked={movAck}
-              onChange={(e) => setMovAck(e.target.checked)}
-            />
-            <span>Confirmo categoría, importe, efectivo usado (si aplica) y nota.</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-            <input
-              type="checkbox"
-              className="h-4 w-4 shrink-0 rounded border-slate-300 text-brand-600 dark:border-slate-500"
-              checked={movTwoCopies}
-              onChange={(e) => setMovTwoCopies(e.target.checked)}
-            />
-            <span>Imprimir 2 copias del ticket</span>
-          </label>
-          <button type="submit" className={btnDark}>
-            Registrar egreso
-          </button>
-        </form>
+        <CashMovementFormPanel
+          direction="expense"
+          categories={expenseCats}
+          notesMin={notesMin}
+          narrowFormClass={narrowFormClass}
+          submitButtonClass={btnDark}
+          onSubmit={submitExpenseMovement}
+        />
       )}
 
       {tab === 'delegados' && can('cash_delegates:manage') && isCashOperable && (
@@ -1137,7 +912,7 @@ export function CashPage() {
             Solo estas personas pueden registrar egresos directos, según la política del taller.
           </p>
           <div className="mt-3 max-h-72 space-y-2 overflow-y-auto rounded-xl border border-slate-100 p-2 dark:border-slate-800">
-            {users.map((u) => (
+            {(delegatesQuery.data?.users ?? []).map((u) => (
               <label
                 key={u.id}
                 className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/80"
@@ -1230,97 +1005,113 @@ export function CashPage() {
             </form>
           )}
 
-          <div className="grid gap-3 md:hidden">
-            {reqList.map((r) => (
-              <div
-                key={r.id}
-                className={isSaasPanel ? 'va-saas-page-section !space-y-0' : 'va-card !p-4'}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-300">
-                      {new Date(r.createdAt).toLocaleString()}
-                    </p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-50">{r.category.name}</p>
-                    <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-50">
-                      ${formatCopFromString(r.amount)}
-                    </p>
-                    {r.requestedBy && (
-                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                        Solicita: <span className="font-medium text-slate-800 dark:text-slate-200">{r.requestedBy.fullName}</span>
-                      </p>
-                    )}
-                  </div>
-                  <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-200">
-                    {expenseRequestStatusLabel(r)}
-                    {r.status === 'PENDING' && r.isExpired && ' · vencida'}
-                  </span>
-                </div>
-                {r.note && (
-                  <p className="mt-2 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{r.note}</p>
-                )}
-                <button
-                  type="button"
-                  className={`${btnSecondary} mt-3 w-full border-brand-200 text-brand-800 dark:border-brand-700 dark:text-brand-100`}
-                  onClick={() => setReviewRequestId(r.id)}
-                >
-                  Ver detalle
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div
-            className={
-              isSaasPanel
-                ? 'va-saas-page-section va-saas-page-section--flush hidden md:block'
-                : 'va-card-flush hidden md:block'
-            }
-          >
-            <div className="va-table-scroll">
-              <table className="va-table min-w-[520px]">
-                <thead>
-                  <tr className="va-table-head-row">
-                    <th className="va-table-th">Fecha</th>
-                    <th className="va-table-th">Solicita</th>
-                    <th className="va-table-th">Estado</th>
-                    <th className="va-table-th">Monto</th>
-                    <th className="va-table-th"> </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reqList.map((r) => (
-                    <tr key={r.id} className="va-table-body-row">
-                      <td className="va-table-td whitespace-nowrap font-mono text-xs text-slate-600 dark:text-slate-300">
-                        {new Date(r.createdAt).toLocaleString()}
-                      </td>
-                      <td className="va-table-td max-w-[10rem] truncate text-sm text-slate-800 dark:text-slate-200">
-                        {r.requestedBy?.fullName ?? '—'}
-                      </td>
-                      <td className="va-table-td font-medium text-slate-900 dark:text-slate-100">
-                        {expenseRequestStatusLabel(r)}
-                        {r.status === 'PENDING' && r.isExpired && (
-                          <span className="ml-1 text-xs font-normal text-amber-700 dark:text-amber-300">(vencida)</span>
+          {reqList.length === 0 ? (
+            <p
+              className={
+                isSaasPanel
+                  ? 'rounded-xl border border-dashed border-slate-200/90 bg-[var(--va-surface-elevated)] px-4 py-8 text-center text-sm text-slate-600 dark:border-slate-600 dark:text-slate-300'
+                  : 'rounded-xl border border-dashed border-slate-200 bg-slate-50/90 px-4 py-8 text-center text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300'
+              }
+            >
+              No hay solicitudes para mostrar con el filtro actual. Si acabás de abrir esta pestaña, probá{' '}
+              <strong>Refrescar lista</strong>.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-3 md:hidden">
+                {reqList.map((r) => (
+                  <div
+                    key={r.id}
+                    className={isSaasPanel ? 'va-saas-page-section !space-y-0' : 'va-card !p-4'}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs text-slate-500 dark:text-slate-300">
+                          {new Date(r.createdAt).toLocaleString()}
+                        </p>
+                        <p className="mt-1 font-semibold text-slate-900 dark:text-slate-50">{r.category.name}</p>
+                        <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-50">
+                          ${formatCopFromString(r.amount)}
+                        </p>
+                        {r.requestedBy && (
+                          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                            Solicita:{' '}
+                            <span className="font-medium text-slate-800 dark:text-slate-200">{r.requestedBy.fullName}</span>
+                          </p>
                         )}
-                      </td>
-                      <td className="va-table-td tabular-nums text-slate-900 dark:text-slate-50">
-                        ${formatCopFromString(r.amount)}
-                      </td>
-                      <td className="va-table-td">
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-brand-700 underline dark:text-brand-300"
-                          onClick={() => setReviewRequestId(r.id)}
-                        >
-                          Ver detalle
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-200">
+                        {expenseRequestStatusLabel(r)}
+                        {r.status === 'PENDING' && r.isExpired && ' · vencida'}
+                      </span>
+                    </div>
+                    {r.note && (
+                      <p className="mt-2 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{r.note}</p>
+                    )}
+                    <button
+                      type="button"
+                      className={`${btnSecondary} mt-3 w-full border-brand-200 text-brand-800 dark:border-brand-700 dark:text-brand-100`}
+                      onClick={() => setReviewRequestId(r.id)}
+                    >
+                      Ver detalle
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                className={
+                  isSaasPanel
+                    ? 'va-saas-page-section va-saas-page-section--flush hidden md:block'
+                    : 'va-card-flush hidden md:block'
+                }
+              >
+                <div className="va-table-scroll">
+                  <table className="va-table min-w-[520px]">
+                    <thead>
+                      <tr className="va-table-head-row">
+                        <th className="va-table-th">Fecha</th>
+                        <th className="va-table-th">Solicita</th>
+                        <th className="va-table-th">Estado</th>
+                        <th className="va-table-th">Monto</th>
+                        <th className="va-table-th"> </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reqList.map((r) => (
+                        <tr key={r.id} className="va-table-body-row">
+                          <td className="va-table-td whitespace-nowrap font-mono text-xs text-slate-600 dark:text-slate-300">
+                            {new Date(r.createdAt).toLocaleString()}
+                          </td>
+                          <td className="va-table-td max-w-[10rem] truncate text-sm text-slate-800 dark:text-slate-200">
+                            {r.requestedBy?.fullName ?? '—'}
+                          </td>
+                          <td className="va-table-td font-medium text-slate-900 dark:text-slate-100">
+                            {expenseRequestStatusLabel(r)}
+                            {r.status === 'PENDING' && r.isExpired && (
+                              <span className="ml-1 text-xs font-normal text-amber-700 dark:text-amber-300">(vencida)</span>
+                            )}
+                          </td>
+                          <td className="va-table-td tabular-nums text-slate-900 dark:text-slate-50">
+                            ${formatCopFromString(r.amount)}
+                          </td>
+                          <td className="va-table-td">
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-brand-700 underline dark:text-brand-300"
+                              onClick={() => setReviewRequestId(r.id)}
+                            >
+                              Ver detalle
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1334,7 +1125,10 @@ export function CashPage() {
         canCancel={can('cash_expense_requests:cancel')}
         canPayOut={can('cash_movements:create_expense')}
         onClose={() => setReviewRequestId(null)}
-        onDone={() => void refreshRequests()}
+        onDone={() => {
+          void invalidateCashExpenseRequestLists(queryClient)
+          void invalidateCashOperationalState(queryClient)
+        }}
         setBanner={setMsg}
       />
     </div>

@@ -1,4 +1,4 @@
-import type { InventoryItem } from '../api/types'
+import type { InventoryItem } from '../../api/types'
 
 type OilOtItem = Pick<InventoryItem, 'sku' | 'name' | 'category' | 'measurementUnit'>
 

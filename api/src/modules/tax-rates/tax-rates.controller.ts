@@ -1,7 +1,8 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { QUOTE_LINE_BUILD_PERMISSIONS } from '../../common/constants/quote-operational-read.permissions';
+import { RequireAnyPermission, RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
 import { CreateTaxRateDto } from './dto/create-tax-rate.dto';
 import { UpdateTaxRateDto } from './dto/update-tax-rate.dto';
@@ -12,7 +13,7 @@ export class TaxRatesController {
   constructor(private readonly taxRates: TaxRatesService) {}
 
   @Get()
-  @RequirePermissions('tax_rates:read')
+  @RequireAnyPermission('tax_rates:read', ...QUOTE_LINE_BUILD_PERMISSIONS)
   list(@Query('activeOnly') activeOnly?: string) {
     const onlyActive = activeOnly === 'true' || activeOnly === '1';
     return this.taxRates.list({ onlyActive });

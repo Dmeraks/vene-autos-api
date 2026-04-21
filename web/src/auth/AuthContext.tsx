@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- useAuth vive junto al provider por cohesión del módulo */
 import {
   createContext,
   useCallback,
@@ -8,32 +9,43 @@ import {
   type ReactNode,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, setToken, getToken } from '../api/client'
+import { ApiError, api, setToken, getToken } from '../api/client'
 import type { AuthUser, LoginResponse } from '../api/types'
 import { portalPath } from '../constants/portalPath'
-import { getStoredLastModulePath } from '../utils/lastModule'
+import { getStoredLastModulePath } from '../services/lastModuleStorage'
 import { mapMeToAuthUser, type MeApiUser } from './mapMeUser'
+
+type SessionError = 'network' | null
 
 type AuthState = {
   user: AuthUser | null
   ready: boolean
+  /** Hay token pero falló la validación por red tras reintentos (no 401). */
+  sessionError: SessionError
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   /** Aplica token + usuario (login o cambio de vista por rol) y actualiza el estado. */
   applyAuthResponse: (res: LoginResponse) => void
+  /** Vuelve a llamar /users/me (p. ej. tras error de red). */
+  retrySession: () => void
   can: (code: string) => boolean
 }
 
 const AuthContext = createContext<AuthState | null>(null)
 
+const SESSION_RETRIES = 4
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [ready, setReady] = useState(false)
+  const [sessionError, setSessionError] = useState<SessionError>(null)
+  const [sessionNonce, setSessionNonce] = useState(0)
   const navigate = useNavigate()
 
   useEffect(() => {
     const on401 = () => {
       setUser(null)
+      setSessionError(null)
       navigate(portalPath('/login'), { replace: true })
     }
     window.addEventListener('vene:unauthorized', on401)
@@ -41,25 +53,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [navigate])
 
   useEffect(() => {
-    if (!getToken()) {
-      setReady(true)
-      return
-    }
-    ;(async () => {
-      try {
-        const me = await api<MeApiUser>('/users/me')
-        setUser(mapMeToAuthUser(me))
-      } catch {
-        setToken(null)
+    let cancelled = false
+
+    async function validateSession() {
+      if (!getToken()) {
         setUser(null)
-      } finally {
+        setSessionError(null)
+        setReady(true)
+        return
+      }
+
+      for (let attempt = 0; attempt < SESSION_RETRIES; attempt++) {
+        try {
+          const me = await api<MeApiUser>('/users/me')
+          if (cancelled) return
+          setUser(mapMeToAuthUser(me))
+          setSessionError(null)
+          setReady(true)
+          return
+        } catch (e) {
+          if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+            setToken(null)
+            if (!cancelled) {
+              setUser(null)
+              setSessionError(null)
+              setReady(true)
+            }
+            return
+          }
+          if (attempt < SESSION_RETRIES - 1) {
+            await new Promise((r) => setTimeout(r, 280 * 2 ** attempt))
+          }
+        }
+      }
+
+      if (!cancelled) {
+        setSessionError('network')
         setReady(true)
       }
-    })()
-  }, [])
+    }
+
+    setReady(false)
+    void validateSession()
+    return () => {
+      cancelled = true
+    }
+  }, [sessionNonce])
 
   const applyAuthResponse = useCallback((res: LoginResponse) => {
     setToken(res.accessToken)
+    setSessionError(null)
     setUser({
       id: res.user.id,
       email: res.user.email,
@@ -69,6 +112,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       previewRole: res.user.previewRole,
       portalCustomerId: res.user.portalCustomerId ?? null,
     })
+  }, [])
+
+  const retrySession = useCallback(() => {
+    setSessionError(null)
+    setReady(false)
+    setSessionNonce((n) => n + 1)
   }, [])
 
   const login = useCallback(
@@ -99,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setToken(null)
     setUser(null)
+    setSessionError(null)
     navigate(portalPath('/login'), { replace: true })
   }, [navigate])
 
@@ -111,8 +161,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const value = useMemo(
-    () => ({ user, ready, login, logout, applyAuthResponse, can }),
-    [user, ready, login, logout, applyAuthResponse, can],
+    () => ({
+      user,
+      ready,
+      sessionError,
+      login,
+      logout,
+      applyAuthResponse,
+      retrySession,
+      can,
+    }),
+    [user, ready, sessionError, login, logout, applyAuthResponse, retrySession, can],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

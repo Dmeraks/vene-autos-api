@@ -1,4 +1,4 @@
-import type { InventoryItem } from '../api/types'
+import type { InventoryItem } from '../../api/types'
 
 /**
  * Detecta ítems de inventario pensados como aceite en caneca/tambor de ~55 gal US (≈208 L).

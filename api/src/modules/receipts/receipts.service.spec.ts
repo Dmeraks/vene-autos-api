@@ -99,12 +99,8 @@ describe('ReceiptsService', () => {
     expect(html).toContain('Juan Pérez');
     expect(html).toContain('ABC123');
     expect(html).toContain('Filtro de aceite');
-    // Política Fase 8+: las líneas LABOR en el recibo se rotulan siempre como
-    // "Mano de obra" (las notas del concepto, p. ej. "cambio de aceite", quedan
-    // solo en la OT). Validamos que el label fijo sale y que la descripción
-    // general del servicio sigue apareciendo en el encabezado del recibo.
-    expect(html).toContain('Mano de obra');
-    expect(html).not.toContain('Mano de obra cambio de aceite');
+    /** LABOR: en PDF/recibo se muestra la descripción de línea (servicio cargado o texto libre). */
+    expect(html).toContain('Mano de obra cambio de aceite');
     expect(html).toContain('Cambio de aceite y revisión general');
     expect(html).toContain('$110.000');
     expect(html).toContain('Abono caja');

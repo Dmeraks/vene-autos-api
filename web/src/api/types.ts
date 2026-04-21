@@ -262,6 +262,73 @@ export type WorkOrderDetail = WorkOrderSummary & {
   warrantyFollowUpCount?: number
 }
 
+/** Cotización / presupuesto (sin consumo de inventario). */
+export type QuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED'
+export type QuoteLineType = 'PART' | 'LABOR'
+
+export type QuoteSummary = {
+  id: string
+  quoteNumber: number
+  publicCode: string
+  status: QuoteStatus
+  /** Maestro vehículo vinculado (si existe). */
+  vehicleId?: string | null
+  title: string
+  description: string | null
+  customerName: string | null
+  customerPhone?: string | null
+  customerEmail?: string | null
+  vehiclePlate: string | null
+  vehicleBrand?: string | null
+  vehicleModel?: string | null
+  validUntil?: string | null
+  createdAt: string
+  updatedAt?: string
+  createdBy?: { id: string; fullName: string; email: string }
+  vehicle?: WorkOrderSummary['vehicle']
+}
+
+export type QuoteLine = {
+  id: string
+  lineType: QuoteLineType
+  sortOrder: number
+  inventoryItemId: string | null
+  serviceId: string | null
+  taxRateId: string | null
+  description: string | null
+  quantity: string
+  unitPrice: string | null
+  discountAmount: string | null
+  taxRatePercentSnapshot: string | null
+  inventoryItem: InventoryItem | null
+  taxRate?: {
+    id: string
+    slug: string
+    name: string
+    kind: string
+    ratePercent: string
+  } | null
+  service?: { id: string; code: string; name: string } | null
+  totals?: WorkOrderLineTotals | null
+}
+
+export type QuoteTotals = Omit<WorkOrderTotals, 'totalCost' | 'totalProfit'> & {
+  /** Cotización sin costos de línea consolidados como la OT; suele ser null si no hay snapshot. */
+  totalCost?: string | null
+  totalProfit?: string | null
+}
+
+export type QuoteDetail = QuoteSummary & {
+  lines: QuoteLine[]
+  internalNotes?: string | null
+  totals: QuoteTotals | null
+}
+
+export type QuoteListResponse = {
+  items: QuoteSummary[]
+  total: number
+}
+
 /** Respuesta de PATCH `/work-orders/:id` (fila actualizada; sin líneas ni paymentSummary del GET detalle). */
 export type WorkOrderPatchResult = {
   status: WorkOrderStatus

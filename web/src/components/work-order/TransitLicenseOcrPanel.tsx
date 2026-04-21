@@ -2,19 +2,19 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'reac
 import {
   collectRecognizeBoxLines,
   parseTransitLicenseFromRecognizeData,
-} from '../../lib/parseTransitLicenseLayout'
+} from '../../utils/parseTransitLicenseLayout'
 import {
   mergeTransitLicenseLayoutAndText,
   parseTransitLicenseOcrText,
   parsedTransitLicenseHasAny,
   type ParsedTransitLicenseFields,
-} from '../../lib/parseTransitLicenseOcr'
+} from '../../utils/parseTransitLicenseOcr'
 import { downscaleImageForOcr, isMobileLike } from '../../utils/imageDownscale'
 import {
   clearOcrImage,
   loadOcrImage,
   saveOcrImage,
-} from '../../utils/ocrImageCache'
+} from '../../services/ocrImageCache'
 
 type Props = {
   disabled?: boolean

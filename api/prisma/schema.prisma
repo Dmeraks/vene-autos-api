@@ -3,8 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  /// Migraciones / `db push` / introspect (conexión directa). En Supabase: host `db.<project>.supabase.co:5432`, no el pooler.
+  directUrl = env("DIRECT_URL")
 }
 
 /// Cuenta humana del sistema. Las reglas de acceso vienen de roles → permisos.
@@ -52,6 +54,7 @@ model User {
   payrollAdjustmentsCreated   PayrollAdjustment[]      @relation("PayrollAdjustmentCreatedBy")
   workshopPayablesCreated     WorkshopPayable[]       @relation("WorkshopPayableCreatedBy")
   workshopPayablePaymentsCreated WorkshopPayablePayment[] @relation("WorkshopPayablePaymentCreatedBy")
+  quotesCreated                Quote[]                    @relation("QuoteCreatedBy")
   /// Cliente del taller enlazado para el rol portal (ver solo OT de vehículos de ese cliente).
   portalCustomerId String?   @map("portal_customer_id")
   portalCustomer   Customer? @relation("UserPortalCustomer", fields: [portalCustomerId], references: [id], onDelete: SetNull)
@@ -100,6 +103,7 @@ model Vehicle {
 
   customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
   workOrders WorkOrder[]
+  quotes     Quote[]
 
   @@index([customerId])
   @@map("vehicles")
@@ -296,6 +300,81 @@ model WorkOrder {
   @@map("work_orders")
 }
 
+/// Cotización / presupuesto (sin consumo de inventario hasta convertirse en OT u orden de compra).
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum QuoteLineType {
+  PART
+  LABOR
+}
+
+/// Contadores atómicos del taller (p. ej. siguiente SKU para repuestos «fantasma» en cotización).
+model WorkshopCounter {
+  key   String @id @db.VarChar(64)
+  value Int    @default(0)
+
+  @@map("workshop_counters")
+}
+
+model Quote {
+  id             String      @id @default(cuid())
+  quoteNumber    Int         @unique @default(autoincrement()) @map("quote_number")
+  publicCode     String      @unique @map("public_code") @db.VarChar(32)
+  status         QuoteStatus @default(DRAFT)
+  title          String      @db.VarChar(200)
+  description    String?     @db.Text
+  validUntil     DateTime?   @map("valid_until")
+  vehicleId      String?     @map("vehicle_id")
+  customerName   String?     @map("customer_name") @db.VarChar(200)
+  customerPhone  String?     @map("customer_phone") @db.VarChar(40)
+  customerEmail  String?     @map("customer_email") @db.VarChar(120)
+  vehiclePlate   String?     @map("vehicle_plate") @db.VarChar(80)
+  vehicleBrand   String?     @map("vehicle_brand") @db.VarChar(80)
+  vehicleModel   String?     @map("vehicle_model") @db.VarChar(80)
+  internalNotes  String?     @map("internal_notes") @db.Text
+  createdById    String      @map("created_by_id")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  vehicle   Vehicle?    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  createdBy User        @relation("QuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  lines     QuoteLine[]
+
+  @@index([status, createdAt])
+  @@index([vehicleId])
+  @@map("quotes")
+}
+
+model QuoteLine {
+  id                       String        @id @default(cuid())
+  quoteId                  String        @map("quote_id")
+  lineType                 QuoteLineType @map("line_type")
+  sortOrder                Int           @default(0) @map("sort_order")
+  inventoryItemId          String?       @map("inventory_item_id")
+  serviceId                String?       @map("service_id")
+  taxRateId                String?       @map("tax_rate_id")
+  description              String?       @db.VarChar(2000)
+  quantity                 Decimal       @db.Decimal(18, 4)
+  unitPrice                Decimal?      @map("unit_price") @db.Decimal(18, 2)
+  discountAmount           Decimal?      @map("discount_amount") @db.Decimal(18, 2)
+  taxRatePercentSnapshot   Decimal?      @map("tax_rate_percent_snapshot") @db.Decimal(5, 2)
+
+  quote         Quote          @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  service       Service?       @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  taxRate       TaxRate?       @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId, sortOrder])
+  @@index([inventoryItemId])
+  @@map("quote_lines")
+}
+
 /// Cobro registrado en caja vinculado a una OT (1:1 con el movimiento de ingreso).
 model WorkOrderPayment {
   id             String               @id @default(cuid())
@@ -355,6 +434,7 @@ model InventoryItem {
   purchaseReceiptLines PurchaseReceiptLine[]
   saleLines            SaleLine[]
   invoiceLines         InvoiceLine[]
+  quoteLines           QuoteLine[]
 
   @@index([measurementUnitId])
   /// Fase 8 · Informe «Stock crítico»: filtra `isActive=true` + `trackStock=true` y ordena por `quantityOnHand`.
@@ -471,6 +551,7 @@ model Service {
   workOrderLines   WorkOrderLine[]
   saleLines        SaleLine[]
   invoiceLines     InvoiceLine[]
+  quoteLines       QuoteLine[]
 
   @@index([isActive, sortOrder])
   @@map("services")
@@ -497,6 +578,7 @@ model TaxRate {
   workOrderLines    WorkOrderLine[]
   saleLines         SaleLine[]
   invoiceLines      InvoiceLine[]
+  quoteLines        QuoteLine[]
 
   @@index([isActive, sortOrder])
   @@map("tax_rates")

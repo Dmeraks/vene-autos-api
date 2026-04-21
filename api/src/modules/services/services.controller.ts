@@ -1,7 +1,8 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { QUOTE_LINE_BUILD_PERMISSIONS } from '../../common/constants/quote-operational-read.permissions';
+import { RequireAnyPermission, RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { JwtUserPayload } from '../auth/types/jwt-user.payload';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -12,7 +13,7 @@ export class ServicesController {
   constructor(private readonly services: ServicesService) {}
 
   @Get()
-  @RequirePermissions('services:read')
+  @RequireAnyPermission('services:read', ...QUOTE_LINE_BUILD_PERMISSIONS)
   list(@Query('activeOnly') activeOnly?: string) {
     const onlyActive = activeOnly === 'true' || activeOnly === '1';
     return this.services.list({ onlyActive });

@@ -4,11 +4,13 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from 'react'
-import { api } from '../api/client'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { STALE_OPERATIONAL_MS } from '../constants/queryStaleTime'
 import { useAuth } from '../auth/AuthContext'
+import { queryKeys } from '../lib/queryKeys'
+import { fetchCashSessionOpenStatus } from '../services/fetchCashSessionOpenStatus'
 
 type LoadStatus = 'loading' | 'ready' | 'error'
 
@@ -24,39 +26,51 @@ const CashSessionOpenContext = createContext<CashSessionOpenContextValue | null>
 
 export function CashSessionOpenProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
-  const [open, setOpen] = useState<boolean | null>(null)
-  const [loadStatus, setLoadStatus] = useState<LoadStatus>('loading')
+  const queryClient = useQueryClient()
+  const queryKey = useMemo(() => queryKeys.cash.openStatusForUser(user?.id), [user?.id])
 
-  const refresh = useCallback(async (): Promise<boolean> => {
-    setLoadStatus((s) => (s === 'ready' ? s : 'loading'))
-    try {
-      const r = await api<{ open: boolean }>('/cash/sessions/open-status')
-      const isOpen = Boolean(r.open)
-      setOpen(isOpen)
-      setLoadStatus('ready')
-      return isOpen
-    } catch {
-      setOpen(false)
-      setLoadStatus('error')
-      return false
-    }
-  }, [])
+  const query = useQuery({
+    queryKey,
+    queryFn: fetchCashSessionOpenStatus,
+    /** Alineado con integración previa: menos requests duplicados entre montajes. */
+    staleTime: STALE_OPERATIONAL_MS,
+    /** Misma cadencia que el `setInterval` anterior (45s). */
+    refetchInterval: 45_000,
+    refetchIntervalInBackground: true,
+  })
 
+  /** Al volver a la pestaña: mismo comportamiento que `visibilitychange` + refresh manual. */
   useEffect(() => {
-    void refresh()
-  }, [refresh, user?.id])
-
-  useEffect(() => {
-    const id = window.setInterval(() => void refresh(), 45_000)
     const onVis = () => {
-      if (document.visibilityState === 'visible') void refresh()
+      if (document.visibilityState === 'visible') {
+        void queryClient.invalidateQueries({ queryKey })
+      }
     }
     document.addEventListener('visibilitychange', onVis)
-    return () => {
-      window.clearInterval(id)
-      document.removeEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [queryClient, queryKey])
+
+  const open = useMemo((): boolean | null => {
+    if (query.isError) return false
+    if (query.isPending && query.data === undefined) return null
+    return query.data ?? null
+  }, [query.isError, query.isPending, query.data])
+
+  const loadStatus = useMemo((): LoadStatus => {
+    if (query.isError) return 'error'
+    if (query.isPending && query.data === undefined) return 'loading'
+    return 'ready'
+  }, [query.isError, query.isPending, query.data])
+
+  const refresh = useCallback(async (): Promise<boolean> => {
+    try {
+      const result = await query.refetch()
+      if (result.isError) return false
+      return Boolean(result.data)
+    } catch {
+      return false
     }
-  }, [refresh])
+  }, [query.refetch])
 
   const value = useMemo(() => ({ open, loadStatus, refresh }), [open, loadStatus, refresh])
 

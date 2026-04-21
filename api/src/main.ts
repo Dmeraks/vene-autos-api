@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
+import { PrismaKnownRequestExceptionFilter } from './common/filters/prisma-known-request.filter';
 import { AppModule } from './app.module';
 
 function resolveCorsOrigin(): boolean | string[] {
@@ -54,6 +55,8 @@ async function bootstrap() {
     origin: resolveCorsOrigin(),
     credentials: true,
   });
+
+  app.useGlobalFilters(new PrismaKnownRequestExceptionFilter());
 
   app.useGlobalPipes(
     new ValidationPipe({

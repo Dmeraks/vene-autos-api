@@ -16,6 +16,7 @@ import {
   Receipt,
   ScrollText,
   Search,
+  NotebookTabs,
   Settings,
   Shield,
   Users,
@@ -24,17 +25,21 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { LoginResponse } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { canSeeQuotesUi } from '../auth/quoteRouteAccess'
 import { CashSessionOpenProvider, useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { usePanelTheme, useUiSettings } from '../theme/PanelThemeProvider'
 import { panelUsesModernShell } from '../config/operationalNotes'
 import { portalPath } from '../constants/portalPath'
-import { setStoredLastModulePath } from '../utils/lastModule'
+import { setStoredLastModulePath } from '../services/lastModuleStorage'
 import { ThemeToggle } from './ThemeToggle'
-import { WorkOrderStatusAlertsBell } from './WorkOrderStatusAlertsBell'
+import { prefetchCashShellQueries } from '../features/cash/cashPrefetch'
+import { prefetchDefaultWorkOrdersList } from '../features/work-orders/prefetch/workOrdersNavPrefetch'
+import { WorkOrderStatusAlertsBell } from '../features/work-orders'
 import { useTheme } from '../theme/ThemeContext'
 
 type PreviewRoleRow = { id: string; name: string; slug: string; isSystem: boolean }
@@ -112,8 +117,13 @@ const TASK_MODES: TaskMode[] = [
   {
     id: 'orders',
     label: 'Modo Órdenes',
-    routePrefixes: [portalPath('/ordenes')],
-    relatedRoutes: [portalPath('/ordenes'), portalPath('/clientes'), portalPath('/caja')],
+    routePrefixes: [portalPath('/ordenes'), portalPath('/cotizaciones')],
+    relatedRoutes: [
+      portalPath('/ordenes'),
+      portalPath('/cotizaciones'),
+      portalPath('/clientes'),
+      portalPath('/caja'),
+    ],
   },
   {
     id: 'inventory',
@@ -188,9 +198,20 @@ function AppShellInner() {
     : 'max-w-6xl'
 
   const { user, logout, can, applyAuthResponse } = useAuth()
+  const handleLogout = useCallback(() => {
+    void logout()
+  }, [logout])
   const { open: cashSessionOpen } = useCashSessionOpen()
   const location = useLocation()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const prefetchNavHints = useCallback(
+    (to: string) => {
+      if (to === portalPath('/caja')) prefetchCashShellQueries(queryClient)
+      else if (to === portalPath('/ordenes')) prefetchDefaultWorkOrdersList(queryClient)
+    },
+    [queryClient],
+  )
   const taskMode = useMemo(() => resolveTaskMode(location.pathname), [location.pathname])
   const [panelSearch, setPanelSearch] = useState('')
   const [saasSidebarCollapsed, setSaasSidebarCollapsed] = useState(readSidebarCollapsed)
@@ -266,28 +287,31 @@ function AppShellInner() {
     return list
   }, [previewRoles, user?.previewRole])
 
-  async function onPreviewRoleChange(roleId: string) {
-    if (!can('auth:assume_role_preview') || rolePreviewBusy) return
-    const current = user?.previewRole?.id ?? ''
-    if (roleId === current) return
-    setRolePreviewBusy(true)
-    try {
-      if (roleId === '') {
-        const res = await api<LoginResponse>('/auth/preview-role/clear', { method: 'POST' })
-        applyAuthResponse(res)
-      } else {
-        const res = await api<LoginResponse>('/auth/preview-role', {
-          method: 'POST',
-          body: JSON.stringify({ roleId }),
-        })
-        applyAuthResponse(res)
+  const onPreviewRoleChange = useCallback(
+    async (roleId: string) => {
+      if (!can('auth:assume_role_preview') || rolePreviewBusy) return
+      const current = user?.previewRole?.id ?? ''
+      if (roleId === current) return
+      setRolePreviewBusy(true)
+      try {
+        if (roleId === '') {
+          const res = await api<LoginResponse>('/auth/preview-role/clear', { method: 'POST' })
+          applyAuthResponse(res)
+        } else {
+          const res = await api<LoginResponse>('/auth/preview-role', {
+            method: 'POST',
+            body: JSON.stringify({ roleId }),
+          })
+          applyAuthResponse(res)
+        }
+      } catch {
+        /* sin toast global; el usuario puede reintentar */
+      } finally {
+        setRolePreviewBusy(false)
       }
-    } catch {
-      /* sin toast global; el usuario puede reintentar */
-    } finally {
-      setRolePreviewBusy(false)
-    }
-  }
+    },
+    [applyAuthResponse, can, rolePreviewBusy, user?.previewRole?.id],
+  )
 
   const links = useMemo((): NavLinkItem[] => {
     const recepcionVisible = can('purchase_receipts:create') && cashSessionOpen === true
@@ -299,6 +323,12 @@ function AppShellInner() {
         label: 'Órdenes',
         Icon: ClipboardList,
         show: can('work_orders:read') || can('work_orders:read_portal'),
+      },
+      {
+        to: portalPath('/cotizaciones'),
+        label: 'Cotizaciones',
+        Icon: NotebookTabs,
+        show: canSeeQuotesUi(can),
       },
       { to: portalPath('/ventas'), label: 'Ventas', Icon: Receipt, show: can('sales:read') },
       {
@@ -441,7 +471,7 @@ function AppShellInner() {
       </span>
       <button
         type="button"
-        onClick={() => void logout()}
+        onClick={handleLogout}
         className={`${isSaas ? 'rounded-lg' : 'rounded-xl'} border border-slate-300 bg-white px-2.5 py-2 text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50 sm:px-3 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700`}
       >
         Salir
@@ -491,7 +521,7 @@ function AppShellInner() {
       </div>
       <button
         type="button"
-        onClick={() => void logout()}
+        onClick={handleLogout}
         title="Cerrar sesión"
         aria-label="Cerrar sesión"
         className={saasIconButtonClass()}
@@ -632,6 +662,7 @@ function AppShellInner() {
                   to={l.to}
                   title={l.label}
                   aria-label={saasSidebarCollapsed ? l.label : undefined}
+                  onPointerEnter={() => prefetchNavHints(l.to)}
                   className={(args) =>
                     [navLinkSidebarSaasClass(args), saasSidebarCollapsed ? 'justify-center gap-0 px-1.5' : ''].join(' ')
                   }
@@ -699,6 +730,7 @@ function AppShellInner() {
                     <NavLink
                       key={`task-${link.to}`}
                       to={link.to}
+                      onPointerEnter={() => prefetchNavHints(link.to)}
                       className={({ isActive }) =>
                         [
                           'rounded-md px-2 py-1 text-xs font-medium tracking-normal transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900',

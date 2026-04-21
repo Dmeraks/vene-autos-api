@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { ApiError } from '../api/client'
+import { ApiError, getToken } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { portalPath } from '../constants/portalPath'
 
@@ -19,7 +19,7 @@ function loginFailureMessage(err: unknown): string {
 }
 
 export function LoginPage() {
-  const { user, ready, login } = useAuth()
+  const { user, ready, login, sessionError, retrySession } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [err, setErr] = useState<string | null>(null)
@@ -27,6 +27,32 @@ export function LoginPage() {
 
   if (ready && user) {
     return <Navigate to={portalPath('/')} replace />
+  }
+
+  if (ready && sessionError === 'network' && getToken()) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-zinc-100 px-4 py-10 text-center text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+        <p className="max-w-md text-sm">
+          No pudimos validar la sesión con el servidor. Tu sesión sigue guardada en este navegador.
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            className="rounded-lg bg-zinc-950 px-4 py-2 text-sm font-semibold text-white hover:bg-black dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-white"
+            onClick={() => retrySession()}
+          >
+            Reintentar
+          </button>
+          <button
+            type="button"
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-600"
+            onClick={() => window.location.reload()}
+          >
+            Recargar página
+          </button>
+        </div>
+      </div>
+    )
   }
 
   async function onSubmit(e: React.FormEvent) {

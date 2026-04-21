@@ -25,10 +25,10 @@ import {
 } from '../config/operationalNotes'
 import { PageHeader } from '../components/layout/PageHeader'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
-import { emitWorkOrderChanged } from '../lib/workOrderEvents'
+import { useWorkOrderDetailMutations } from '../features/work-orders/hooks/useWorkOrderDetailMutations'
 import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
-import type { ParsedTransitLicenseFields } from '../lib/parseTransitLicenseOcr'
+import type { ParsedTransitLicenseFields } from '../utils/parseTransitLicenseOcr'
 import {
   API_MONEY_DECIMAL_REGEX,
   formatCopFromString,
@@ -39,17 +39,18 @@ import {
 import {
   printTicketFromApi,
   successMessageWithTicketAndPulse,
-} from '../utils/cashDrawerBridge'
+} from '../services/cashDrawerBridge'
+import { normalizeListResponse } from '../utils/normalizeListResponse'
 import {
   inventoryItemUsesQuarterGallonOtQuantity,
   partLineQuantityDisplayWithQuarters,
   workOrderOilStoredGallonUnitPriceToQuarterPriceString,
-} from '../utils/oilQuarterGallonOt'
+} from '../services/inventory/oilQuarterGallonOt'
 import {
   allowsFractionalWorkOrderPartQuantity,
   workOrderPartQuantityClientIssue,
   workOrderPartStockClientIssue,
-} from '../utils/workOrderPartQuantity'
+} from '../services/inventory/workOrderPartQuantity'
 import type {
   AuthUser,
   InventoryItem,
@@ -308,6 +309,15 @@ type AssignableUserRow = { id: string; fullName: string; email: string }
 
 export function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const {
+    patchWorkOrder,
+    patchWorkOrderPlain,
+    postLine,
+    deleteLine,
+    patchLine,
+    reopenDelivered,
+    recordPayment: recordPaymentMutation,
+  } = useWorkOrderDetailMutations(id)
   const { user, can } = useAuth()
   const navigate = useNavigate()
   const [invoiceBusy, setInvoiceBusy] = useState(false)
@@ -546,13 +556,13 @@ export function WorkOrderDetailPage() {
     const want = canRef.current('services:read') || canRef.current('tax_rates:read')
     if (!want) return
     if (canRef.current('services:read')) {
-      void api<{ items: ServiceCatalogRow[] }>(`/services?activeOnly=true`)
-        .then((r) => setServicesCatalog(Array.isArray(r.items) ? r.items : []))
+      void api<ServiceCatalogRow[] | { items: ServiceCatalogRow[] }>(`/services?activeOnly=true`)
+        .then((r) => setServicesCatalog(normalizeListResponse<ServiceCatalogRow>(r)))
         .catch(() => undefined)
     }
     if (canRef.current('tax_rates:read')) {
-      void api<{ items: TaxRateCatalogRow[] }>(`/tax-rates?activeOnly=true`)
-        .then((r) => setTaxRatesCatalog(Array.isArray(r.items) ? r.items : []))
+      void api<TaxRateCatalogRow[] | { items: TaxRateCatalogRow[] }>(`/tax-rates?activeOnly=true`)
+        .then((r) => setTaxRatesCatalog(normalizeListResponse<TaxRateCatalogRow>(r)))
         .catch(() => undefined)
     }
   }, [])
@@ -839,16 +849,13 @@ export function WorkOrderDetailPage() {
           setMsg('Descuento: solo pesos enteros; miles con punto (ej. 2.000).')
           return
         }
-        await api(`/work-orders/${id}/lines`, {
-          method: 'POST',
-          body: JSON.stringify({
-            lineType: 'PART',
-            inventoryItemId: partItemId,
-            quantity: partQty,
-            ...(canViewWoFinancials && partUp ? { unitPrice: partUp } : {}),
-            ...(partTaxRateId ? { taxRateId: partTaxRateId } : {}),
-            ...(partDiscountNorm ? { discountAmount: partDiscountNorm } : {}),
-          }),
+        await postLine.mutateAsync({
+          lineType: 'PART',
+          inventoryItemId: partItemId,
+          quantity: partQty,
+          ...(canViewWoFinancials && partUp ? { unitPrice: partUp } : {}),
+          ...(partTaxRateId ? { taxRateId: partTaxRateId } : {}),
+          ...(partDiscountNorm ? { discountAmount: partDiscountNorm } : {}),
         })
       } else {
         const laborUp = canViewWoFinancials ? normalizeMoneyDecimalStringForApi(laborPrice) : ''
@@ -875,7 +882,7 @@ export function WorkOrderDetailPage() {
         if (laborServiceId) payload.serviceId = laborServiceId
         if (laborTaxRateId) payload.taxRateId = laborTaxRateId
         if (laborDiscountNorm) payload.discountAmount = laborDiscountNorm
-        await api(`/work-orders/${id}/lines`, { method: 'POST', body: JSON.stringify(payload) })
+        await postLine.mutateAsync(payload)
       }
       try {
         await refreshLinesOnWorkOrder()
@@ -907,16 +914,12 @@ export function WorkOrderDetailPage() {
     setMsg(null)
     setAssignBusy(true)
     try {
-      const updated = await api<WorkOrderPatchResult>(`/work-orders/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ assignedToId: user.id }),
-      })
+      const updated = await patchWorkOrder.mutateAsync({ assignedToId: user.id })
       try {
         mergeWorkOrderPatchIntoState(updated, setWo, setWoStatus, setWoDesc, setWoAuth)
       } catch {
         /* respuesta distinta a la esperada; load() alinea con el servidor */
       }
-      emitWorkOrderChanged(id)
       setMsg(
         updated.status === 'RECEIVED'
           ? 'Orden en estado Recibida y asignada a vos'
@@ -937,16 +940,12 @@ export function WorkOrderDetailPage() {
     setMsg(null)
     setAssignBusy(true)
     try {
-      const updated = await api<WorkOrderPatchResult>(`/work-orders/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ assignedToId: reassignUserId }),
-      })
+      const updated = await patchWorkOrder.mutateAsync({ assignedToId: reassignUserId })
       try {
         mergeWorkOrderPatchIntoState(updated, setWo, setWoStatus, setWoDesc, setWoAuth)
       } catch {
         /* idem takeWorkOrder */
       }
-      emitWorkOrderChanged(id)
       setMsg(
         updated.status === 'RECEIVED' && updated.assignedTo
           ? `Orden en estado Recibida y asignada a ${updated.assignedTo.fullName}`
@@ -1112,27 +1111,23 @@ export function WorkOrderDetailPage() {
     if (!okSave) return
 
     try {
-      await api(`/work-orders/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          description: woDesc.trim(),
-          status: woStatus,
-          ...(canViewWoFinancials ? { authorizedAmount: authNorm === '' ? null : authNorm } : {}),
-          customerName: newCustomerName === '' ? null : newCustomerName,
-          customerEmail: newEmail === '' ? null : newEmail,
-          customerPhone: newPhone === '' ? null : newPhone,
-          vehiclePlate: newPlate === '' ? null : newPlate,
-          vehicleBrand: newBrand === '' ? null : newBrand,
-          vehicleModel: newModel === '' ? null : newModel,
-          vehicleLine: newLine === '' ? null : newLine,
-          vehicleCylinderCc: newCylinder === '' ? null : newCylinder,
-          vehicleColor: newVehicleColor === '' ? null : newVehicleColor,
-          intakeOdometerKm: newKmParsed,
-          inspectionOnly: woInspectionOnly,
-        }),
+      await patchWorkOrderPlain.mutateAsync({
+        description: woDesc.trim(),
+        status: woStatus,
+        ...(canViewWoFinancials ? { authorizedAmount: authNorm === '' ? null : authNorm } : {}),
+        customerName: newCustomerName === '' ? null : newCustomerName,
+        customerEmail: newEmail === '' ? null : newEmail,
+        customerPhone: newPhone === '' ? null : newPhone,
+        vehiclePlate: newPlate === '' ? null : newPlate,
+        vehicleBrand: newBrand === '' ? null : newBrand,
+        vehicleModel: newModel === '' ? null : newModel,
+        vehicleLine: newLine === '' ? null : newLine,
+        vehicleCylinderCc: newCylinder === '' ? null : newCylinder,
+        vehicleColor: newVehicleColor === '' ? null : newVehicleColor,
+        intakeOdometerKm: newKmParsed,
+        inspectionOnly: woInspectionOnly,
       })
       setMsg('Orden actualizada')
-      emitWorkOrderChanged(id)
       await load()
     } catch (err) {
       if (!(await showBlockingConflictModal(err))) {
@@ -1164,14 +1159,10 @@ export function WorkOrderDetailPage() {
     setMsg(null)
     setReopenBusy(true)
     try {
-      await api(`/work-orders/${id}/reopen-delivered`, {
-        method: 'POST',
-        body: JSON.stringify({ justification: j, note: n }),
-      })
+      await reopenDelivered.mutateAsync({ justification: j, note: n })
       setReopenNote('')
       setReopenJustification('')
       setMsg('Orden reabierta a Lista')
-      emitWorkOrderChanged(id)
       await load()
     } catch (err) {
       if (!(await showBlockingConflictModal(err))) {
@@ -1355,15 +1346,12 @@ export function WorkOrderDetailPage() {
        * Guardamos el pago en el API y capturamos su `id` para imprimir el ticket asociado.
        * El ticket se manda al puente local con pulso al cajón en el mismo viaje.
        */
-      const created = await api<{ id: string }>(`/work-orders/${id}/payments`, {
-        method: 'POST',
-        body: JSON.stringify({
-          paymentKind: payKind,
-          amount: payAmtNorm,
-          note: pn,
-          categorySlug: payCat,
-          ...(tenNorm ? { tenderAmount: tenNorm } : {}),
-        }),
+      const created = await recordPaymentMutation.mutateAsync({
+        paymentKind: payKind,
+        amount: payAmtNorm,
+        note: pn,
+        categorySlug: payCat,
+        ...(tenNorm ? { tenderAmount: tenNorm } : {}),
       })
       setPayAmt('')
       setPayTender('')
@@ -1408,7 +1396,7 @@ export function WorkOrderDetailPage() {
     setMsg(null)
     let lines: WorkOrderLine[]
     try {
-      lines = await api<WorkOrderLine[]>(`/work-orders/${id}/lines/${lineId}`, { method: 'DELETE' })
+      lines = await deleteLine.mutateAsync(lineId)
     } catch (e) {
       if (!(await showBlockingConflictModal(e))) {
         setMsg(e instanceof Error ? e.message : 'Error al eliminar')
@@ -1506,10 +1494,7 @@ export function WorkOrderDetailPage() {
       if (editLine.lineType === 'LABOR') body.description = editDesc.trim()
       // Solo emitimos taxRateId cuando cambió respecto al valor actual (evita escribir por nada).
       if ((editLine.taxRateId ?? null) !== taxRatePatch) body.taxRateId = taxRatePatch
-      await api(`/work-orders/${id}/lines/${editLine.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(body),
-      })
+      await patchLine.mutateAsync({ lineId: editLine.id, body })
       setEditLine(null)
       try {
         await refreshLinesOnWorkOrder()

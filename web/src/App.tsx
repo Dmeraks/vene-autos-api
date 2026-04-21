@@ -1,8 +1,9 @@
+import { lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { PORTAL_BASE, portalPath } from './constants/portalPath'
 import { AppShell } from './components/AppShell'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { AuditPage } from './pages/admin/AuditPage'
+import { RouteSuspense } from './components/RouteSuspense'
 import { RolePreviewPage } from './pages/admin/RolePreviewPage'
 import { RoleDetailPage } from './pages/admin/RoleDetailPage'
 import { RolesPage } from './pages/admin/RolesPage'
@@ -17,20 +18,27 @@ import { CustomersPage } from './pages/CustomersPage'
 import { CommercialLandingPage } from './pages/CommercialLandingPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { AceitePage } from './pages/AceitePage'
-import { InventoryPage } from './pages/InventoryPage'
 import { ConsultPublicWorkOrderPage } from './pages/ConsultPublicWorkOrderPage'
 import { LoginPage } from './pages/LoginPage'
 import { ReceiveStockPage } from './pages/ReceiveStockPage'
 import { VehicleDetailPage } from './pages/VehicleDetailPage'
-import { WorkOrderDetailPage } from './pages/WorkOrderDetailPage'
-import { ReportsPage } from './pages/ReportsPage'
 import { SaleDetailPage } from './pages/SaleDetailPage'
 import { SalesPage } from './pages/SalesPage'
 import { InvoiceDetailPage } from './pages/InvoiceDetailPage'
-import { InvoicesPage } from './pages/InvoicesPage'
-import PayrollPage from './pages/PayrollPage'
 import WorkshopFinancePage from './pages/WorkshopFinancePage'
-import { WorkOrdersPage } from './pages/WorkOrdersPage'
+
+/** Rutas con tablas grandes o bloques tipo gráficos: fuera del bundle inicial. */
+const AuditPage = lazy(() => import('./pages/admin/AuditPage').then((m) => ({ default: m.AuditPage })))
+const InventoryPage = lazy(() => import('./pages/InventoryPage').then((m) => ({ default: m.InventoryPage })))
+const InvoicesPage = lazy(() => import('./pages/InvoicesPage').then((m) => ({ default: m.InvoicesPage })))
+const PayrollPage = lazy(() => import('./pages/PayrollPage'))
+const ReportsPage = lazy(() => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })))
+const WorkOrderDetailPage = lazy(() =>
+  import('./pages/WorkOrderDetailPage').then((m) => ({ default: m.WorkOrderDetailPage })),
+)
+const WorkOrdersPage = lazy(() => import('./pages/WorkOrdersPage').then((m) => ({ default: m.WorkOrdersPage })))
+const QuotesPage = lazy(() => import('./pages/QuotesPage').then((m) => ({ default: m.QuotesPage })))
+const QuoteDetailPage = lazy(() => import('./pages/QuoteDetailPage').then((m) => ({ default: m.QuoteDetailPage })))
 
 export default function App() {
   return (
@@ -42,9 +50,46 @@ export default function App() {
       <Route path={PORTAL_BASE} element={<AppShell />}>
         <Route element={<ProtectedRoute />}>
           <Route index element={<DashboardPage />} />
-          <Route path="ordenes" element={<WorkOrdersPage />} />
-          <Route path="ordenes/:id" element={<WorkOrderDetailPage />} />
-          <Route path="inventario" element={<InventoryPage />} />
+          <Route
+            path="ordenes"
+            element={
+              <RouteSuspense>
+                <WorkOrdersPage />
+              </RouteSuspense>
+            }
+          />
+          <Route
+            path="ordenes/:id"
+            element={
+              <RouteSuspense>
+                <WorkOrderDetailPage />
+              </RouteSuspense>
+            }
+          />
+          <Route
+            path="cotizaciones"
+            element={
+              <RouteSuspense>
+                <QuotesPage />
+              </RouteSuspense>
+            }
+          />
+          <Route
+            path="cotizaciones/:id"
+            element={
+              <RouteSuspense>
+                <QuoteDetailPage />
+              </RouteSuspense>
+            }
+          />
+          <Route
+            path="inventario"
+            element={
+              <RouteSuspense>
+                <InventoryPage />
+              </RouteSuspense>
+            }
+          />
           <Route path="aceite" element={<AceitePage />} />
           <Route path="recepcion" element={<ReceiveStockPage />} />
           <Route path="clientes" element={<CustomersPage />} />
@@ -53,10 +98,31 @@ export default function App() {
           <Route path="caja" element={<CashPage />} />
           <Route path="ventas" element={<SalesPage />} />
           <Route path="ventas/:id" element={<SaleDetailPage />} />
-          <Route path="facturacion" element={<InvoicesPage />} />
+          <Route
+            path="facturacion"
+            element={
+              <RouteSuspense>
+                <InvoicesPage />
+              </RouteSuspense>
+            }
+          />
           <Route path="facturacion/:id" element={<InvoiceDetailPage />} />
-          <Route path="informes" element={<ReportsPage />} />
-          <Route path="admin/nomina" element={<PayrollPage />} />
+          <Route
+            path="informes"
+            element={
+              <RouteSuspense>
+                <ReportsPage />
+              </RouteSuspense>
+            }
+          />
+          <Route
+            path="admin/nomina"
+            element={
+              <RouteSuspense>
+                <PayrollPage />
+              </RouteSuspense>
+            }
+          />
           <Route path="admin/finanzas-taller" element={<WorkshopFinancePage />} />
           <Route path="admin/usuarios" element={<UsersPage />} />
           <Route path="admin/roles" element={<RolesPage />} />
@@ -65,7 +131,14 @@ export default function App() {
           <Route path="admin/impuestos" element={<TaxRatesPage />} />
           <Route path="admin/configuracion" element={<SettingsPage />} />
           <Route path="admin/resoluciones-fiscales" element={<FiscalResolutionsPage />} />
-          <Route path="admin/auditoria" element={<AuditPage />} />
+          <Route
+            path="admin/auditoria"
+            element={
+              <RouteSuspense>
+                <AuditPage />
+              </RouteSuspense>
+            }
+          />
           <Route path="admin/vista-rol" element={<RolePreviewPage />} />
         </Route>
       </Route>

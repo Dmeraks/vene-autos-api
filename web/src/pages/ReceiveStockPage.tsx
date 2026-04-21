@@ -20,7 +20,7 @@ import {
   formatMoneyInputDisplayFromNormalized,
   normalizeMoneyDecimalStringForApi,
 } from '../utils/copFormat'
-import { successMessageWithDrawerPulse } from '../utils/cashDrawerBridge'
+import { successMessageWithDrawerPulse } from '../services/cashDrawerBridge'
 
 type CostInputMode = 'per_unit' | 'line_total'
 

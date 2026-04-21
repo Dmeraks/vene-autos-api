@@ -93,10 +93,23 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     let msg =
       Array.isArray(rawMsg) ? rawMsg.map((x) => String(x)).filter(Boolean).join(' ') : String(rawMsg ?? res.statusText)
 
-    if (res.status === 502 || res.status === 503 || res.status === 504) {
+    if (res.status === 403 && typeof body === 'object' && body !== null && 'missing' in body) {
+      const missing = (body as { missing?: unknown }).missing
+      if (Array.isArray(missing) && missing.length > 0) {
+        msg = `${msg} (falta: ${missing.map(String).join(', ')})`
+      }
+    }
+
+    if (res.status === 502 || res.status === 504) {
       msg = isLoginAttempt
         ? 'El servidor no respondió a tiempo. Intentá de nuevo en unos momentos.'
-        : 'La API no respondió correctamente (502/503/504). Suele ocurrir si el backend no está en marcha o PostgreSQL no está accesible. Desde la raíz del repo: npm run db:up, luego npm run api:dev, y comprobar en la consola del servidor la línea «Vene Autos API — http://localhost:…».'
+        : 'La API no respondió correctamente (502/504). Suele ocurrir si el backend no está en marcha o PostgreSQL no está accesible. Desde la raíz del repo: npm run db:up, luego npm run api:dev, y comprobar en la consola del servidor la línea «Vene Autos API — http://localhost:…».'
+    }
+
+    /** 503 con cuerpo JSON suele venir del API cuando falta migración / schema vs BD (ver mensaje del servidor). */
+    if (res.status === 503 && (!msg || msg === 'Service Unavailable')) {
+      msg =
+        'El servicio no está disponible (503). Si acabás de actualizar código, ejecutá desde la raíz del repo: npm run db:migrate.'
     }
 
     throw new ApiError(msg || 'Error de API', res.status, body)
