@@ -255,7 +255,7 @@ describe('Workshop phase 5 (integración)', () => {
     expect(after.averageCost?.toString()).toBe('36364');
   });
 
-  it('LABOR no mueve stock; OT cerrada no admite líneas nuevas', async () => {
+  it('LABOR no mueve stock; admite varias líneas LABOR; OT cerrada no admite líneas nuevas', async () => {
     const tag = `L${Date.now()}`;
     const customer = await prisma.customer.create({
       data: { displayName: `P5L ${tag}`, primaryPhone: '3002222222' },
@@ -291,18 +291,21 @@ describe('Workshop phase 5 (integración)', () => {
     );
     expect(labor.lineType).toBe(WorkOrderLineType.LABOR);
 
-    await expect(
-      workOrderLines.create(
-        wo.id,
-        intActor(actorId),
-        {
-          lineType: WorkOrderLineType.LABOR,
-          description: 'Segunda mano de obra no permitida',
-          quantity: '1',
-        },
-        {},
-      ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    const labor2 = await workOrderLines.create(
+      wo.id,
+      intActor(actorId),
+      {
+        lineType: WorkOrderLineType.LABOR,
+        description: 'Segunda mano de obra',
+        quantity: '1',
+      },
+      {},
+    );
+    expect(labor2.lineType).toBe(WorkOrderLineType.LABOR);
+    const laborCount = await prisma.workOrderLine.count({
+      where: { workOrderId: wo.id, lineType: WorkOrderLineType.LABOR },
+    });
+    expect(laborCount).toBe(2);
 
     await prisma.workOrder.update({
       where: { id: wo.id },

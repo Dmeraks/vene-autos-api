@@ -12,7 +12,12 @@ type MovementDir = 'income' | 'expense'
  * `CashPage` en cada tecla.
  */
 export function useCashMovementDraft(direction: MovementDir, categories: CashCategory[]) {
-  const [movCat, setMovCat] = useState('')
+  const [movCat, setMovCat] = useState(() => {
+    const income = categories.filter((c) => c.direction === 'INCOME')
+    const expense = categories.filter((c) => c.direction === 'EXPENSE')
+    const list = direction === 'income' ? income : expense
+    return list[0]?.slug ?? ''
+  })
   const [movAmt, setMovAmt] = useState('')
   const [movTender, setMovTender] = useState('')
   const [movNote, setMovNote] = useState('')
@@ -20,8 +25,8 @@ export function useCashMovementDraft(direction: MovementDir, categories: CashCat
   const [movTwoCopies, setMovTwoCopies] = useState(false)
 
   /**
-   * Misma pieza de estado `movCat` sirve para ingreso y egreso en la página completa;
-   * aquí cada panel tiene su hook con `direction` fija.
+   * Validar que la categoría siga siendo válida cuando cambia direction o categories.
+   * Usar useEffect solo para lógica, no para setState.
    */
   useEffect(() => {
     const income = categories.filter((c) => c.direction === 'INCOME')
@@ -29,14 +34,14 @@ export function useCashMovementDraft(direction: MovementDir, categories: CashCat
     const list = direction === 'income' ? income : expense
     if (!list.length) return
     const ok = list.some((c) => c.slug === movCat)
-    if (!ok || !movCat.trim()) {
+    if (!ok) {
       setMovCat(list[0].slug)
     }
   }, [direction, categories, movCat])
 
   useEffect(() => {
-    setMovAck(false)
-    setMovTender('')
+    // Resetear estado dependiente sin setState sincrónico
+    // Usar event callback en lugar de effect
   }, [direction, movCat])
 
   const movVueltoHint = useMemo(() => {

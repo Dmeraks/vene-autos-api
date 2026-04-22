@@ -1,15 +1,23 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { OilDrumGauge } from '../components/aceite/OilDrumGauge'
-import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { panelUsesModernShell } from '../config/operationalNotes'
+import { STALE_INVENTORY_CATALOG_MS } from '../constants/queryStaleTime'
 import { portalPath } from '../constants/portalPath'
+import {
+  fetchInventoryItemsForQuery,
+  fetchOilDrumEconomicsForQuery,
+} from '../features/inventory/services/inventoryCatalogApi'
+import { queryKeys } from '../lib/queryKeys'
 import { PageHeader } from '../components/layout/PageHeader'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
-import type { InventoryItem, OilDrumEconomicsItem, OilDrumEconomicsResponse } from '../api/types'
+import type { InventoryItem, OilDrumEconomicsItem } from '../api/types'
 import { formatCopFromString } from '../utils/copFormat'
 import { inventoryItemIsOilDrum55Gallon, OIL_DRUM_CATEGORY_HINT } from '../services/inventory/oilDrumInventory'
+
+const INVENTORY_QUERY_GC_MS = 20 * 60_000
 
 /** Una caneca en la imagen = esta cantidad en la unidad del ítem (p. ej. 55 gal). */
 const DRUM_REFERENCE_QTY = 55
@@ -226,50 +234,33 @@ export function AceitePage() {
   const isSaas = panelUsesModernShell(panelTheme)
   const { can } = useAuth()
   const canEditInv = can('inventory_items:update')
-  const [rows, setRows] = useState<InventoryItem[] | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [eco, setEco] = useState<OilDrumEconomicsResponse | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const data = await api<InventoryItem[]>('/inventory/items')
-        if (!cancelled) setRows(data)
-      } catch {
-        if (!cancelled) setErr('No se pudo cargar el inventario')
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!rows) return
-    const drumCount = rows.filter((r) => r.isActive && inventoryItemIsOilDrum55Gallon(r)).length
-    if (drumCount === 0) {
-      setEco(null)
-      return
-    }
-    let cancelled = false
-    ;(async () => {
-      try {
-        const data = await api<OilDrumEconomicsResponse>('/inventory/items/oil-drum-economics')
-        if (!cancelled) setEco(data)
-      } catch {
-        if (!cancelled) setEco(null)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [rows])
+  const itemsQuery = useQuery({
+    queryKey: queryKeys.inventory.items(),
+    queryFn: ({ signal }) => fetchInventoryItemsForQuery(signal),
+    staleTime: STALE_INVENTORY_CATALOG_MS,
+    gcTime: INVENTORY_QUERY_GC_MS,
+  })
+  const rows = itemsQuery.data ?? null
+  const err = itemsQuery.isError
+    ? itemsQuery.error instanceof Error
+      ? itemsQuery.error.message
+      : 'No se pudo cargar el inventario'
+    : null
 
   const oilRows = useMemo(() => {
     if (!rows) return []
     return rows.filter((r) => r.isActive && inventoryItemIsOilDrum55Gallon(r)).sort((a, b) => a.sku.localeCompare(b.sku))
   }, [rows])
+
+  const ecoQuery = useQuery({
+    queryKey: queryKeys.inventory.oilDrumEconomics(),
+    queryFn: ({ signal }) => fetchOilDrumEconomicsForQuery(signal),
+    enabled: oilRows.length > 0,
+    staleTime: STALE_INVENTORY_CATALOG_MS,
+    gcTime: INVENTORY_QUERY_GC_MS,
+  })
+  const eco = ecoQuery.data ?? null
 
   const unitSummary = useMemo(() => {
     const bySlug = new Map<string, { name: string; sum: number }>()
@@ -481,7 +472,7 @@ export function AceitePage() {
         </>
       ) : null}
 
-      {rows === null && !err ? <p className="text-slate-500">Cargando…</p> : null}
+      {itemsQuery.isLoading && !err ? <p className="text-slate-500">Cargando…</p> : null}
     </div>
   )
 }

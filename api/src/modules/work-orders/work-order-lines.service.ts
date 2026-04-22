@@ -282,14 +282,6 @@ export class WorkOrderLinesService {
       const sortOrder = await this.nextSortOrder(tx, workOrderId);
 
       if (dto.lineType === WorkOrderLineType.LABOR) {
-        const existingLabor = await tx.workOrderLine.count({
-          where: { workOrderId, lineType: WorkOrderLineType.LABOR },
-        });
-        if (existingLabor > 0) {
-          throw new BadRequestException(
-            'Esta orden ya tiene una línea de mano de obra. Editá la existente o eliminá la línea antes de agregar otra.',
-          );
-        }
         const descriptionForSave =
           dto.description?.trim() || resolvedServiceDescription || '';
         return tx.workOrderLine.create({

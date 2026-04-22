@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { Prisma, WorkOrderStatus } from '@prisma/client';
+import { Prisma, WorkOrderLineType, WorkOrderStatus } from '@prisma/client';
 import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -219,7 +219,26 @@ describe('WorkOrdersService', () => {
         createdBy: {},
         assignedTo: null,
         vehicle: null,
-        lines: [],
+        lines: [
+          {
+            id: 'ln1',
+            lineType: WorkOrderLineType.LABOR,
+            sortOrder: 0,
+            quantity: new Prisma.Decimal(1),
+            unitPrice: new Prisma.Decimal(100),
+            discountAmount: null,
+            costSnapshot: null,
+            taxRateId: null,
+            taxRatePercentSnapshot: null,
+            taxRate: null,
+            inventoryItem: null,
+            service: null,
+            workOrderId: 'wo1',
+            description: 'MO',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
         warrantyFollowUps: [],
         _count: { payments: 2, warrantyFollowUps: 0 },
       });
@@ -234,9 +253,10 @@ describe('WorkOrdersService', () => {
         totalPaid: '40',
         remaining: '60',
       });
-      expect(out.linesSubtotal).toBe('0');
+      expect(out.linesSubtotal).toBe('100');
       expect(out.amountDue).toBe('60');
-      expect(out.lines).toEqual([]);
+      expect(out.authorizedAmount).toBeNull();
+      expect(out.lines).toHaveLength(1);
     });
 
     it('404 si la OT es de otro usuario y no hay read_all', async () => {
@@ -358,22 +378,6 @@ describe('WorkOrdersService', () => {
       });
       await service.update('wo1', closer, { status: WorkOrderStatus.DELIVERED } satisfies UpdateWorkOrderDto, {});
       expect(prisma.workOrder.update).toHaveBeenCalled();
-    });
-
-    it('rechaza tope autorizado menor al cobrado', async () => {
-      prisma.workOrder.findFirst.mockResolvedValue({
-        id: 'wo1',
-        status: WorkOrderStatus.RECEIVED,
-        deliveredAt: null,
-        assignedToId: null,
-        authorizedAmount: new Prisma.Decimal('100'),
-      });
-      prisma.workOrderPayment.aggregate.mockResolvedValue({
-        _sum: { amount: new Prisma.Decimal('80') },
-      });
-      await expect(
-        service.update('wo1', actorAll, { authorizedAmount: '50' } satisfies UpdateWorkOrderDto, {}),
-      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('desvincula vehículo con vehicleId null', async () => {
@@ -523,7 +527,7 @@ describe('WorkOrdersService', () => {
           take: 25,
         }),
       );
-      expect(res).toEqual({ items: [{ id: 'a' }], total: 120 });
+      expect(res).toEqual({ items: [{ id: 'a', authorizedAmount: null }], total: 120 });
     });
   });
 

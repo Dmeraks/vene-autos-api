@@ -322,21 +322,6 @@ export function WorkOrdersPage() {
                   Solo revisión / diagnóstico (el cobro va como línea de mano de obra)
                 </span>
               </label>
-              {m.canViewWoFinancials ? (
-                <label className="block text-sm">
-                  <span className="va-label">Tope de cobros en caja (opcional)</span>
-                  <input
-                    inputMode="decimal"
-                    autoComplete="off"
-                    value={m.formatMoneyInputDisplayFromNormalized(
-                      m.normalizeMoneyDecimalStringForApi(m.authorizedAmount),
-                    )}
-                    onChange={(e) => m.setAuthorizedAmount(m.normalizeMoneyDecimalStringForApi(e.target.value))}
-                    placeholder="ej. 150000 o 150.000 (solo pesos enteros)"
-                    className="va-field mt-1"
-                  />
-                </label>
-              ) : null}
               <div className="flex gap-2 pt-2">
                 <button type="submit" className="va-btn-primary">
                   Crear y abrir

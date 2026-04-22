@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError, openAuthenticatedHtml } from '../api/client'
 import type {
   CreateSaleLinePayload,
-  InventoryItem,
   RecordSalePaymentPayload,
   SaleDetail,
   SaleLineType,
@@ -12,7 +12,10 @@ import type {
   TaxRate,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { STALE_INVENTORY_CATALOG_MS } from '../constants/queryStaleTime'
 import { portalPath } from '../constants/portalPath'
+import { fetchInventoryItemsForQuery } from '../features/inventory/services/inventoryCatalogApi'
+import { queryKeys } from '../lib/queryKeys'
 import { useConfirm } from '../components/confirm/ConfirmProvider'
 import { PageHeader } from '../components/layout/PageHeader'
 import { formatCopFromString, normalizeMoneyDecimalStringForApi } from '../utils/copFormat'
@@ -20,6 +23,7 @@ import {
   printTicketFromApi,
   successMessageWithTicketAndPulse,
 } from '../services/cashDrawerBridge'
+import { cashIncomeCategoryOpensPhysicalDrawer } from '../services/cashIncomePhysicalDrawer'
 import { normalizeListResponse } from '../utils/normalizeListResponse'
 
 type CashCategory = { id: string; slug: string; name: string; direction: string }
@@ -76,7 +80,6 @@ export function SaleDetailPage() {
   const [msg, setMsg] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const [items, setItems] = useState<InventoryItem[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [taxRates, setTaxRates] = useState<TaxRate[]>([])
   const [incomeCats, setIncomeCats] = useState<CashCategory[]>([])
@@ -84,6 +87,18 @@ export function SaleDetailPage() {
   const [lineDraft, setLineDraft] = useState<AddLineDraft>(EMPTY_LINE)
   const [lineBusy, setLineBusy] = useState(false)
   const [lineMsg, setLineMsg] = useState<string | null>(null)
+
+  const inventoryItemsQuery = useQuery({
+    queryKey: queryKeys.inventory.items(),
+    queryFn: ({ signal }) => fetchInventoryItemsForQuery(signal),
+    staleTime: STALE_INVENTORY_CATALOG_MS,
+    gcTime: 20 * 60_000,
+    enabled: can('inventory_items:read'),
+  })
+  const items = useMemo(
+    () => (inventoryItemsQuery.data ?? []).filter((i) => i.isActive),
+    [inventoryItemsQuery.data],
+  )
 
   const [confirmBusy, setConfirmBusy] = useState(false)
   const [cancelBusy, setCancelBusy] = useState(false)
@@ -116,13 +131,6 @@ export function SaleDetailPage() {
   useEffect(() => {
     void load()
   }, [load])
-
-  useEffect(() => {
-    if (!can('inventory_items:read')) return
-    void api<InventoryItem[]>('/inventory/items')
-      .then((list) => setItems(list.filter((i) => i.isActive)))
-      .catch(() => undefined)
-  }, [can])
 
   useEffect(() => {
     if (!can('services:read')) return
@@ -339,9 +347,7 @@ export function SaleDetailPage() {
       }
       if (payTender.trim()) payload.tenderAmount = normalizeMoneyDecimalStringForApi(payTender)
       /**
-       * Fase 7.7 · Capturamos el id del cobro para imprimir ticket térmico (58 mm, ESC/POS)
-       * desde el puente local y, en el mismo viaje, abrir el cajón. Si se marcó "2 copias",
-       * se envía copies=2 al puente.
+       * Fase 7.7 · Ticket térmico vía puente. Cajón físico solo con categoría efectivo (`ingreso_cobro`).
        */
       const created = await api<{ id: string }>(`/sales/${sale.id}/payments`, {
         method: 'POST',
@@ -354,7 +360,7 @@ export function SaleDetailPage() {
       setPayMsg(
         await successMessageWithTicketAndPulse(ticketPath, 'Cobro registrado', {
           copies: payTwoCopies ? 2 : 1,
-          openDrawer: true,
+          openDrawer: cashIncomeCategoryOpensPhysicalDrawer(payCat),
         }),
       )
       setPayTwoCopies(false)

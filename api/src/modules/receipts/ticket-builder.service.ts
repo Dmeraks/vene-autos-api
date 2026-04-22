@@ -432,7 +432,7 @@ export class TicketBuilderService {
     const subtotal = toNumberSafe(totals.linesSubtotal ?? wo.linesSubtotal ?? '0');
     const discount = toNumberSafe(totals.totalDiscount ?? '0');
     const tax = toNumberSafe(totals.totalTax ?? '0');
-    const grand = toNumberSafe(totals.grandTotal ?? wo.authorizedAmount ?? subtotal);
+    const grand = toNumberSafe(totals.grandTotal ?? subtotal);
     const paid = toNumberSafe(wo.paymentSummary?.totalPaid ?? '0');
     const due = toNumberSafe(wo.amountDue ?? Math.max(0, grand - paid));
 
@@ -530,9 +530,7 @@ export class TicketBuilderService {
     if (lines.length > 0) {
       this.pushDetailHeader(blocks);
       this.pushLineDetail(blocks, lines);
-      const grand = toNumberSafe(
-        wo.totals?.grandTotal ?? wo.authorizedAmount ?? 0,
-      );
+      const grand = toNumberSafe(wo.totals?.grandTotal ?? 0);
       if (grand > 0) {
         blocks.push({ type: 'item', left: 'Total OT', right: formatCop(grand) });
       }

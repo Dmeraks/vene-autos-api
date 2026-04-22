@@ -34,8 +34,12 @@ export async function searchVehiclesForWorkOrder(q: string): Promise<WorkOrdersV
   return api<WorkOrdersVehicleHit[]>(`/vehicles/search?q=${encodeURIComponent(q)}`)
 }
 
-export async function fetchWorkOrderDetailForList(id: string): Promise<WorkOrderDetail> {
-  return api<WorkOrderDetail>(`/work-orders/${id}?_=${Date.now()}`)
+/**
+ * BEFORE: Usaba `_=${Date.now()}` → cache busting → nunca cachea.
+ * NOW: Sin busting → TanStack Query puede reutilizar data.
+ */
+export async function fetchWorkOrderDetailForList(id: string, signal?: AbortSignal): Promise<WorkOrderDetail> {
+  return api<WorkOrderDetail>(`/work-orders/${id}`, { signal })
 }
 
 /** GET detalle sin bust de URL — para TanStack Query (caché + prefetch). */
@@ -43,8 +47,30 @@ export async function fetchWorkOrderDetailForQuery(id: string, signal?: AbortSig
   return api<WorkOrderDetail>(`/work-orders/${id}`, { signal })
 }
 
-export async function fetchCustomerVehiclesForWorkOrderList(customerId: string): Promise<WorkOrdersWarrantyVehicleOption[]> {
-  return api<WorkOrdersWarrantyVehicleOption[]>(`/customers/${customerId}/vehicles?_=${Date.now()}`)
+/** Cobros de la OT — misma clave de caché que `queryKeys.workOrders.payments(id)`. */
+export type WorkOrderPaymentRow = {
+  id: string
+  amount: string
+  kind?: 'PARTIAL' | 'FULL_SETTLEMENT'
+  createdAt: string
+  note: string | null
+  recordedBy: { fullName: string }
+  cashMovement: {
+    category: { slug: string; name: string }
+    tenderAmount?: string | null
+    changeAmount?: string | null
+  }
+}
+
+export async function fetchWorkOrderPaymentsForQuery(
+  id: string,
+  signal?: AbortSignal,
+): Promise<WorkOrderPaymentRow[]> {
+  return api<WorkOrderPaymentRow[]>(`/work-orders/${id}/payments`, { signal })
+}
+
+export async function fetchCustomerVehiclesForWorkOrderList(customerId: string, signal?: AbortSignal): Promise<WorkOrdersWarrantyVehicleOption[]> {
+  return api<WorkOrdersWarrantyVehicleOption[]>(`/customers/${customerId}/vehicles`, { signal })
 }
 
 export async function createWorkOrderFromList(

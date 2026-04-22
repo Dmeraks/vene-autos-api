@@ -211,6 +211,7 @@ export type WorkOrderSummary = {
   /** Solo revisión / diagnóstico: el cobro al cliente va como línea de mano de obra. */
   inspectionOnly?: boolean
   createdAt: string
+  /** Legado: el API devuelve siempre `null` (ya no hay tope de cobro en OT). */
   authorizedAmount?: string | null
   assignedTo?: { id: string; fullName: string; email: string } | null
   /** Presente si esta OT es una garantía o seguimiento vinculado a otra ya entregada. */
@@ -241,7 +242,7 @@ export type WorkOrderDetail = WorkOrderSummary & {
   lines: WorkOrderLine[]
   /** `null` si el perfil no puede ver importes (p. ej. técnico). */
   linesSubtotal: string | null
-  /** Saldo pendiente para liquidar (tope autorizado si existe; si no, total de líneas), menos cobrado. */
+  /** Saldo pendiente: total de líneas (IVA/descuentos) menos cobrado. */
   amountDue: string | null
   /** Desglose completo (subtotal/IVA/INC/descuento/total/costo/utilidad). `null` = perfil sin visibilidad. */
   totals: WorkOrderTotals | null
@@ -334,7 +335,6 @@ export type WorkOrderPatchResult = {
   status: WorkOrderStatus
   description: string
   assignedTo: { id: string; fullName: string; email: string } | null
-  authorizedAmount?: string | null
 }
 
 export type AuthUser = {
@@ -890,7 +890,6 @@ export type CreateWorkOrderPayload = {
   internalNotes?: string
   assignedToId?: string
   vehicleId?: string
-  authorizedAmount?: string
   /** OT origen (debe estar entregada). Crea una orden de garantía vinculada. */
   parentWorkOrderId?: string
 }

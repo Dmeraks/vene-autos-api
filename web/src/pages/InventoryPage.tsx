@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { PageHeader } from '../components/layout/PageHeader'
 import { panelUsesModernShell } from '../config/operationalNotes'
+import { STALE_INVENTORY_CATALOG_MS } from '../constants/queryStaleTime'
 import {
   readInventoryHiddenDevEnabled,
   setInventoryHiddenDevEnabled,
 } from '../constants/inventoryHiddenDev'
+import {
+  fetchInventoryHiddenItemsForQuery,
+  fetchInventoryItemsForQuery,
+  fetchMeasurementUnitsForQuery,
+} from '../features/inventory/services/inventoryCatalogApi'
+import { queryKeys } from '../lib/queryKeys'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
 import type { InventoryItem, MeasurementUnit } from '../api/types'
 import {
@@ -15,15 +23,17 @@ import {
   normalizeMoneyDecimalStringForApi,
 } from '../utils/copFormat'
 
+const INVENTORY_QUERY_GC_MS = 20 * 60_000
+
 export function InventoryPage() {
   const panelTheme = usePanelTheme()
   const isSaas = panelUsesModernShell(panelTheme)
+  const queryClient = useQueryClient()
   const { can } = useAuth()
   const showInvActions = can('inventory_items:update')
   const showInvDelete = can('inventory_items:delete')
   const showStubDevTools = can('inventory_items:read')
   const showInvActionsCol = showInvActions || showInvDelete
-  const [rows, setRows] = useState<InventoryItem[] | null>(null)
   const [units, setUnits] = useState<MeasurementUnit[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -44,8 +54,6 @@ export function InventoryPage() {
   const [newSupplier, setNewSupplier] = useState('')
   const [newCategory, setNewCategory] = useState('')
   const [hiddenDevEnabled, setHiddenDevEnabled] = useState(readInventoryHiddenDevEnabled)
-  const [hiddenRows, setHiddenRows] = useState<InventoryItem[] | null>(null)
-  const [hiddenErr, setHiddenErr] = useState<string | null>(null)
   const createBtnClass = 'va-btn-primary w-full shrink-0 sm:w-auto'
   const tableWrapClass = isSaas
     ? 'va-saas-page-section va-saas-page-section--flush min-w-0'
@@ -71,78 +79,61 @@ export function InventoryPage() {
     return Math.ceil(q * c - 1e-9).toLocaleString('es-CO', { maximumFractionDigits: 0 })
   }
 
-  const load = async () => {
-    const data = await api<InventoryItem[]>('/inventory/items')
-    setRows(data)
-  }
+  const itemsQuery = useQuery({
+    queryKey: queryKeys.inventory.items(),
+    queryFn: ({ signal }) => fetchInventoryItemsForQuery(signal),
+    staleTime: STALE_INVENTORY_CATALOG_MS,
+    gcTime: INVENTORY_QUERY_GC_MS,
+  })
+  const rows = itemsQuery.data ?? null
+
+  const hiddenQuery = useQuery({
+    queryKey: queryKeys.inventory.hiddenItems(),
+    queryFn: ({ signal }) => fetchInventoryHiddenItemsForQuery(signal),
+    enabled: hiddenDevEnabled && showStubDevTools,
+    staleTime: STALE_INVENTORY_CATALOG_MS,
+    gcTime: INVENTORY_QUERY_GC_MS,
+  })
+  const hiddenList = hiddenQuery.data
+  const hiddenErr = hiddenQuery.isError ? 'No se pudieron cargar los SKU ocultos.' : null
+
+  const unitsQuery = useQuery({
+    queryKey: queryKeys.inventory.measurementUnits(),
+    queryFn: ({ signal }) => fetchMeasurementUnitsForQuery(signal),
+    staleTime: STALE_INVENTORY_CATALOG_MS,
+    gcTime: INVENTORY_QUERY_GC_MS,
+  })
+
+  const invalidateInventoryLists = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.items() })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.oilDrumEconomics() })
+    if (hiddenDevEnabled && showStubDevTools) {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.hiddenItems() })
+    }
+  }, [hiddenDevEnabled, queryClient, showStubDevTools])
 
   const toggleHiddenDev = useCallback(() => {
     const next = !hiddenDevEnabled
     setHiddenDevEnabled(next)
     setInventoryHiddenDevEnabled(next)
-    if (!next) {
-      setHiddenRows(null)
-      setHiddenErr(null)
-    }
   }, [hiddenDevEnabled])
 
   useEffect(() => {
-    let cancelled = false
-    if (!hiddenDevEnabled || !showStubDevTools) {
-      setHiddenRows(null)
-      setHiddenErr(null)
-      return () => {
-        cancelled = true
-      }
+    if (itemsQuery.isError) {
+      setErr(
+        itemsQuery.error instanceof Error ? itemsQuery.error.message : 'No se pudo cargar el inventario',
+      )
+    } else {
+      setErr(null)
     }
-    ;(async () => {
-      setHiddenErr(null)
-      try {
-        const data = await api<InventoryItem[]>('/inventory/items/hidden-items')
-        if (!cancelled) setHiddenRows(data)
-      } catch {
-        if (!cancelled) {
-          setHiddenRows(null)
-          setHiddenErr('No se pudieron cargar los SKU ocultos.')
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [hiddenDevEnabled, showStubDevTools])
+  }, [itemsQuery.isError, itemsQuery.error])
 
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const u = await api<MeasurementUnit[]>('/inventory/measurement-units')
-        if (!cancelled && u.length) {
-          setUnits(u)
-          setSlug((s) => (u.some((x) => x.slug === s) ? s : u[0].slug))
-        }
-      } catch {
-        /* */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        await load()
-      } catch {
-        if (!cancelled) setErr('No se pudo cargar el inventario')
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    const u = unitsQuery.data
+    if (!u?.length) return
+    setUnits(u)
+    setSlug((s) => (u.some((x) => x.slug === s) ? s : u[0].slug))
+  }, [unitsQuery.data])
 
   function openEdit(r: InventoryItem) {
     setEditItem(r)
@@ -179,7 +170,7 @@ export function InventoryPage() {
         }),
       })
       setEditItem(null)
-      await load()
+      await invalidateInventoryLists()
       setMsg('Ítem actualizado')
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error al guardar')
@@ -196,15 +187,7 @@ export function InventoryPage() {
     setMsg(null)
     try {
       await api(`/inventory/items/${row.id}`, { method: 'DELETE' })
-      await load()
-      if (hiddenDevEnabled && showStubDevTools) {
-        try {
-          const data = await api<InventoryItem[]>('/inventory/items/hidden-items')
-          setHiddenRows(data)
-        } catch {
-          /* no-op */
-        }
-      }
+      await invalidateInventoryLists()
       setMsg('Ítem eliminado')
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'No se pudo borrar')
@@ -234,7 +217,7 @@ export function InventoryPage() {
       setNewSupplier('')
       setNewCategory('')
       setInitialQty('0')
-      await load()
+      await invalidateInventoryLists()
       setMsg('Ítem creado')
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Error al crear')
@@ -278,7 +261,9 @@ export function InventoryPage() {
       )}
       {msg && <p className="va-card-muted">{msg}</p>}
 
-      {!rows && !err && <p className="text-slate-500 dark:text-slate-300">Cargando…</p>}
+      {itemsQuery.isLoading && !itemsQuery.isError ? (
+        <p className="text-slate-500 dark:text-slate-300">Cargando…</p>
+      ) : null}
 
       {rows && (
         <div className={tableWrapClass}>
@@ -430,15 +415,15 @@ export function InventoryPage() {
             SKU ocultos (desarrollo)
           </h2>
           {hiddenErr ? <p className="va-alert-error-lg">{hiddenErr}</p> : null}
-          {!hiddenRows && !hiddenErr ? (
+          {hiddenQuery.isPending && hiddenList === undefined && !hiddenErr ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">Cargando…</p>
           ) : null}
-          {hiddenRows && hiddenRows.length === 0 ? (
+          {hiddenList && hiddenList.length === 0 ? (
             <p className="text-sm text-slate-600 dark:text-slate-400">
               No hay ítems inactivos en catálogo.
             </p>
           ) : null}
-          {hiddenRows && hiddenRows.length > 0 ? (
+          {hiddenList && hiddenList.length > 0 ? (
             <div className={tableWrapClass}>
               <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
                 <table className="va-table va-table-inv w-full min-w-[42rem]">
@@ -453,7 +438,7 @@ export function InventoryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {hiddenRows.map((r) => (
+                    {hiddenList.map((r) => (
                       <tr key={r.id} className="va-table-body-row">
                         <td className="va-table-td font-mono text-sm">{singleLineCode(r.sku)}</td>
                         <td className="va-table-td">{r.name}</td>

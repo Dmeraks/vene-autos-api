@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { useConfirm } from '../components/confirm/ConfirmProvider'
 import { NotesMinCharCounter } from '../components/NotesMinCharCounter'
+import { STALE_INVENTORY_CATALOG_MS } from '../constants/queryStaleTime'
 import { portalPath } from '../constants/portalPath'
+import { fetchInventoryItemsForQuery } from '../features/inventory/services/inventoryCatalogApi'
+import { queryKeys } from '../lib/queryKeys'
 import { PageHeader } from '../components/layout/PageHeader'
 import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
@@ -14,13 +18,14 @@ import {
   SETTINGS_UI_CONTEXT_PATH,
   type SettingsUiContextResponse,
 } from '../config/operationalNotes'
-import type { InventoryItem } from '../api/types'
 import {
   formatCopInteger,
   formatMoneyInputDisplayFromNormalized,
   normalizeMoneyDecimalStringForApi,
 } from '../utils/copFormat'
 import { successMessageWithDrawerPulse } from '../services/cashDrawerBridge'
+
+const INVENTORY_QUERY_GC_MS = 20 * 60_000
 
 type CostInputMode = 'per_unit' | 'line_total'
 
@@ -54,9 +59,19 @@ function lineMoneyAddForTotal(l: LineDraft): number | null {
 export function ReceiveStockPage() {
   const panelTheme = usePanelTheme()
   const isSaas = panelUsesModernShell(panelTheme)
+  const queryClient = useQueryClient()
   const confirm = useConfirm()
   const { open: cashOpen, loadStatus: cashOpenLoadStatus, refresh: refreshCashOpen } = useCashSessionOpen()
-  const [items, setItems] = useState<InventoryItem[]>([])
+  const itemsQuery = useQuery({
+    queryKey: queryKeys.inventory.items(),
+    queryFn: ({ signal }) => fetchInventoryItemsForQuery(signal),
+    staleTime: STALE_INVENTORY_CATALOG_MS,
+    gcTime: INVENTORY_QUERY_GC_MS,
+  })
+  const items = useMemo(
+    () => (itemsQuery.data ?? []).filter((i) => i.trackStock && i.isActive),
+    [itemsQuery.data],
+  )
   const [lines, setLines] = useState<LineDraft[]>([
     { inventoryItemId: '', quantity: '1', unitCost: '', lineTotalCost: '', costMode: 'per_unit' },
   ])
@@ -89,21 +104,6 @@ export function ReceiveStockPage() {
     void api<SettingsUiContextResponse>(SETTINGS_UI_CONTEXT_PATH)
       .then((r) => setNotesMin(parseNotesUiContext(r).notesMinLengthChars))
       .catch(() => undefined)
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const list = await api<InventoryItem[]>('/inventory/items')
-        if (!cancelled) setItems(list.filter((i) => i.trackStock && i.isActive))
-      } catch {
-        /* */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
   }, [])
 
   function addRow() {
@@ -211,6 +211,8 @@ export function ReceiveStockPage() {
           : 'Recepción registrada correctamente.',
       )
       await refreshCashOpen()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.items() })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.oilDrumEconomics() })
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Error al registrar')
     } finally {

@@ -2,18 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError, openAuthenticatedHtml } from '../api/client'
-import type {
-  InventoryItem,
-  QuoteDetail,
-  QuoteLineType,
-  QuoteStatus,
-  Service,
-  TaxRate,
-} from '../api/types'
+import type { QuoteDetail, QuoteLineType, QuoteStatus, Service, TaxRate } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { canAddQuoteLines, canRemoveQuoteLines, canSeeQuotesUi } from '../auth/quoteRouteAccess'
 import { portalPath } from '../constants/portalPath'
-import { STALE_OPERATIONAL_MS, STALE_SEMI_STATIC_MS } from '../constants/queryStaleTime'
+import { STALE_INVENTORY_CATALOG_MS, STALE_OPERATIONAL_MS, STALE_SEMI_STATIC_MS } from '../constants/queryStaleTime'
+import { fetchInventoryItemsForQuery } from '../features/inventory/services/inventoryCatalogApi'
 import { queryKeys } from '../lib/queryKeys'
 import { normalizeListResponse } from '../utils/normalizeListResponse'
 import {
@@ -100,9 +94,10 @@ export function QuoteDetailPage() {
   })
 
   const inventoryQuery = useQuery({
-    queryKey: ['inventoryItems', 'active'],
-    queryFn: ({ signal }) => api<InventoryItem[]>('/inventory/items', { signal }),
-    staleTime: STALE_SEMI_STATIC_MS,
+    queryKey: queryKeys.inventory.items(),
+    queryFn: ({ signal }) => fetchInventoryItemsForQuery(signal),
+    staleTime: STALE_INVENTORY_CATALOG_MS,
+    gcTime: 20 * 60_000,
     enabled: Boolean(id) && canSeeQuotesUi(can) && (can('inventory_items:read') || canBuildLines),
   })
 

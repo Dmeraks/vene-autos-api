@@ -191,11 +191,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     [showItem],
   )
 
+  // Inicializar promptDraft solo cuando active cambia a type 'prompt'
   useEffect(() => {
-    if (active?.type === 'prompt') {
+    if (active?.type !== 'prompt') {
+      setPromptError(null)
+      return
+    }
+    // Usar microtask para evitar cascading render
+    queueMicrotask(() => {
       setPromptDraft(active.opts.defaultValue ?? '')
       setPromptError(null)
-    }
+    })
   }, [active])
 
   useEffect(() => {

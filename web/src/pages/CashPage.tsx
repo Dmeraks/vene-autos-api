@@ -37,6 +37,7 @@ import {
   successMessageWithTicketAndPulse,
   triggerCashDrawerPulse,
 } from '../services/cashDrawerBridge'
+import { cashIncomeCategoryOpensPhysicalDrawer } from '../services/cashIncomePhysicalDrawer'
 import {
   API_MONEY_DECIMAL_REGEX,
   formatCopFromString,
@@ -86,7 +87,7 @@ export function CashPage() {
     current?.status !== 'OPEN' &&
     !(current === undefined && cashOpen === true)
 
-  const [delSel, setDelSel] = useState<Set<string>>(new Set())
+  const [delSel, setDelSel] = useState<Set<string>>(() => new Set())
 
   const [reqStatus, setReqStatus] = useState<string>('')
   const [reqCat, setReqCat] = useState('')
@@ -178,18 +179,25 @@ export function CashPage() {
     onSuccess: () => invalidateCashExpenseRequestLists(queryClient),
   })
 
+  // Inicializar delSel con los delegates del query
   useEffect(() => {
     const d = delegatesQuery.data
     if (!d) return
     setDelSel(new Set(d.delegateIds))
-  }, [delegatesQuery.data])
+  }, [delegatesQuery.data?.delegateIds])
 
-  useEffect(() => {
+  // Resetear tab si no es operable y está en una pestaña restringida
+  const effectiveTab = useMemo(() => {
     const restricted: CashTab[] = ['ingreso', 'egreso', 'delegados', 'movimientos', 'solicitudes']
-    if (!isCashOperable && restricted.includes(tab)) {
-      setTab('sesion')
-    }
+    return !isCashOperable && restricted.includes(tab) ? 'sesion' : tab
   }, [tab, isCashOperable])
+
+  // Sincronizar con el tab derivado si cambia
+  useEffect(() => {
+    if (effectiveTab !== tab) {
+      setTab(effectiveTab)
+    }
+  }, [effectiveTab, tab])
 
   useEffect(() => {
     void api<SettingsUiContextResponse>(SETTINGS_UI_CONTEXT_PATH)
@@ -445,8 +453,8 @@ export function CashPage() {
     if (!okMov) return false
     try {
       /**
-       * Fase 7.7 · Capturamos `id` (movimiento) y `sessionId` para imprimir el ticket
-       * térmico del movimiento desde el puente local. El cajón siempre se abre.
+       * Fase 7.7 · Ticket térmico vía puente. Egreso: siempre puede implicar efectivo físico.
+       * Ingreso: solo pulsamos cajón si la categoría es efectivo en mostrador (`ingreso_cobro`).
        */
       const created = await cashMovementMutation.mutateAsync({
         dir,
@@ -459,10 +467,12 @@ export function CashPage() {
       })
       const successLabel = dir === 'income' ? 'Ingreso registrado' : 'Egreso registrado'
       const ticketPath = `/cash/sessions/${created.sessionId}/movements/${created.id}/receipt-ticket.json`
+      const openDrawer =
+        dir === 'expense' || cashIncomeCategoryOpensPhysicalDrawer(categorySlug)
       setMsg(
         await successMessageWithTicketAndPulse(ticketPath, successLabel, {
           copies: movTwoCopies ? 2 : 1,
-          openDrawer: true,
+          openDrawer,
         }),
       )
       return true
@@ -564,15 +574,16 @@ export function CashPage() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.cash.expenseRequestsRoot() })
   }, [queryClient])
 
-  const allTabs: { id: CashTab; label: string; show: boolean }[] = [
+  const allTabs = useMemo(() => [
     { id: 'sesion', label: 'Sesión', show: can('cash_sessions:read') },
     { id: 'ingreso', label: 'Ingreso', show: can('cash_movements:create_income') && isCashOperable },
     { id: 'egreso', label: 'Egreso', show: can('cash_movements:create_expense') && isCashOperable },
     { id: 'delegados', label: 'Delegados', show: can('cash_delegates:manage') && isCashOperable },
     { id: 'movimientos', label: 'Movimientos', show: can('cash_sessions:read') && isCashOperable },
     { id: 'solicitudes', label: 'Solicitudes', show: can('cash_expense_requests:read') && isCashOperable },
-  ]
-  const tabs = allTabs.filter((t) => t.show)
+  ] as const, [can, isCashOperable])
+  
+  const tabs = useMemo(() => allTabs.filter((t) => t.show), [allTabs])
 
   const incomeCats = useMemo(
     () => categories.filter((c) => c.direction === 'INCOME'),
@@ -581,15 +592,19 @@ export function CashPage() {
   const expenseCats = useMemo(
     () => categories.filter((c) => c.direction === 'EXPENSE'),
     [categories],
-  )
+  ) // ✅ React Compiler puede optimizar esto
 
   const btnPrimary = 'va-btn-primary'
   /** Fondo oscuro: fuerza texto blanco (el texto del padre .va-card en oscuro no debe heredarse). */
-  const btnDark =
-    'va-btn-primary !bg-slate-800 text-white hover:!bg-slate-900 dark:!bg-slate-700 dark:text-white dark:hover:!bg-slate-600'
+  const btnDark = useMemo(() =>
+    'va-btn-primary !bg-slate-800 text-white hover:!bg-slate-900 dark:!bg-slate-700 dark:text-white dark:hover:!bg-slate-600',
+    [],
+  )
   const btnSecondary = 'va-btn-secondary'
-  const openSessionBtnClassicClass =
-    'va-tab-row-stretch-btn bg-gradient-to-b from-emerald-600 to-emerald-700 text-sm font-semibold text-white shadow-md shadow-emerald-900/25 ring-1 ring-emerald-800/30 transition hover:from-emerald-500 hover:to-emerald-600 hover:shadow-lg active:translate-y-px dark:from-emerald-600 dark:to-emerald-800 dark:shadow-emerald-950/40 dark:ring-emerald-500/25 dark:hover:from-emerald-500 dark:hover:to-emerald-700'
+  const openSessionBtnClassicClass = useMemo(() =>
+    'va-tab-row-stretch-btn bg-gradient-to-b from-emerald-600 to-emerald-700 text-sm font-semibold text-white shadow-md shadow-emerald-900/25 ring-1 ring-emerald-800/30 transition hover:from-emerald-500 hover:to-emerald-600 hover:shadow-lg active:translate-y-px dark:from-emerald-600 dark:to-emerald-800 dark:shadow-emerald-950/40 dark:ring-emerald-500/25 dark:hover:from-emerald-500 dark:hover:to-emerald-700',
+    [],
+  )
 
   return (
     <div className={pageStackClass}>

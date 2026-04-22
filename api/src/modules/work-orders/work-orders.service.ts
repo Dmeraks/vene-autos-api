@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { Prisma, WorkOrderStatus } from '@prisma/client';
-import { ceilWholeCop, decimalFromMoneyApiString } from '../../common/money/cop-money';
+import { ceilWholeCop } from '../../common/money/cop-money';
 import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -112,16 +112,6 @@ export class WorkOrdersService {
       );
     }
 
-    if (
-      dto.authorizedAmount != null &&
-      String(dto.authorizedAmount).trim() !== '' &&
-      !actorMayViewWorkOrderFinancials(actor)
-    ) {
-      throw new ForbiddenException(
-        'No tenés permiso para definir el tope autorizado ni importes en la orden.',
-      );
-    }
-
     /** La OT nace sin técnico asignado; la asignación se hace después con PATCH. `publicCode` se setea en la transacción. */
     const data: Omit<Prisma.WorkOrderCreateInput, 'publicCode'> = {
       description: dto.description.trim(),
@@ -136,9 +126,6 @@ export class WorkOrdersService {
       vehicleNotes: dto.vehicleNotes?.trim() ?? null,
       internalNotes: dto.internalNotes?.trim() ?? null,
       inspectionOnly: dto.inspectionOnly ?? false,
-      authorizedAmount: dto.authorizedAmount
-        ? decimalFromMoneyApiString(dto.authorizedAmount)
-        : undefined,
       status: WorkOrderStatus.UNASSIGNED,
       createdBy: { connect: { id: actorUserId } },
       ...(parentId ? { parentWorkOrder: { connect: { id: parentId } } } : {}),
@@ -221,7 +208,6 @@ export class WorkOrdersService {
         publicCode: row.publicCode,
         status: row.status,
         description: row.description,
-        authorizedAmount: row.authorizedAmount?.toString() ?? null,
         vehicleId: row.vehicleId,
         parentWorkOrderId: row.parentWorkOrderId ?? null,
       },
@@ -400,10 +386,9 @@ export class WorkOrdersService {
       this.prisma.workOrder.count({ where }),
     ]);
 
-    const mayView = actorMayViewWorkOrderFinancials(actor);
     return {
       total,
-      items: mayView ? items : items.map((it) => ({ ...it, authorizedAmount: null })),
+      items: items.map((it) => ({ ...it, authorizedAmount: null })),
     };
   }
 
@@ -441,10 +426,6 @@ export class WorkOrdersService {
       _sum: { amount: true },
     });
     const totalPaid = paid._sum.amount ?? new Prisma.Decimal(0);
-    const remainingDec =
-      row.authorizedAmount != null ? row.authorizedAmount.minus(totalPaid) : null;
-    const remaining =
-      remainingDec != null ? (remainingDec.lt(0) ? '0' : ceilWholeCop(remainingDec).toString()) : null;
 
     const lineRows = row.lines ?? [];
     const linesForTotals: LineForTotals[] = lineRows.map((ln) => ({
@@ -461,10 +442,10 @@ export class WorkOrdersService {
     const totals = computeWorkOrderTotals(linesForTotals);
     const linesSubtotalCeiled = ceilWholeCop(totals.linesSubtotal);
 
-    // Saldo pendiente usa el tope autorizado si existe; si no, el total con IVA/descuento ya calculado.
-    const dueBase = row.authorizedAmount ?? ceilWholeCop(totals.grandTotal);
+    const dueBase = ceilWholeCop(totals.grandTotal);
     const amountDueDec = dueBase.minus(totalPaid);
     const amountDue = amountDueDec.lt(0) ? '0' : ceilWholeCop(amountDueDec).toString();
+    const remaining = amountDue;
 
     const linesWithTotals = lineRows.map((ln, idx) => ({
       ...ln,
@@ -482,6 +463,7 @@ export class WorkOrdersService {
 
     const detail = {
       ...rest,
+      authorizedAmount: null,
       lines: linesWithTotals,
       linesSubtotal: linesSubtotalCeiled.toString(),
       amountDue,
@@ -604,12 +586,6 @@ export class WorkOrdersService {
       throw new BadRequestException('No hay campos para actualizar');
     }
 
-    if (dto.authorizedAmount !== undefined && !actorMayViewWorkOrderFinancials(actor)) {
-      throw new ForbiddenException(
-        'No tenés permiso para ver ni modificar importes ni tope de cobro en la orden.',
-      );
-    }
-
     const before = await this.prisma.workOrder.findFirst({
       where: { id, ...this.workOrderVisibilityWhere(actor) },
     });
@@ -638,20 +614,6 @@ export class WorkOrdersService {
 
     if (dto.assignedToId !== undefined && dto.assignedToId !== null) {
       await this.assertAssignableUser(dto.assignedToId);
-    }
-
-    if (dto.authorizedAmount !== undefined && dto.authorizedAmount !== null) {
-      const cap = decimalFromMoneyApiString(dto.authorizedAmount);
-      const paid = await this.prisma.workOrderPayment.aggregate({
-        where: { workOrderId: id },
-        _sum: { amount: true },
-      });
-      const totalPaid = paid._sum.amount ?? new Prisma.Decimal(0);
-      if (cap.lt(totalPaid)) {
-        throw new BadRequestException(
-          'El monto autorizado no puede ser menor al total ya cobrado en esta orden',
-        );
-      }
     }
 
     if (dto.status !== undefined && dto.status !== before.status) {
@@ -747,10 +709,9 @@ export class WorkOrdersService {
     if (dto.internalNotes !== undefined) {
       data.internalNotes = dto.internalNotes?.trim() ?? null;
     }
-    if (dto.authorizedAmount !== undefined) {
-      data.authorizedAmount =
-        dto.authorizedAmount === null ? null : decimalFromMoneyApiString(dto.authorizedAmount);
-    }
+    /** Tope de cobro deshabilitado: columna legada se limpia en cada guardado. */
+    data.authorizedAmount = null;
+
     const impliedDisconnectAssignee =
       dto.status === WorkOrderStatus.UNASSIGNED &&
       dto.status !== before.status &&
@@ -841,14 +802,12 @@ export class WorkOrdersService {
         status: before.status,
         orderNumber: before.orderNumber,
         assignedToId: before.assignedToId,
-        authorizedAmount: before.authorizedAmount?.toString() ?? null,
         vehicleId: before.vehicleId,
       },
       nextPayload: {
         status: row.status,
         orderNumber: row.orderNumber,
         assignedToId: row.assignedToId,
-        authorizedAmount: row.authorizedAmount?.toString() ?? null,
         vehicleId: row.vehicleId,
         fields: keys,
       },

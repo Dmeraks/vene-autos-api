@@ -25,6 +25,7 @@ import { resolveTenderAndChange } from '../cash/cash-tender.util';
 import type { RecordWorkOrderPaymentDto } from './dto/record-work-order-payment.dto';
 import { WorkOrdersService } from './work-orders.service';
 import { actorMayViewWorkOrderFinancials } from './work-orders.visibility';
+import { billingTotalsCeiledForWorkOrder } from './work-order-grand-total';
 
 const userBrief = { select: { id: true, email: true, fullName: true } };
 
@@ -75,7 +76,7 @@ export class WorkOrderPaymentsService {
     }
     const wo = await this.prisma.workOrder.findUnique({
       where: { id: workOrderId },
-      select: { id: true, status: true, authorizedAmount: true, orderNumber: true, publicCode: true },
+      select: { id: true, status: true, orderNumber: true, publicCode: true },
     });
     if (!wo) {
       throw new NotFoundException('Orden de trabajo no encontrada');
@@ -86,35 +87,24 @@ export class WorkOrderPaymentsService {
       _count: { _all: true },
     });
     const totalPaid = agg._sum.amount ?? new Prisma.Decimal(0);
-    const authorized = wo.authorizedAmount;
-    let remaining: string | null = null;
-    if (authorized != null) {
-      const remDec = authorized.minus(totalPaid);
-      remaining = remDec.lt(0) ? '0' : ceilWholeCop(remDec).toString();
-    }
-    const lines = await this.prisma.workOrderLine.findMany({
-      where: { workOrderId },
-      select: { quantity: true, unitPrice: true },
-    });
-    let linesSubtotal = new Prisma.Decimal(0);
-    for (const ln of lines) {
-      const up = ln.unitPrice ?? new Prisma.Decimal(0);
-      linesSubtotal = linesSubtotal.plus(ln.quantity.mul(up));
-    }
-    const linesSubtotalCeiled = ceilWholeCop(linesSubtotal);
-    const dueBase = authorized ?? linesSubtotalCeiled;
+    const { linesSubtotal, grandTotal } = await billingTotalsCeiledForWorkOrder(
+      this.prisma.workOrderLine,
+      workOrderId,
+    );
+    const dueBase = grandTotal;
     const amountDueDec = dueBase.minus(totalPaid);
     const amountDue = amountDueDec.lt(0) ? '0' : ceilWholeCop(amountDueDec).toString();
+    const remaining = amountDue;
     return {
       workOrderId: wo.id,
       orderNumber: wo.orderNumber,
       publicCode: wo.publicCode,
       status: wo.status,
-      authorizedAmount: authorized?.toString() ?? null,
+      authorizedAmount: null,
       totalPaid: totalPaid.toString(),
       paymentCount: agg._count._all,
       remaining,
-      linesSubtotal: linesSubtotalCeiled.toString(),
+      linesSubtotal: linesSubtotal.toString(),
       amountDue,
     };
   }
@@ -146,8 +136,8 @@ export class WorkOrderPaymentsService {
       dto.paymentKind === 'full' ? WorkOrderPaymentKind.FULL_SETTLEMENT : WorkOrderPaymentKind.PARTIAL;
 
     /**
-     * Bloqueo de fila en la OT + lecturas/escrituras en la misma transacción para que el tope
-     * `authorizedAmount` no se supere por cobros concurrentes (dos peticiones en paralelo).
+     * Bloqueo de fila en la OT + lecturas/escrituras en la misma transacción para evitar cobros
+     * concurrentes que desalineen el saldo.
      */
     const { movement, payment, wo, session, statusAfter } = await this.prisma.$transaction(
       async (tx) => {
@@ -160,7 +150,6 @@ export class WorkOrderPaymentsService {
             orderNumber: true,
             publicCode: true,
             status: true,
-            authorizedAmount: true,
           },
         });
         if (!wo) {
@@ -172,20 +161,10 @@ export class WorkOrderPaymentsService {
           );
         }
 
-        const lineRows = await tx.workOrderLine.findMany({
-          where: { workOrderId: wo.id },
-          select: { quantity: true, unitPrice: true },
-        });
-        let linesSubtotal = new Prisma.Decimal(0);
-        for (const ln of lineRows) {
-          const up = ln.unitPrice ?? new Prisma.Decimal(0);
-          linesSubtotal = linesSubtotal.plus(ln.quantity.mul(up));
-        }
-        const linesSubtotalCeiled = ceilWholeCop(linesSubtotal);
-        const totalDue = wo.authorizedAmount ?? linesSubtotalCeiled;
+        const { grandTotal: totalDue } = await billingTotalsCeiledForWorkOrder(tx.workOrderLine, wo.id);
         if (totalDue.lte(0)) {
           throw new BadRequestException(
-            'No hay saldo pendiente (tope autorizado y subtotal de líneas en cero). Definí importes o un tope antes de cobrar.',
+            'No hay saldo pendiente: el total de líneas (con impuestos y descuentos) es cero. Cargá importes antes de cobrar.',
           );
         }
 
@@ -194,9 +173,6 @@ export class WorkOrderPaymentsService {
           _sum: { amount: true },
         });
         const already = paidSum._sum.amount ?? new Prisma.Decimal(0);
-        if (wo.authorizedAmount != null && already.plus(amount).gt(wo.authorizedAmount)) {
-          throw new BadRequestException('El cobro excede el monto autorizado de la orden');
-        }
 
         const newTotalPaid = already.plus(amount);
         if (dto.paymentKind === 'partial') {

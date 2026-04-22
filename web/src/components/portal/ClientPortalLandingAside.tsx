@@ -44,7 +44,7 @@ function Reveal({
     )
     io.observe(el)
     return () => io.disconnect()
-  }, [reduced])
+  }, [reduced, setOn])
 
   return (
     <div

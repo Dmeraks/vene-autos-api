@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 /**
- * Patrón reutilizable: fondo + imagen “llena” encima con `clip-path: polygon()` (borde superior senoidal
+ * Patrón reutilizable: fondo + imagen "llena" encima con `clip-path: polygon()` (borde superior senoidal
  * + fase por rAF) y lerp del % de recorte. Stock bajo ~16 %: charco cóncavo (U suave) y onda más lenta.
  * Entrada con delay fijo + `prefers-reduced-motion` aplana el borde y frena animaciones.
  */
@@ -12,7 +12,7 @@ type Props = {
 }
 
 const ENTER_DELAY_MS = 2500
-/** Duración del “bajado” del nivel cuando cambia el tope de stock. */
+/** Duración del "bajado" del nivel cuando cambia el tope de stock. */
 const CLIP_DURATION_MS = 3200
 
 const EMPTY_DRUM_SRC = '/caneca-aceite-vacia.png'
@@ -48,7 +48,7 @@ function bowlDeltaFactor(xPct: number): number {
 }
 
 /**
- * Intensidad 0–1 del charco: suave entre ~21 % y 16 % de stock para no “saltar” al cruzar el umbral.
+ * Intensidad 0–1 del charco: suave entre ~21 % y 16 % de stock para no "saltar" al cruzar el umbral.
  */
 function lowStockBowlIntensity(stockRatio: number): number {
   const hi = 0.21
@@ -75,7 +75,7 @@ function liquidClipPolygon(
   if (baseTopPct >= 99.98) return 'inset(100% 0 0 0)'
 
   const bowlMix = flatEdge ? 0 : lowStockBowlIntensity(stockRatio)
-  /** Con charco activo, la onda fina no “tapa” la U: se atenúa fuerte. */
+  /** Con charco activo, la onda fina no "tapa" la U: se atenúa fuerte. */
   const waveMul = flatEdge ? 0 : 1 - 0.7 * bowlMix
   const amp = flatEdge ? 0 : WAVE_AMP_PCT * waveMul
   const bowl = BOWL_AMP_PCT * bowlMix
@@ -100,19 +100,21 @@ export function OilDrumGauge({ stockRatio }: Props) {
   const r = Math.min(1, Math.max(0, stockRatio))
   const pct = r * 100
 
-  const ratioRef = useRef(r)
-  ratioRef.current = r
-
   /** Objetivo: % del alto de la llena oculto por arriba (0 = toda visible). */
   const [clipTargetPct, setClipTargetPct] = useState(0)
   /** Valor mostrado (lerp hacia `clipTargetPct`). */
   const [clipDisplayPct, setClipDisplayPct] = useState(0)
   const clipDisplayRef = useRef(0)
-  clipDisplayRef.current = clipDisplayPct
-
   const introDoneRef = useRef(false)
+  const ratioRef = useRef(r)
   const [reduceMotion, setReduceMotion] = useState(false)
   const [wavePhase, setWavePhase] = useState(0)
+
+  // Actualizar refs en effect, no en render
+  useEffect(() => {
+    ratioRef.current = r
+    clipDisplayRef.current = clipDisplayPct
+  }, [r, clipDisplayPct])
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')

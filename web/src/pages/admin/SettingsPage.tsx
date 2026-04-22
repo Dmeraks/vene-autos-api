@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { useAuth } from '../../auth/AuthContext'
 import { useConfirm } from '../../components/confirm/ConfirmProvider'
@@ -6,7 +7,12 @@ import { PageHeader } from '../../components/layout/PageHeader'
 import { getSettingPresentation } from '../../config/settingsPresentation'
 import { panelUsesModernShell } from '../../config/operationalNotes'
 import { usePanelTheme } from '../../theme/PanelThemeProvider'
+import { STALE_SETTINGS_ADMIN_MS } from '../../constants/queryStaleTime'
+import { fetchSettingsTenantMap, fetchUsersListForQuery } from '../../features/settings/settingsTenantApi'
+import { queryKeys } from '../../lib/queryKeys'
 import { isResumeLastModuleEnabled, setResumeLastModuleEnabled } from '../../services/lastModuleStorage'
+
+const SETTINGS_PAGE_QUERY_GC_MS = 45 * 60_000
 
 function displayValue(v: unknown): string {
   if (v === null || v === undefined) return ''
@@ -288,6 +294,7 @@ function groupSettingKeys(keys: string[]): Array<{ section: (typeof SETTING_SECT
 export function SettingsPage() {
   const panelTheme = usePanelTheme()
   const isSaas = panelUsesModernShell(panelTheme)
+  const queryClient = useQueryClient()
   const { can } = useAuth()
   const confirm = useConfirm()
   const canSaveSettings = can('settings:update')
@@ -300,7 +307,6 @@ export function SettingsPage() {
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<string | null>(null)
 
-  const [userOptions, setUserOptions] = useState<UserOption[] | null>(null)
   const [resetUserId, setResetUserId] = useState('')
   const [resetPw1, setResetPw1] = useState('')
   const [resetPw2, setResetPw2] = useState('')
@@ -309,29 +315,42 @@ export function SettingsPage() {
   const [resumeLastModuleEnabled, setResumeLastModuleEnabledState] = useState(true)
   const [resumePrefMsg, setResumePrefMsg] = useState<string | null>(null)
 
-  useEffect(() => {
-    void api<Record<string, unknown>>('/settings')
-      .then((raw) => {
-        setServerSnapshot(raw)
-        const merged = mergeSettingsFromServer(raw)
-        setMap(merged)
-        const d: Record<string, string> = {}
-        for (const k of Object.keys(merged)) {
-          d[k] = displayValue(merged[k])
-        }
-        setDraft(d)
-      })
-      .catch(() => setMsg('No se pudo cargar la configuración'))
-  }, [])
+  const settingsQuery = useQuery({
+    queryKey: queryKeys.settings.tenantMap(),
+    queryFn: ({ signal }) => fetchSettingsTenantMap(signal),
+    staleTime: STALE_SETTINGS_ADMIN_MS,
+    gcTime: SETTINGS_PAGE_QUERY_GC_MS,
+  })
 
-  useEffect(() => {
-    if (!canResetPasswords) return
-    void api<UserOption[]>('/users')
-      .then((rows) => {
-        setUserOptions(rows.map((r) => ({ id: r.id, email: r.email, fullName: r.fullName, isActive: r.isActive })))
-      })
-      .catch(() => setUserOptions([]))
-  }, [canResetPasswords])
+  const usersQuery = useQuery({
+    queryKey: queryKeys.users.list(),
+    queryFn: ({ signal }) => fetchUsersListForQuery(signal),
+    enabled: canResetPasswords,
+    staleTime: STALE_SETTINGS_ADMIN_MS,
+    gcTime: SETTINGS_PAGE_QUERY_GC_MS,
+  })
+
+  useLayoutEffect(() => {
+    const raw = settingsQuery.data
+    if (!raw) return
+    setServerSnapshot(raw)
+    const merged = mergeSettingsFromServer(raw)
+    setMap(merged)
+    const d: Record<string, string> = {}
+    for (const k of Object.keys(merged)) {
+      d[k] = displayValue(merged[k])
+    }
+    setDraft(d)
+  }, [settingsQuery.data])
+
+  const userOptions = useMemo((): UserOption[] | null => {
+    if (!canResetPasswords) return null
+    if (usersQuery.isPending) return null
+    if (usersQuery.isError) return []
+    const rows = usersQuery.data
+    if (!rows) return null
+    return rows.map((r) => ({ id: r.id, email: r.email, fullName: r.fullName, isActive: r.isActive }))
+  }, [canResetPasswords, usersQuery.data, usersQuery.isError, usersQuery.isPending])
 
   useEffect(() => {
     setResumeLastModuleEnabledState(isResumeLastModuleEnabled())
@@ -390,14 +409,7 @@ export function SettingsPage() {
         method: 'PATCH',
         body: JSON.stringify({ values }),
       })
-      setServerSnapshot(updated)
-      const merged = mergeSettingsFromServer(updated)
-      setMap(merged)
-      const d: Record<string, string> = {}
-      for (const k of Object.keys(merged)) {
-        d[k] = displayValue(merged[k])
-      }
-      setDraft(d)
+      queryClient.setQueryData(queryKeys.settings.tenantMap(), updated)
       setMsg('Configuración guardada')
       window.dispatchEvent(new CustomEvent('vene:panel-theme-changed'))
     } catch (err) {
@@ -435,6 +447,7 @@ export function SettingsPage() {
           method: 'PATCH',
           body: JSON.stringify({ password: resetPw1 }),
         })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.users.list() })
         setResetPw1('')
         setResetPw2('')
         setResetMsg('Contraseña actualizada. El usuario debe iniciar sesión de nuevo.')
@@ -444,7 +457,7 @@ export function SettingsPage() {
         setResetBusy(false)
       }
     },
-    [resetUserId, resetPw1, resetPw2, userOptions, confirm],
+    [resetUserId, resetPw1, resetPw2, userOptions, confirm, queryClient],
   )
 
   const showSupportTab = canResetPasswords
@@ -501,6 +514,13 @@ export function SettingsPage() {
         </div>
       )}
 
+      {settingsQuery.isError && !settingsQuery.data ? (
+        <p className="va-alert-error-lg">
+          {settingsQuery.error instanceof Error
+            ? settingsQuery.error.message
+            : 'No se pudo cargar la configuración'}
+        </p>
+      ) : null}
       {msg && <p className="va-card-muted">{msg}</p>}
 
       {(!showSupportTab || panel === 'workshop') && (
@@ -543,7 +563,9 @@ export function SettingsPage() {
             )}
           </section>
 
-          {!map && <p className="text-slate-500 dark:text-slate-300">Cargando…</p>}
+          {!map && settingsQuery.isPending ? (
+            <p className="text-slate-500 dark:text-slate-300">Cargando…</p>
+          ) : null}
           {map && (
             <form onSubmit={save} className="min-w-0 space-y-5">
               {!canSaveSettings && (

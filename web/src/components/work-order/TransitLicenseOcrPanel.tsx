@@ -90,7 +90,6 @@ export function TransitLicenseOcrPanel({ disabled, onApply }: Props) {
   // o sin tesseract.js disponible) no es fatal: `runOcr` lo reintentará.
   useEffect(() => {
     void ensureWorker().catch((e) => {
-      // eslint-disable-next-line no-console
       console.warn('[OCR] pre-warm fallido', e)
     })
     return () => {

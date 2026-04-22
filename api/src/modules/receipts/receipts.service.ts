@@ -355,7 +355,7 @@ export class ReceiptsService {
     const subtotal = totals.linesSubtotal ?? wo.linesSubtotal ?? '0';
     const discount = totals.totalDiscount ?? '0';
     const tax = totals.totalTax ?? '0';
-    const grand = totals.grandTotal ?? wo.authorizedAmount?.toString() ?? '0';
+    const grand = totals.grandTotal ?? '0';
     const paid = wo.paymentSummary?.totalPaid ?? '0';
     const due = wo.amountDue ?? '0';
 

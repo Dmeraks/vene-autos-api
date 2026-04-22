@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { STALE_OPERATIONAL_MS } from '../../../constants/queryStaleTime'
+import { STALE_WORK_ORDER_DETAIL_MS, STALE_WORK_ORDERS_LIST_MS } from '../../../constants/queryStaleTime'
 import { queryKeys } from '../../../lib/queryKeys'
 import {
   parseWorkOrderListFilters,
@@ -13,7 +13,7 @@ export function prefetchWorkOrderDetail(queryClient: QueryClient, workOrderId: s
   void queryClient.prefetchQuery({
     queryKey: queryKeys.workOrders.detail(workOrderId),
     queryFn: ({ signal }) => fetchWorkOrderDetailForQuery(workOrderId, signal),
-    staleTime: STALE_OPERATIONAL_MS,
+    staleTime: STALE_WORK_ORDER_DETAIL_MS,
   })
 }
 
@@ -38,6 +38,6 @@ export function prefetchDefaultWorkOrdersList(queryClient: QueryClient): void {
         },
         signal,
       ),
-    staleTime: STALE_OPERATIONAL_MS,
+    staleTime: STALE_WORK_ORDERS_LIST_MS,
   })
 }

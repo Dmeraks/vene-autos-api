@@ -8,7 +8,7 @@ import type {
   WorkOrderSummary,
   WorkOrderStatus,
 } from '../../../api/types'
-import { STALE_OPERATIONAL_MS } from '../../../constants/queryStaleTime'
+import { STALE_WORK_ORDERS_LIST_MS } from '../../../constants/queryStaleTime'
 import { useAuth } from '../../../auth/AuthContext'
 import { portalPath } from '../../../constants/portalPath'
 import { queryKeys } from '../../../lib/queryKeys'
@@ -16,7 +16,6 @@ import { emitWorkOrderChanged, WORK_ORDER_CHANGED_EVENT } from '../../../service
 import { panelUsesModernShell } from '../../../config/operationalNotes'
 import { usePanelTheme } from '../../../theme/PanelThemeProvider'
 import {
-  API_MONEY_DECIMAL_REGEX,
   formatMoneyInputDisplayFromNormalized,
   normalizeMoneyDecimalStringForApi,
 } from '../../../utils/copFormat'
@@ -107,8 +106,8 @@ export function useWorkOrdersPageModel() {
         },
         signal,
       ),
-    /** Lista operativa; invalidación explícita tras crear/cancelar OT. */
-    staleTime: STALE_OPERATIONAL_MS,
+    /** Lista operativa; invalidación explícita tras crear/cancelar OT. Frescura extendida al volver del detalle. */
+    staleTime: STALE_WORK_ORDERS_LIST_MS,
     select: selectWorkOrderListSlice,
     /** Misma UX que antes: no vaciar la grilla al cambiar página o refetch en background. */
     placeholderData: keepPreviousData,
@@ -140,14 +139,14 @@ export function useWorkOrdersPageModel() {
   const createWorkOrderMutation = useMutation({
     mutationFn: createWorkOrderFromList,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workOrders.root })
+      void queryClient.invalidateQueries({ queryKey: [...queryKeys.workOrders.root, 'list'] })
     },
   })
 
   const cancelWorkOrderMutation = useMutation({
     mutationFn: cancelWorkOrderToTerminal,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workOrders.root })
+      void queryClient.invalidateQueries({ queryKey: [...queryKeys.workOrders.root, 'list'] })
     },
   })
 
@@ -166,7 +165,6 @@ export function useWorkOrdersPageModel() {
   const [intakeKmCreate, setIntakeKmCreate] = useState('')
   const [inspectionOnlyCreate, setInspectionOnlyCreate] = useState(false)
   const [vehicleId, setVehicleId] = useState('')
-  const [authorizedAmount, setAuthorizedAmount] = useState('')
   const [warrantyParentId, setWarrantyParentId] = useState<string | null>(null)
   const [warrantyParentOrderNumber, setWarrantyParentOrderNumber] = useState<number | null>(null)
   const [warrantyVehicleOptions, setWarrantyVehicleOptions] = useState<WorkOrdersWarrantyVehicleOption[]>([])
@@ -262,12 +260,12 @@ export function useWorkOrdersPageModel() {
 
   /** Invalida/refresca la lista (misma firma que antes para compatibilidad exportada). */
   const loadPage = useCallback(
-    async (pageNum?: number, _signal?: AbortSignal) => {
+    async (pageNum?: number) => {
       if (typeof pageNum === 'number' && pageNum !== page) {
         setPage(pageNum)
         return
       }
-      await queryClient.invalidateQueries({ queryKey: queryKeys.workOrders.root })
+      await queryClient.invalidateQueries({ queryKey: [...queryKeys.workOrders.root, 'list'] })
     },
     [page, queryClient],
   )
@@ -404,8 +402,14 @@ export function useWorkOrdersPageModel() {
   }, [searchParams, can, setSearchParams])
 
   useEffect(() => {
-    const onWoChanged = () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workOrders.root })
+    const onWoChanged = (ev: Event) => {
+      const ce = ev as CustomEvent<{ workOrderId: string }>
+      const wid = ce.detail?.workOrderId
+      void queryClient.invalidateQueries({ queryKey: [...queryKeys.workOrders.root, 'list'] })
+      if (wid) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.workOrders.detail(wid) })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.workOrders.payments(wid) })
+      }
     }
     window.addEventListener(WORK_ORDER_CHANGED_EVENT, onWoChanged)
     return () => window.removeEventListener(WORK_ORDER_CHANGED_EVENT, onWoChanged)
@@ -441,13 +445,6 @@ export function useWorkOrdersPageModel() {
         return
       }
       const body: CreateWorkOrderPayload = { description: desc.trim() }
-      const aaNorm = normalizeMoneyDecimalStringForApi(authorizedAmount)
-      if (authorizedAmount.trim() && (!aaNorm || !API_MONEY_DECIMAL_REGEX.test(aaNorm))) {
-        setCreateMsg(
-          'Tope de cobros: solo pesos enteros; miles con punto (ej. 2.550.356), o dejá vacío.',
-        )
-        return
-      }
       if (vid) body.vehicleId = vid
       if (warrantyParentId) body.parentWorkOrderId = warrantyParentId
       const vb = vehicleBrandCreate.trim()
@@ -462,7 +459,6 @@ export function useWorkOrdersPageModel() {
         body.intakeOdometerKm = n
       }
       if (inspectionOnlyCreate) body.inspectionOnly = true
-      if (canViewWoFinancials && aaNorm) body.authorizedAmount = aaNorm
       try {
         const created = await createWorkOrderMutation.mutateAsync(body)
         setCreateOpen(false)
@@ -474,7 +470,6 @@ export function useWorkOrdersPageModel() {
         setIntakeKmCreate('')
         setInspectionOnlyCreate(false)
         setVehicleId('')
-        setAuthorizedAmount('')
         setWarrantyParentId(null)
         setWarrantyParentOrderNumber(null)
         setWarrantyVehicleOptions([])
@@ -491,8 +486,6 @@ export function useWorkOrdersPageModel() {
       }
     },
     [
-      authorizedAmount,
-      canViewWoFinancials,
       createWorkOrderMutation,
       desc,
       inspectionOnlyCreate,
@@ -593,8 +586,6 @@ export function useWorkOrdersPageModel() {
     setInspectionOnlyCreate,
     vehicleId,
     setVehicleId,
-    authorizedAmount,
-    setAuthorizedAmount,
     warrantyParentId,
     warrantyParentOrderNumber,
     warrantyVehicleOptions,

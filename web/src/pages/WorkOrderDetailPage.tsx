@@ -2,15 +2,18 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type Dispatch,
   type SetStateAction,
 } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, ApiError, openAuthenticatedHtml } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { STALE_INVENTORY_CATALOG_MS } from '../constants/queryStaleTime'
 import { portalPath } from '../constants/portalPath'
 import { useAlert, useConfirm } from '../components/confirm/ConfirmProvider'
 import { ClientConsentSignModal } from '../components/work-order/ClientConsentSignModal'
@@ -26,8 +29,12 @@ import {
 import { PageHeader } from '../components/layout/PageHeader'
 import { useCashSessionOpen } from '../context/CashSessionOpenContext'
 import { useWorkOrderDetailMutations } from '../features/work-orders/hooks/useWorkOrderDetailMutations'
+import { fetchInventoryItemsForQuery } from '../features/inventory/services/inventoryCatalogApi'
+import { useWorkOrderDetailCache } from '../features/work-orders/hooks/useWorkOrderDetailCache'
+import type { WorkOrderPaymentRow } from '../features/work-orders/services/workOrdersListApi'
 import { panelUsesModernShell } from '../config/operationalNotes'
 import { usePanelTheme } from '../theme/PanelThemeProvider'
+import { queryKeys } from '../lib/queryKeys'
 import type { ParsedTransitLicenseFields } from '../utils/parseTransitLicenseOcr'
 import {
   API_MONEY_DECIMAL_REGEX,
@@ -40,6 +47,7 @@ import {
   printTicketFromApi,
   successMessageWithTicketAndPulse,
 } from '../services/cashDrawerBridge'
+import { cashIncomeCategoryOpensPhysicalDrawer } from '../services/cashIncomePhysicalDrawer'
 import { normalizeListResponse } from '../utils/normalizeListResponse'
 import {
   inventoryItemUsesQuarterGallonOtQuantity,
@@ -69,20 +77,6 @@ const WORK_ORDER_PART_LINE_MANAGER_SLUGS = new Set([
   'administrador',
   'dueno',
 ])
-
-type PaymentRow = {
-  id: string
-  amount: string
-  kind?: 'PARTIAL' | 'FULL_SETTLEMENT'
-  createdAt: string
-  note: string | null
-  recordedBy: { fullName: string }
-  cashMovement: {
-    category: { slug: string; name: string }
-    tenderAmount?: string | null
-    changeAmount?: string | null
-  }
-}
 
 type CashCat = { slug: string; name: string; direction: string }
 
@@ -282,7 +276,6 @@ function mergeWorkOrderPatchIntoState(
   setWo: Dispatch<SetStateAction<WorkOrderDetail | null>>,
   setWoStatus: (s: WorkOrderStatus) => void,
   setWoDesc: (s: string) => void,
-  setWoAuth: (s: string) => void,
 ) {
   setWo((prev) => {
     if (!prev) return prev
@@ -293,16 +286,10 @@ function mergeWorkOrderPatchIntoState(
       status: nextStatus,
       ...(patch.description !== undefined ? { description: patch.description } : {}),
       assignedTo: at ? { id: at.id, fullName: at.fullName, email: at.email } : null,
-      ...(patch.authorizedAmount !== undefined ? { authorizedAmount: patch.authorizedAmount } : {}),
     }
   })
   if (patch.status !== undefined) setWoStatus(patch.status)
   if (patch.description !== undefined) setWoDesc(patch.description)
-  if (patch.authorizedAmount !== undefined) {
-    setWoAuth(
-      patch.authorizedAmount != null ? normalizeMoneyDecimalStringForApi(String(patch.authorizedAmount)) : '',
-    )
-  }
 }
 
 type AssignableUserRow = { id: string; fullName: string; email: string }
@@ -330,7 +317,6 @@ export function WorkOrderDetailPage() {
   const confirm = useConfirm()
   const blockingAlert = useAlert()
   const [wo, setWo] = useState<WorkOrderDetail | null>(null)
-  const [items, setItems] = useState<InventoryItem[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -360,7 +346,7 @@ export function WorkOrderDetailPage() {
   const [partDiscount, setPartDiscount] = useState<string>('')
   const [showFiscalOptions, setShowFiscalOptions] = useState(false)
 
-  const [payments, setPayments] = useState<PaymentRow[]>([])
+  const [payments, setPayments] = useState<WorkOrderPaymentRow[]>([])
   const [payAmt, setPayAmt] = useState('')
   const [payTender, setPayTender] = useState('')
   const [payNote, setPayNote] = useState('')
@@ -381,7 +367,6 @@ export function WorkOrderDetailPage() {
   const { open: cashOpen, loadStatus: cashOpenLoadStatus, refresh: refreshCashOpen } = useCashSessionOpen()
 
   const [woDesc, setWoDesc] = useState('')
-  const [woAuth, setWoAuth] = useState('')
   const [woCustomerName, setWoCustomerName] = useState('')
   const [woCustomerEmail, setWoCustomerEmail] = useState('')
   const [woCustomerPhone, setWoCustomerPhone] = useState('')
@@ -401,6 +386,19 @@ export function WorkOrderDetailPage() {
   const [consentModal, setConsentModal] = useState<null | 'view' | 'sign'>(null)
 
   const cashierOnly = useMemo(() => isCashierWorkOrderSimplifiedView(user), [user])
+
+  const inventoryItemsQuery = useQuery({
+    queryKey: queryKeys.inventory.items(),
+    queryFn: ({ signal }) => fetchInventoryItemsForQuery(signal),
+    enabled: !cashierOnly && can('inventory_items:read'),
+    staleTime: STALE_INVENTORY_CATALOG_MS,
+    gcTime: 20 * 60_000,
+  })
+  const items = useMemo(() => {
+    const list = inventoryItemsQuery.data
+    if (!list) return []
+    return list.filter((i) => i.trackStock && i.isActive && inventoryItemHasAvailableStock(i))
+  }, [inventoryItemsQuery.data])
 
   const canManageWoPartLines = useMemo(() => {
     const slugs = user?.previewRole?.slug ? [user.previewRole.slug] : (user?.roleSlugs ?? [])
@@ -439,49 +437,54 @@ export function WorkOrderDetailPage() {
     [wo, blockingAlert],
   )
 
-  const load = useCallback(async () => {
-    if (!id) return
-    const canNow = canRef.current
-    setErr(null)
-    try {
-      const bust = `_=${Date.now()}`
-      const data = await api<WorkOrderDetail>(`/work-orders/${id}?${bust}`)
-      setWo(data)
-      setWoDesc(data.description)
-      setWoAuth(
-        data.authorizedAmount != null ? normalizeMoneyDecimalStringForApi(String(data.authorizedAmount)) : '',
-      )
-      setWoCustomerName((data.customerName ?? '').trim())
-      setWoCustomerEmail((data.customerEmail ?? '').trim())
-      setWoCustomerPhone((data.customerPhone ?? '').trim())
-      setWoVehiclePlate((data.vehiclePlate ?? '').trim())
-      setWoVehicleBrand((data.vehicleBrand ?? '').trim())
-      setWoVehicleModel((data.vehicleModel ?? '').trim())
-      setWoVehicleLine((data.vehicleLine ?? '').trim())
-      setWoVehicleCylinderCc((data.vehicleCylinderCc ?? '').trim())
-      setWoVehicleColor((data.vehicleColor ?? '').trim())
-      setWoIntakeKm(data.intakeOdometerKm != null ? String(data.intakeOdometerKm) : '')
-      setWoInspectionOnly(Boolean(data.inspectionOnly))
-      setWoStatus(data.status)
-      if (hideWorkOrderCashUi) {
-        setPayments([])
-      } else if (canNow('work_orders:read')) {
-        try {
-          setPayments(await api<PaymentRow[]>(`/work-orders/${id}/payments?${bust}`))
-        } catch {
-          setPayments([])
-        }
-      }
-    } catch (err) {
-      throw err
+  const canReadWoPayments = useMemo(() => can('work_orders:read'), [can])
+  const queryClient = useQueryClient()
+  const { detailQuery, paymentsQuery, refetchBundle } = useWorkOrderDetailCache(id, {
+    hideCashUi: hideWorkOrderCashUi,
+    canReadPayments: canReadWoPayments,
+  })
+  const load = refetchBundle
+
+  useLayoutEffect(() => {
+    const data = detailQuery.data
+    if (!data) return
+    setWo(data)
+    setWoDesc(data.description)
+    setWoCustomerName((data.customerName ?? '').trim())
+    setWoCustomerEmail((data.customerEmail ?? '').trim())
+    setWoCustomerPhone((data.customerPhone ?? '').trim())
+    setWoVehiclePlate((data.vehiclePlate ?? '').trim())
+    setWoVehicleBrand((data.vehicleBrand ?? '').trim())
+    setWoVehicleModel((data.vehicleModel ?? '').trim())
+    setWoVehicleLine((data.vehicleLine ?? '').trim())
+    setWoVehicleCylinderCc((data.vehicleCylinderCc ?? '').trim())
+    setWoVehicleColor((data.vehicleColor ?? '').trim())
+    setWoIntakeKm(data.intakeOdometerKm != null ? String(data.intakeOdometerKm) : '')
+    setWoInspectionOnly(Boolean(data.inspectionOnly))
+    setWoStatus(data.status)
+  }, [detailQuery.data])
+
+  useLayoutEffect(() => {
+    if (hideWorkOrderCashUi) {
+      setPayments([])
+      return
     }
-  }, [id, hideWorkOrderCashUi])
+    if (paymentsQuery.data) setPayments(paymentsQuery.data)
+  }, [hideWorkOrderCashUi, paymentsQuery.data])
+
+  useEffect(() => {
+    if (detailQuery.isError) {
+      const e = detailQuery.error
+      setErr(e instanceof Error ? e.message : 'No se pudo cargar la orden')
+    } else {
+      setErr(null)
+    }
+  }, [detailQuery.isError, detailQuery.error])
 
   /** Lista y subtotal desde endpoints dedicados (evita JSON del detalle de OT en caché tras mutar líneas). */
   const refreshLinesOnWorkOrder = useCallback(async () => {
     if (!id) return
-    const qs = `_=${Date.now()}`
-    const lines = await api<WorkOrderLine[]>(`/work-orders/${id}/lines?${qs}`)
+    const lines = await api<WorkOrderLine[]>(`/work-orders/${id}/lines`)
     const linesSubtotal = canRef.current('work_orders:view_financials') ||
       canRef.current('work_order_lines:set_unit_price') ||
       canRef.current('work_orders:record_payment')
@@ -495,44 +498,19 @@ export function WorkOrderDetailPage() {
         linesSubtotal,
       }
     })
-  }, [id])
+    queryClient.setQueryData<WorkOrderDetail>(queryKeys.workOrders.detail(id), (prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        lines,
+        linesSubtotal: linesSubtotal ?? prev.linesSubtotal,
+      }
+    })
+  }, [id, queryClient])
 
   useEffect(() => {
     setConsentModal(null)
   }, [id])
-
-  useEffect(() => {
-    if (!id) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        await load()
-      } catch {
-        if (!cancelled) setErr('No se pudo cargar la orden')
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [id, load])
-
-  useEffect(() => {
-    if (cashierOnly || !can('inventory_items:read')) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const list = await api<InventoryItem[]>('/inventory/items')
-        if (!cancelled) {
-          setItems(list.filter((i) => i.trackStock && i.isActive && inventoryItemHasAvailableStock(i)))
-        }
-      } catch {
-        /* opcional */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [can, cashierOnly])
 
   useEffect(() => {
     if (partItemId && !items.some((i) => i.id === partItemId)) {
@@ -589,11 +567,6 @@ export function WorkOrderDetailPage() {
   }, [can, hideWorkOrderCashUi])
 
   const closed = wo?.status === 'DELIVERED' || wo?.status === 'CANCELLED'
-  const hasLaborLine = (wo?.lines ?? []).some((l) => String(l.lineType).toUpperCase() === 'LABOR')
-
-  useEffect(() => {
-    if (hasLaborLine && addKind === 'LABOR') setAddKind('PART')
-  }, [hasLaborLine, addKind])
 
   const canMutateLines =
     wo &&
@@ -640,12 +613,8 @@ export function WorkOrderDetailPage() {
   /** Alineado con `saveWorkOrder`: si hay diferencias respecto al último `wo` cargado, el botón pide guardar con color de acción. */
   const workOrderFormDirty = useMemo(() => {
     if (!wo || !canPatchWo) return false
-    const prevAuth = wo.authorizedAmount != null ? String(wo.authorizedAmount) : ''
-    const prevAuthNorm = prevAuth ? normalizeMoneyDecimalStringForApi(prevAuth) : ''
-    const authNorm = normalizeMoneyDecimalStringForApi(woAuth)
     const descChanged = woDesc.trim() !== wo.description
     const statusChanged = woStatus !== wo.status
-    const authChanged = canViewWoFinancials && authNorm !== prevAuthNorm
     const prevCustomerName = (wo.customerName ?? '').trim()
     const newCustomerName = woCustomerName.trim()
     const nameChanged = newCustomerName !== prevCustomerName
@@ -688,7 +657,6 @@ export function WorkOrderDetailPage() {
     return (
       descChanged ||
       statusChanged ||
-      authChanged ||
       nameChanged ||
       emailChanged ||
       phoneChanged ||
@@ -707,7 +675,6 @@ export function WorkOrderDetailPage() {
     canViewWoFinancials,
     woDesc,
     woStatus,
-    woAuth,
     woCustomerName,
     woCustomerEmail,
     woCustomerPhone,
@@ -828,7 +795,7 @@ export function WorkOrderDetailPage() {
   async function addLine() {
     if (!id || !canMutateLines) return
     setMsg(null)
-    const lineKind: WorkOrderLineType = hasLaborLine ? 'PART' : addKind
+    const lineKind: WorkOrderLineType = addKind
     try {
       if (lineKind === 'PART') {
         if (partQtyIssue) {
@@ -916,7 +883,7 @@ export function WorkOrderDetailPage() {
     try {
       const updated = await patchWorkOrder.mutateAsync({ assignedToId: user.id })
       try {
-        mergeWorkOrderPatchIntoState(updated, setWo, setWoStatus, setWoDesc, setWoAuth)
+        mergeWorkOrderPatchIntoState(updated, setWo, setWoStatus, setWoDesc)
       } catch {
         /* respuesta distinta a la esperada; load() alinea con el servidor */
       }
@@ -942,7 +909,7 @@ export function WorkOrderDetailPage() {
     try {
       const updated = await patchWorkOrder.mutateAsync({ assignedToId: reassignUserId })
       try {
-        mergeWorkOrderPatchIntoState(updated, setWo, setWoStatus, setWoDesc, setWoAuth)
+        mergeWorkOrderPatchIntoState(updated, setWo, setWoStatus, setWoDesc)
       } catch {
         /* idem takeWorkOrder */
       }
@@ -967,22 +934,9 @@ export function WorkOrderDetailPage() {
     if (!id || !canPatchWo || !wo) return
     setMsg(null)
 
-    const prevAuth = wo.authorizedAmount != null ? String(wo.authorizedAmount) : ''
-    const prevAuthNorm = prevAuth ? normalizeMoneyDecimalStringForApi(prevAuth) : ''
-    const authNorm = normalizeMoneyDecimalStringForApi(woAuth)
-    if (authNorm && !API_MONEY_DECIMAL_REGEX.test(authNorm)) {
-      setMsg(
-        'Tope de cobros: solo pesos enteros; miles con punto (ej. 2.550.356).',
-      )
-      return
-    }
-    const newAuthNum = authNorm === '' ? null : Number(authNorm)
-    const totalPaid = Number(wo.paymentSummary.totalPaid ?? 0)
     const cancelNow = woStatus === 'CANCELLED' && wo.status !== 'CANCELLED'
     const descChanged = woDesc.trim() !== wo.description
     const statusChanged = woStatus !== wo.status
-    const authChanged = canViewWoFinancials && authNorm !== prevAuthNorm
-
     const prevCustomerName = (wo.customerName ?? '').trim()
     const newCustomerName = woCustomerName.trim()
     const nameChanged = newCustomerName !== prevCustomerName
@@ -1042,7 +996,6 @@ export function WorkOrderDetailPage() {
     if (
       !descChanged &&
       !statusChanged &&
-      !authChanged &&
       !nameChanged &&
       !emailChanged &&
       !phoneChanged &&
@@ -1070,11 +1023,6 @@ export function WorkOrderDetailPage() {
     ) {
       lines.push('· Se quita el técnico asignado y la orden vuelve a la cola «Sin asignar».')
     }
-    if (authChanged) {
-      lines.push(
-        `· Tope cobros: ${prevAuthNorm ? formatCopFromString(prevAuthNorm) : 'sin tope'} → ${authNorm ? formatCopFromString(authNorm) : 'sin tope'}`,
-      )
-    }
     if (nameChanged) lines.push(`· Cliente: ${prevCustomerName || '—'} → ${newCustomerName || '—'}`)
     if (emailChanged) lines.push(`· Correo: ${prevEmail || '—'} → ${newEmail || '—'}`)
     if (phoneChanged) lines.push(`· Teléfono: ${prevPhone || '—'} → ${newPhone || '—'}`)
@@ -1099,9 +1047,6 @@ export function WorkOrderDetailPage() {
     if (cancelNow) {
       lines.push('', '⚠ La orden pasará a CANCELADA. Revisá cobros y líneas antes de continuar.')
     }
-    if (newAuthNum != null && !Number.isNaN(newAuthNum) && totalPaid > newAuthNum) {
-      lines.push('', '⚠ El tope es menor que el total ya cobrado en esta OT; el servidor puede rechazar el guardado.')
-    }
     const okSave = await confirm({
       title: `Orden ${wo.publicCode}`,
       message: lines.join('\n'),
@@ -1114,7 +1059,6 @@ export function WorkOrderDetailPage() {
       await patchWorkOrderPlain.mutateAsync({
         description: woDesc.trim(),
         status: woStatus,
-        ...(canViewWoFinancials ? { authorizedAmount: authNorm === '' ? null : authNorm } : {}),
         customerName: newCustomerName === '' ? null : newCustomerName,
         customerEmail: newEmail === '' ? null : newEmail,
         customerPhone: newPhone === '' ? null : newPhone,
@@ -1251,8 +1195,6 @@ export function WorkOrderDetailPage() {
       return
     }
     const catName = incomeCats.find((c) => c.slug === payCat)?.name ?? payCat
-    const remain = wo.paymentSummary.remaining
-    const authLine = wo.authorizedAmount != null ? String(wo.authorizedAmount) : 'sin tope'
     const ten = tenNorm
     const aNum = Number(payAmtNorm)
     const tNum = Number(ten)
@@ -1300,14 +1242,6 @@ export function WorkOrderDetailPage() {
                 Ya cobrado en OT: <span className="font-mono font-medium">${wo.paymentSummary.totalPaid}</span>
               </p>
               <p>
-                Tope autorizado: <span className="font-mono font-medium">{authLine}</span>
-              </p>
-              {remain != null && (
-                <p>
-                  Saldo bajo tope: <span className="font-mono font-medium">${remain}</span>
-                </p>
-              )}
-              <p>
                 Saldo pendiente (cobro): <span className="font-mono font-medium">${wo.amountDue}</span>
               </p>
             </div>
@@ -1344,7 +1278,7 @@ export function WorkOrderDetailPage() {
     try {
       /**
        * Guardamos el pago en el API y capturamos su `id` para imprimir el ticket asociado.
-       * El ticket se manda al puente local con pulso al cajón en el mismo viaje.
+       * El puente puede abrir el cajón físico solo si la categoría es efectivo (`ingreso_cobro`).
        */
       const created = await recordPaymentMutation.mutateAsync({
         paymentKind: payKind,
@@ -1362,7 +1296,7 @@ export function WorkOrderDetailPage() {
       setMsg(
         await successMessageWithTicketAndPulse(ticketPath, 'Cobro registrado', {
           copies: payTwoCopies ? 2 : 1,
-          openDrawer: true,
+          openDrawer: cashIncomeCategoryOpensPhysicalDrawer(payCat),
         }),
       )
       setPayTwoCopies(false)
@@ -1396,7 +1330,7 @@ export function WorkOrderDetailPage() {
     setMsg(null)
     let lines: WorkOrderLine[]
     try {
-      lines = await deleteLine.mutateAsync(lineId)
+      lines = await deleteLine.mutateAsync({ lineId, touchesInventory: ln.lineType === 'PART' })
     } catch (e) {
       if (!(await showBlockingConflictModal(e))) {
         setMsg(e instanceof Error ? e.message : 'Error al eliminar')
@@ -1494,7 +1428,11 @@ export function WorkOrderDetailPage() {
       if (editLine.lineType === 'LABOR') body.description = editDesc.trim()
       // Solo emitimos taxRateId cuando cambió respecto al valor actual (evita escribir por nada).
       if ((editLine.taxRateId ?? null) !== taxRatePatch) body.taxRateId = taxRatePatch
-      await patchLine.mutateAsync({ lineId: editLine.id, body })
+      await patchLine.mutateAsync({
+        lineId: editLine.id,
+        body,
+        touchesInventory: editLine.lineType === 'PART',
+      })
       setEditLine(null)
       try {
         await refreshLinesOnWorkOrder()
@@ -1827,19 +1765,6 @@ export function WorkOrderDetailPage() {
                 ))}
               </select>
             </label>
-            {!hideWorkOrderCashUi && canViewWoFinancials && (
-              <label className="block text-sm">
-                <span className="va-label">Monto autorizado (tope)</span>
-                <input
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={formatMoneyInputDisplayFromNormalized(normalizeMoneyDecimalStringForApi(woAuth))}
-                  onChange={(e) => setWoAuth(normalizeMoneyDecimalStringForApi(e.target.value))}
-                  placeholder="Vacío = sin tope"
-                  className="va-field mt-1"
-                />
-              </label>
-            )}
             <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
               <h3 className="va-section-title text-sm">Cliente y vehículo (facturación)</h3>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-300">
@@ -2067,9 +1992,7 @@ export function WorkOrderDetailPage() {
             <p className="text-xs font-medium text-slate-500 dark:text-slate-300">Saldo pendiente</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-50">${wo.amountDue}</p>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
-              {wo.authorizedAmount != null
-                ? 'Según tope autorizado menos cobrado (si hay líneas, el tope manda).'
-                : 'Según total de líneas (con IVA/descuento si hubiera) menos cobrado.'}
+              Total de líneas (con IVA y descuentos si hubiera) menos lo ya cobrado.
             </p>
           </div>
         </div>
@@ -2740,30 +2663,14 @@ export function WorkOrderDetailPage() {
               type="button"
               role="tab"
               aria-selected={addKind === 'LABOR'}
-              disabled={hasLaborLine}
-              title={
-                hasLaborLine
-                  ? 'Ya hay una mano de obra en esta orden. Editá o quitá la línea en la tabla de arriba para agregar otra.'
-                  : undefined
-              }
-              onClick={() => {
-                if (hasLaborLine) return
-                setAddKind('LABOR')
-              }}
-              className={`va-tab ${addKind === 'LABOR' ? 'va-tab-active' : 'va-tab-inactive'} ${
-                hasLaborLine ? 'cursor-not-allowed opacity-50' : ''
-              }`}
+              onClick={() => setAddKind('LABOR')}
+              className={`va-tab ${addKind === 'LABOR' ? 'va-tab-active' : 'va-tab-inactive'}`}
             >
               Mano de obra
             </button>
           </div>
-          {hasLaborLine && (
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-300">
-              Solo una mano de obra por orden. Con la pestaña deshabilitada podés seguir agregando repuestos.
-            </p>
-          )}
 
-          {addKind === 'PART' || hasLaborLine ? (
+          {addKind === 'PART' ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <label className="block text-sm sm:col-span-2">
                 <span className="va-label">Ítem</span>
@@ -2874,7 +2781,7 @@ export function WorkOrderDetailPage() {
                     Se completan solo si los necesitás: como persona natural podés dejarlos vacíos (sin IVA ni descuento).
                   </p>
                   <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                    {addKind === 'LABOR' && !hasLaborLine && servicesCatalog.length > 0 ? (
+                    {addKind === 'LABOR' && servicesCatalog.length > 0 ? (
                       <label className="block text-sm sm:col-span-3">
                         <span className="va-label">Servicio del catálogo (opcional)</span>
                         <select
@@ -2908,9 +2815,9 @@ export function WorkOrderDetailPage() {
                       <label className="block text-sm">
                         <span className="va-label">Impuesto (opcional)</span>
                         <select
-                          value={addKind === 'PART' || hasLaborLine ? partTaxRateId : laborTaxRateId}
+                          value={addKind === 'PART' ? partTaxRateId : laborTaxRateId}
                           onChange={(e) =>
-                            addKind === 'PART' || hasLaborLine
+                            addKind === 'PART'
                               ? setPartTaxRateId(e.target.value)
                               : setLaborTaxRateId(e.target.value)
                           }
@@ -2932,12 +2839,12 @@ export function WorkOrderDetailPage() {
                         autoComplete="off"
                         value={formatMoneyInputDisplayFromNormalized(
                           normalizeMoneyDecimalStringForApi(
-                            addKind === 'PART' || hasLaborLine ? partDiscount : laborDiscount,
+                            addKind === 'PART' ? partDiscount : laborDiscount,
                           ),
                         )}
                         onChange={(e) => {
                           const next = normalizeMoneyDecimalStringForApi(e.target.value)
-                          if (addKind === 'PART' || hasLaborLine) setPartDiscount(next)
+                          if (addKind === 'PART') setPartDiscount(next)
                           else setLaborDiscount(next)
                         }}
                         className="va-field mt-1"
@@ -2954,9 +2861,9 @@ export function WorkOrderDetailPage() {
             type="button"
             onClick={() => void addLine()}
             disabled={
-              addKind === 'PART' || hasLaborLine
+              addKind === 'PART'
                 ? !partItemId || !!partQtyIssue
-                : laborDesc.trim().length < 3 && !laborServiceId
+                : !laborServiceId
             }
             className="va-btn-primary mt-6 px-5 disabled:opacity-50"
           >

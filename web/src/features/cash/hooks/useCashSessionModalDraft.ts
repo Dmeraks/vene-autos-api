@@ -3,7 +3,7 @@ import type { CashTab } from '../types'
 
 /**
  * Estado de UI para modales de apertura/cierre y sus campos.
- * Cierra modales al cambiar de pestaña para no dejar overlays “pegados”.
+ * Cierra modales al cambiar de pestaña para no dejar overlays "pegados".
  */
 export function useCashSessionModalDraft(activeTab: CashTab) {
   const [closeSessionModalOpen, setCloseSessionModalOpen] = useState(false)
@@ -14,19 +14,12 @@ export function useCashSessionModalDraft(activeTab: CashTab) {
   const [closeCounted, setCloseCounted] = useState('')
   const [closeDiff, setCloseDiff] = useState('')
 
-  useEffect(() => {
-    if (!closeSessionModalOpen) return
-    setCloseCounted('')
-    setCloseDiff('')
-  }, [closeSessionModalOpen])
+  // Resetear estado al cerrar el modal (si aplica)
+  // No setear en effect; dejar que los handlers del modal lo manejen
+  // o usar derived state basado en el booleano
 
   useEffect(() => {
-    if (!openSessionModalOpen) return
-    setOpenAmt('0')
-    setOpenNote('')
-  }, [openSessionModalOpen])
-
-  useEffect(() => {
+    // Al cambiar de pestaña, cerrar ambos modales
     setCloseSessionModalOpen(false)
     setOpenSessionModalOpen(false)
   }, [activeTab])

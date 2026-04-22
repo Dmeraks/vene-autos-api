@@ -8,6 +8,7 @@ import {
   CashMovementDirection,
   CashSessionStatus,
   Prisma,
+  WorkOrderLineType,
   WorkOrderStatus,
 } from '@prisma/client';
 import { NotesPolicyService } from '../../common/notes-policy/notes-policy.service';
@@ -22,6 +23,20 @@ const WO_ID = 'clwo0000000000000000000001';
 const USER_ID = 'clusr000000000000000000001';
 
 const LONG_NOTE = 'Nota operativa de cobro con suficiente texto. '.repeat(2);
+
+function laborLine(unitPrice: string) {
+  return {
+    id: `ln-${unitPrice}`,
+    lineType: WorkOrderLineType.LABOR,
+    quantity: new Prisma.Decimal(1),
+    unitPrice: new Prisma.Decimal(unitPrice),
+    discountAmount: null,
+    costSnapshot: null,
+    taxRateId: null,
+    taxRatePercentSnapshot: null,
+    taxRate: null,
+  };
+}
 
 const payActor = (sub: string): JwtUserPayload => ({
   sub,
@@ -44,9 +59,8 @@ describe('WorkOrderPaymentsService', () => {
       orderNumber: number;
       publicCode?: string;
       status: WorkOrderStatus;
-      authorizedAmount: Prisma.Decimal | null;
     } | null;
-    lines?: Array<{ quantity: Prisma.Decimal; unitPrice: Prisma.Decimal | null }>;
+    lines?: ReturnType<typeof laborLine>[];
     paidSum?: Prisma.Decimal | null;
     session?: { id: string } | null;
     category?: { id: string; slug: string; direction: CashMovementDirection } | null;
@@ -77,7 +91,7 @@ describe('WorkOrderPaymentsService', () => {
         update: jest.fn().mockResolvedValue({}),
       },
       workOrderLine: {
-        findMany: jest.fn().mockResolvedValue(setup.lines ?? []),
+        findMany: jest.fn().mockResolvedValue(setup.lines ?? [laborLine('500')]),
       },
       workOrderPayment: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: setup.paidSum ?? null } }),
@@ -164,7 +178,6 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.CANCELLED,
-            authorizedAmount: null,
           },
         }),
       ),
@@ -188,7 +201,6 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.UNASSIGNED,
-            authorizedAmount: null,
           },
         }),
       ),
@@ -212,7 +224,6 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.DELIVERED,
-            authorizedAmount: null,
           },
         }),
       ),
@@ -228,7 +239,7 @@ describe('WorkOrderPaymentsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('rechaza si supera authorizedAmount', async () => {
+  it('rechaza abono si el acumulado superaría el total de la orden', async () => {
     prisma.$transaction.mockImplementation(async (fn: (tx: ReturnType<typeof makeTx>) => Promise<unknown>) =>
       fn(
         makeTx({
@@ -236,8 +247,8 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: new Prisma.Decimal('100'),
           },
+          lines: [laborLine('100')],
           paidSum: new Prisma.Decimal('80'),
         }),
       ),
@@ -261,7 +272,6 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: new Prisma.Decimal('500'),
           },
           session: null,
         }),
@@ -286,7 +296,6 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: new Prisma.Decimal('500'),
           },
           category: null,
         }),
@@ -311,7 +320,6 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: new Prisma.Decimal('500'),
           },
           categoryDirection: CashMovementDirection.EXPENSE,
         }),
@@ -336,8 +344,8 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: new Prisma.Decimal('100'),
           },
+          lines: [laborLine('100')],
           paidSum: new Prisma.Decimal('80'),
         }),
       ),
@@ -361,8 +369,8 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 1,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: new Prisma.Decimal('100'),
           },
+          lines: [laborLine('100')],
           paidSum: new Prisma.Decimal('0'),
         }),
       ),
@@ -386,7 +394,6 @@ describe('WorkOrderPaymentsService', () => {
             id: WO_ID,
             orderNumber: 7,
             status: WorkOrderStatus.RECEIVED,
-            authorizedAmount: new Prisma.Decimal('500'),
           },
           paidSum: new Prisma.Decimal('100'),
         }),
@@ -417,8 +424,8 @@ describe('WorkOrderPaymentsService', () => {
           id: WO_ID,
           orderNumber: 7,
           status: WorkOrderStatus.READY,
-          authorizedAmount: new Prisma.Decimal('150'),
         },
+        lines: [laborLine('150')],
         paidSum: new Prisma.Decimal('50'),
       });
       return fn(txHolder.tx);

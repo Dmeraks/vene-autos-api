@@ -14,7 +14,6 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { IsPrismaCuid } from '../../../common/decorators/is-prisma-cuid.decorator';
-import { MONEY_DECIMAL_REGEX } from '../../cash/cash.constants';
 
 /**
  * Alta de orden: nace en UNASSIGNED sin técnico asignado.
@@ -105,11 +104,4 @@ export class CreateWorkOrderDto {
   @IsPrismaCuid()
   parentWorkOrderId?: string;
 
-  /** Tope opcional de cobros en caja para esta OT (sin tope si se omite). */
-  @IsOptional()
-  @IsString()
-  @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'Monto inválido: solo pesos enteros en dígitos, sin decimales (ej. "150000")',
-  })
-  authorizedAmount?: string;
 }

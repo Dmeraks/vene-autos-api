@@ -284,11 +284,10 @@ export class WorkOrdersController {
     if (!payment) {
       throw new InternalServerErrorException('El cobro no existe o no pertenece a esta orden.');
     }
-    const summary = await this.workOrderPayments.summary(id, actor);
     const paidSoFar = payments
       .filter((p) => new Date(p.createdAt as string).getTime() <= new Date(payment.createdAt as string).getTime())
       .reduce((acc, p) => acc + Number(p.amount.toString()), 0);
-    const grand = Number(summary.authorizedAmount ?? summary.linesSubtotal ?? 0);
+    const grand = Number(detail.totals?.grandTotal ?? 0);
     const dueAfter = Math.max(0, grand - paidSoFar);
     const d = detail as unknown as WorkOrderForReceipt;
     return this.ticketBuilder.buildWorkOrderPaymentTicket(
@@ -301,7 +300,7 @@ export class WorkOrdersController {
         vehiclePlate: d.vehiclePlate ?? null,
         vehicleBrand: d.vehicleBrand ?? null,
         vehicleModel: d.vehicleModel ?? null,
-        authorizedAmount: d.authorizedAmount ?? null,
+        authorizedAmount: null,
         lines: d.lines,
         totals: d.totals,
         totalPaidAfter: paidSoFar.toString(),

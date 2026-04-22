@@ -2,6 +2,10 @@
 /node_modules/
 /package-lock.json
 
+# Web (Vite): variables de entorno locales (VITE_API_BASE, etc.)
+web/.env
+web/.env.local
+
 # API (Nest + Prisma)
 api/node_modules/
 api/dist/

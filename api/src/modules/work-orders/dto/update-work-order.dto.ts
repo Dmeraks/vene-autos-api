@@ -7,7 +7,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  Matches,
   Max,
   MaxLength,
   Min,
@@ -15,7 +14,6 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { IsPrismaCuid } from '../../../common/decorators/is-prisma-cuid.decorator';
-import { MONEY_DECIMAL_REGEX } from '../../cash/cash.constants';
 
 const STATUSES = Object.values(WorkOrderStatus);
 
@@ -122,16 +120,6 @@ export class UpdateWorkOrderDto {
   @ValidateIf((_, v) => v != null)
   @IsPrismaCuid()
   vehicleId?: string | null;
-
-  /** Tope de cobros; `null` quita el tope. */
-  @IsOptional()
-  @Allow()
-  @ValidateIf((_, v) => v != null)
-  @IsString()
-  @Matches(MONEY_DECIMAL_REGEX, {
-    message: 'Monto inválido: solo pesos enteros en dígitos, sin decimales (ej. "150000")',
-  })
-  authorizedAmount?: string | null;
 
   /** Copia del texto de consentimiento mostrado al cliente (solo con `clientSignaturePngBase64`). */
   @IsOptional()

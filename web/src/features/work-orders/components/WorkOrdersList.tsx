@@ -52,7 +52,7 @@ const WoSelectCheckbox = memo(function WoSelectCheckbox({
 export const WorkOrdersList = memo(function WorkOrdersList({
   rows,
   listView,
-  canViewWoFinancials,
+  canViewWoFinancials: _canViewWoFinancials,
   selectedIds,
   toggleSelect,
   selectAll,
@@ -183,14 +183,6 @@ export const WorkOrdersList = memo(function WorkOrdersList({
                         <span className="rounded bg-slate-100 px-1 py-0 font-mono text-[11px] text-slate-800 dark:bg-slate-800 dark:text-slate-200">
                           {wo.vehiclePlate}
                         </span>
-                      </dd>
-                    </div>
-                  ) : null}
-                  {canViewWoFinancials && wo.authorizedAmount ? (
-                    <div className="sm:col-span-2">
-                      <dt className="text-slate-400 dark:text-slate-500">Tope de cobros en caja</dt>
-                      <dd className="font-mono font-medium text-slate-800 dark:text-slate-100">
-                        {wo.authorizedAmount}
                       </dd>
                     </div>
                   ) : null}
