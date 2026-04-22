@@ -55,12 +55,33 @@ model User {
   workshopPayablesCreated     WorkshopPayable[]       @relation("WorkshopPayableCreatedBy")
   workshopPayablePaymentsCreated WorkshopPayablePayment[] @relation("WorkshopPayablePaymentCreatedBy")
   quotesCreated                Quote[]                    @relation("QuoteCreatedBy")
+  /// Líneas de crédito / deuda interna donde este usuario es el deudor (solo ítems editables en UI).
+  employeeCreditLinesAsDebtor EmployeeCreditLine[] @relation("EmployeeCreditDebtor")
+  employeeCreditLinesCreated  EmployeeCreditLine[] @relation("EmployeeCreditCreatedBy")
   /// Cliente del taller enlazado para el rol portal (ver solo OT de vehículos de ese cliente).
   portalCustomerId String?   @map("portal_customer_id")
   portalCustomer   Customer? @relation("UserPortalCustomer", fields: [portalCustomerId], references: [id], onDelete: SetNull)
 
   @@index([portalCustomerId])
   @@map("users")
+}
+
+/// Cargo interno contra un empleado (consumo en tienda, préstamo, etc.). El total por persona se deriva de la suma de líneas activas (`voided_at` nulo).
+model EmployeeCreditLine {
+  id           String    @id @default(cuid())
+  debtorUserId String    @map("debtor_user_id")
+  description  String    @db.VarChar(500)
+  amount       Decimal   @db.Decimal(18, 2)
+  voidedAt     DateTime? @map("voided_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  createdById  String    @map("created_by_id")
+
+  debtorUser User @relation("EmployeeCreditDebtor", fields: [debtorUserId], references: [id], onDelete: Restrict)
+  createdBy  User @relation("EmployeeCreditCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([debtorUserId, voidedAt])
+  @@map("employee_credit_lines")
 }
 
 /// Cliente del taller (persona o empresa de contacto).
@@ -264,7 +285,7 @@ model WorkOrder {
   intakeOdometerKm Int?        @map("intake_odometer_km")
   /// Solo revisión / diagnóstico: el cargo al cliente debe figurar como línea de mano de obra (flujo de cobro habitual).
   inspectionOnly Boolean       @default(false) @map("inspection_only")
-  /// Tope opcional de cobros en caja para esta OT; si es null, no hay tope en sistema (solo montos válidos).
+  /// Legado: ya no se usa en lógica de negocio (saldo = total de líneas). Se limpia en cada PATCH de OT.
   authorizedAmount Decimal?    @map("authorized_amount") @db.Decimal(18, 2)
   /// Texto de consentimiento mostrado al firmar (copia para auditoría).
   clientConsentTextSnapshot String?   @map("client_consent_text_snapshot") @db.Text

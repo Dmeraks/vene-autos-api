@@ -26,6 +26,7 @@ import { SaleDetailPage } from './pages/SaleDetailPage'
 import { SalesPage } from './pages/SalesPage'
 import { InvoiceDetailPage } from './pages/InvoiceDetailPage'
 import WorkshopFinancePage from './pages/WorkshopFinancePage'
+import { EmployeeCreditPage } from './pages/EmployeeCreditPage'
 
 /** Rutas con tablas grandes o bloques tipo gráficos: fuera del bundle inicial. */
 const AuditPage = lazy(() => import('./pages/admin/AuditPage').then((m) => ({ default: m.AuditPage })))
@@ -124,6 +125,7 @@ export default function App() {
             }
           />
           <Route path="admin/finanzas-taller" element={<WorkshopFinancePage />} />
+          <Route path="admin/credito-empleados" element={<EmployeeCreditPage />} />
           <Route path="admin/usuarios" element={<UsersPage />} />
           <Route path="admin/roles" element={<RolesPage />} />
           <Route path="admin/roles/:id" element={<RoleDetailPage />} />

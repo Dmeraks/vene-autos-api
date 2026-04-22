@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Droplet,
   FileText,
+  CircleDollarSign,
   HandCoins,
   Inbox,
   LayoutDashboard,
@@ -38,6 +39,8 @@ import { portalPath } from '../constants/portalPath'
 import { setStoredLastModulePath } from '../services/lastModuleStorage'
 import { ThemeToggle } from './ThemeToggle'
 import { prefetchCashShellQueries } from '../features/cash/cashPrefetch'
+import { prefetchInventoryCatalog } from '../features/inventory/prefetch/inventoryNavPrefetch'
+import { prefetchSettingsAdminPanel } from '../features/settings/prefetchSettingsNav'
 import { prefetchDefaultWorkOrdersList } from '../features/work-orders/prefetch/workOrdersNavPrefetch'
 import { WorkOrderStatusAlertsBell } from '../features/work-orders'
 import { useTheme } from '../theme/ThemeContext'
@@ -153,6 +156,7 @@ const TASK_MODES: TaskMode[] = [
       portalPath('/admin/impuestos'),
       portalPath('/admin/nomina'),
       portalPath('/admin/finanzas-taller'),
+      portalPath('/admin/credito-empleados'),
       portalPath('/admin/auditoria'),
       portalPath('/admin/configuracion'),
     ],
@@ -209,8 +213,19 @@ function AppShellInner() {
     (to: string) => {
       if (to === portalPath('/caja')) prefetchCashShellQueries(queryClient)
       else if (to === portalPath('/ordenes')) prefetchDefaultWorkOrdersList(queryClient)
+      else if (
+        to === portalPath('/inventario') ||
+        to === portalPath('/recepcion') ||
+        to === portalPath('/aceite')
+      ) {
+        prefetchInventoryCatalog(queryClient)
+      } else if (to === portalPath('/admin/configuracion') && can('settings:read')) {
+        prefetchSettingsAdminPanel(queryClient, {
+          prefetchUsersList: can('users:reset_password'),
+        })
+      }
     },
-    [queryClient],
+    [can, queryClient],
   )
   const taskMode = useMemo(() => resolveTaskMode(location.pathname), [location.pathname])
   const [panelSearch, setPanelSearch] = useState('')
@@ -350,6 +365,12 @@ function AppShellInner() {
         label: 'Finanzas taller',
         Icon: PiggyBank,
         show: can('workshop_finance:read'),
+      },
+      {
+        to: portalPath('/admin/credito-empleados'),
+        label: 'Crédito empleados',
+        Icon: CircleDollarSign,
+        show: can('employee_credits:read'),
       },
       { to: portalPath('/informes'), label: 'Informes', Icon: BarChart3, show: can('reports:read') },
       { to: portalPath('/admin/servicios'), label: 'Servicios', Icon: Wrench, show: can('services:read') },

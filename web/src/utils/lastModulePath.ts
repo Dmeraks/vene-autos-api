@@ -15,6 +15,7 @@ const MODULE_PREFIXES: Array<{ prefix: string; modulePath: string }> = [
   { prefix: '/admin/roles', modulePath: '/admin/roles' },
   { prefix: '/admin/nomina', modulePath: '/admin/nomina' },
   { prefix: '/admin/finanzas-taller', modulePath: '/admin/finanzas-taller' },
+  { prefix: '/admin/credito-empleados', modulePath: '/admin/credito-empleados' },
   { prefix: '/admin/servicios', modulePath: '/admin/servicios' },
   { prefix: '/admin/impuestos', modulePath: '/admin/impuestos' },
   { prefix: '/admin/resoluciones-fiscales', modulePath: '/admin/resoluciones-fiscales' },

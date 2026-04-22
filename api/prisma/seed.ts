@@ -415,6 +415,16 @@ const PERMISSIONS: Array<{ resource: string; action: string; description: string
     action: 'delete',
     description: 'Eliminar líneas de cotización',
   },
+  {
+    resource: 'employee_credits',
+    action: 'read',
+    description: 'Ver resumen y líneas de crédito / cargos internos de empleados',
+  },
+  {
+    resource: 'employee_credits',
+    action: 'manage',
+    description: 'Crear, editar y anular líneas de crédito de empleados',
+  },
 ];
 
 /**
@@ -523,6 +533,8 @@ const BACKEND_REQUIRED_PERMISSION_CODES: readonly string[] = [
   'quote_lines:create',
   'quote_lines:update',
   'quote_lines:delete',
+  'employee_credits:read',
+  'employee_credits:manage',
 ];
 
 const CASH_CATEGORIES: Array<{
@@ -745,6 +757,8 @@ async function main() {
     // Finanzas taller: reservas teóricas al cierre + deudas (misma línea operativa que caja/nómina).
     'workshop_finance:read',
     'workshop_finance:manage',
+    'employee_credits:read',
+    'employee_credits:manage',
     'quotes:create',
     'quotes:read',
     'quotes:read_all',

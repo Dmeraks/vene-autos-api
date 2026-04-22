@@ -10,6 +10,7 @@ export const MODULE_PRIORITY: Record<string, number> = {
   [portalPath('/aceite')]: 85,
   [portalPath('/clientes')]: 70,
   [portalPath('/informes')]: 60,
+  [portalPath('/admin/credito-empleados')]: 58,
   [portalPath('/admin/usuarios')]: 45,
   [portalPath('/admin/roles')]: 40,
   [portalPath('/admin/auditoria')]: 35,

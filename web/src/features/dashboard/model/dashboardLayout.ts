@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  CircleDollarSign,
   ClipboardList,
   Droplet,
   Inbox,
@@ -95,6 +96,14 @@ export function createDashboardSections(can: CanFn, cashSessionOpen: boolean | n
           description: 'Métricas de actividad, ingresos y desempeño operativo.',
           icon: BarChart3,
           show: can('reports:read'),
+          enabled: true,
+        },
+        {
+          to: portalPath('/admin/credito-empleados'),
+          title: 'Crédito empleados',
+          description: 'Cargos internos por persona; solo se editan líneas, no el nombre del usuario.',
+          icon: CircleDollarSign,
+          show: can('employee_credits:read'),
           enabled: true,
         },
       ],
