@@ -7,3 +7,15 @@ export const STALE_OPERATIONAL_MS = 30_000
 
 /** Catálogos y datos que cambian pocas veces al día. */
 export const STALE_SEMI_STATIC_MS = 60_000
+
+/** Listado GET /work-orders: al volver desde el detalle se reutiliza la grilla sin refetch inmediato. */
+export const STALE_WORK_ORDERS_LIST_MS = 120_000
+
+/** GET /work-orders/:id y cobros: prefetch + reentrada a la misma OT sin pegarle al servidor al instante. */
+export const STALE_WORK_ORDER_DETAIL_MS = 180_000
+
+/** GET /inventory/items (y derivados del catálogo): al volver entre rutas del panel se reutiliza la lista. */
+export const STALE_INVENTORY_CATALOG_MS = 120_000
+
+/** GET /settings y GET /users en Configuración: sección poco frecuente; reutilizar datos varios minutos. */
+export const STALE_SETTINGS_ADMIN_MS = 10 * 60_000
