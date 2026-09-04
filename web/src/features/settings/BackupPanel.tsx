@@ -110,7 +110,7 @@ export function BackupPanel({ canWrite }: BackupPanelProps) {
   const downloadBackup = useCallback(async (filename: string) => {
     try {
       setMsg(null)
-      const res = await fetch(`${apiBaseUrl()}/api/v1/backup/download/${filename}`, {
+      const res = await fetch(`${apiBaseUrl()}/backup/download/${filename}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('vene_access_token') ?? ''}`,
         },
@@ -160,7 +160,7 @@ export function BackupPanel({ canWrite }: BackupPanelProps) {
       formData.append('type', restoreType)
 
       const token = localStorage.getItem('vene_access_token') ?? ''
-      const res = await fetch(`${apiBaseUrl()}/api/v1/backup/restore`, {
+      const res = await fetch(`${apiBaseUrl()}/backup/restore`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
