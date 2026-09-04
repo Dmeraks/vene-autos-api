@@ -14,10 +14,31 @@ import * as crypto from 'crypto';
 
 const execAsync = promisify(execCb);
 
-const PG_DUMP_PATH = 'C:\\Program Files\\PostgreSQL\\16\\bin\\pg_dump.exe';
-const PG_RESTORE_PATH = 'C:\\Program Files\\PostgreSQL\\16\\bin\\pg_restore.exe';
-const PSQL_PATH = 'C:\\Program Files\\PostgreSQL\\16\\bin\\psql.exe';
 const MAX_BACKUP_AGE_MS = 24 * 60 * 60 * 1000; // 24 horas
+
+/**
+ * Resuelve la ruta de una herramienta PostgreSQL (pg_dump/pg_restore/psql).
+ * Prioridad: variable de entorno → rutas Windows conocidas → PATH del sistema.
+ */
+function resolveToolPath(envVar: string, exeName: string): string {
+  const fromEnv = process.env[envVar];
+  if (fromEnv) return fromEnv;
+
+  if (process.platform === 'win32') {
+    const candidates = [16, 15, 14, 13].map(
+      (v) => `C:\\Program Files\\PostgreSQL\\${v}\\bin\\${exeName}.exe`,
+    );
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p;
+    }
+  }
+
+  return exeName;
+}
+
+const PG_DUMP_PATH = resolveToolPath('PG_DUMP_PATH', 'pg_dump');
+const PG_RESTORE_PATH = resolveToolPath('PG_RESTORE_PATH', 'pg_restore');
+const PSQL_PATH = resolveToolPath('PSQL_PATH', 'psql');
 
 export type BackupType = 'local' | 'production';
 

@@ -20,13 +20,14 @@ import {
   BadRequestException,
   NotFoundException,
   StreamableFile,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
-import { BackupService, BackupType } from './backup.service';
+import { BackupService, BackupType, BackupResult } from './backup.service';
 
 interface MulterFile {
   fieldname: string;
@@ -42,6 +43,7 @@ interface MulterFile {
 
 @Controller('backup')
 export class BackupController {
+  private readonly logger = new Logger(BackupController.name);
   constructor(private readonly backupService: BackupService) {}
 
   /**
@@ -57,7 +59,14 @@ export class BackupController {
       throw new BadRequestException('Tipo debe ser "local" o "production"');
     }
 
-    const result = await this.backupService.createBackup(type);
+    let result: BackupResult;
+    try {
+      result = await this.backupService.createBackup(type);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Backup ${type} falló: ${message}`);
+      throw new BadRequestException(`No se pudo crear el backup: ${message}`);
+    }
 
     return {
       success: true,
