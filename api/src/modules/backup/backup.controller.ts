@@ -28,6 +28,18 @@ import * as path from 'path';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { BackupService, BackupType } from './backup.service';
 
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  destination: string;
+  filename: string;
+  path: string;
+  buffer: Buffer;
+}
+
 @Controller('backup')
 export class BackupController {
   constructor(private readonly backupService: BackupService) {}
@@ -128,7 +140,7 @@ export class BackupController {
   )
   @RequirePermissions('settings:write')
   async restoreBackup(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: MulterFile,
     @Body() body: { type?: BackupType },
   ) {
     if (!file) {
@@ -187,7 +199,7 @@ export class BackupController {
     }),
   )
   @RequirePermissions('settings:read')
-  async validateBackup(@UploadedFile() file: Express.Multer.File) {
+  async validateBackup(@UploadedFile() file: MulterFile) {
     if (!file) {
       throw new BadRequestException('No se proporcionó un archivo');
     }
