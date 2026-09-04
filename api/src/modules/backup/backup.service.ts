@@ -160,7 +160,7 @@ export class BackupService {
       '--no-owner',
       '--no-privileges',
       '--verbose',
-      `"${filepath}"`,
+      `--file="${filepath}"`,
     ].join(' ');
 
     try {
