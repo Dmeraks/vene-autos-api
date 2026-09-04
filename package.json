@@ -1,0 +1,32 @@
+{
+  "name": "vene-autos",
+  "private": true,
+  "description": "Raíz del repo: Prisma y Nest viven en la carpeta api/. No ejecutes npx prisma aquí sin --schema.",
+  "scripts": {
+    "db:up": "cd api && docker compose up -d",
+    "db:migrate": "cd api && npx prisma migrate deploy",
+    "db:seed": "cd api && npx prisma db seed",
+    "db:studio": "cd api && npx prisma studio",
+    "db:generate": "cd api && npx prisma generate",
+    "api:install": "cd api && npm install",
+    "api:dev": "cd api && npm run start:dev",
+    "api:compile": "cd api && npm run compile",
+    "api:build": "cd api && npm run build",
+    "api:test": "cd api && npm test",
+    "api:test:integration": "cd api && npm run test:integration",
+    "api:lint": "cd api && npm run lint",
+    "web:install": "cd web && npm install",
+    "web:dev": "cd web && npm run dev",
+    "web:build": "cd web && npm run build",
+    "build": "npm run api:compile && npm run web:build",
+    "build:full": "npm run api:build && npm run web:build",
+    "backfill:legacy-vehicles": "cd api && npm run backfill:legacy-vehicles",
+    "db:backup": "cd api && npm run db:backup:local",
+    "db:backup:prod": "cd api && npm run db:backup:production",
+    "db:restore": "cd api && npm run db:restore",
+    "docs:deploy-pdf": "node scripts/generate-deploy-pdf.cjs"
+  },
+  "devDependencies": {
+    "pdfkit": "^0.16.0"
+  }
+}

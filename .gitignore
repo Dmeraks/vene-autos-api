@@ -1,0 +1,27 @@
+# Raíz (solo scripts; evitá `npm install` aquí salvo que agregues dependencias)
+/node_modules/
+/package-lock.json
+
+# Web (Vite): variables de entorno locales (VITE_API_BASE, etc.)
+web/.env
+web/.env.local
+
+# API (Nest + Prisma)
+api/node_modules/
+api/dist/
+api/.env
+api/.env.local
+api/coverage/
+api/*.log
+
+# Copias ZIP generadas por backup-vene-autos.bat
+/backups/
+
+# Editor / SO
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
+
+# Credenciales pegadas por error en la raíz (no versionar)
+dmeraksauriojagalosaurio6963.txt

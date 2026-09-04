@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vene-autos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vene
+      POSTGRES_PASSWORD: vene
+      POSTGRES_DB: vene_autos
+    ports:
+      - '5432:5432'
+    volumes:
+      - vene_autos_pgdata:/var/lib/postgresql/data
+
+volumes:
+  vene_autos_pgdata:
