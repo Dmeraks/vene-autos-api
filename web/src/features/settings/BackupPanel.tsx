@@ -235,7 +235,7 @@ export function BackupPanel({ canWrite }: BackupPanelProps) {
           </p>
         </div>
         <span className="inline-flex shrink-0 items-center rounded-lg border border-brand-200 bg-brand-100 px-2.5 py-1 text-xs font-medium text-brand-900 dark:border-brand-500 dark:bg-brand-900 dark:text-brand-50 dark:shadow-sm">
-          Permiso: settings:write
+          Permiso: settings:update
         </span>
       </div>
 

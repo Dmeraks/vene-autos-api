@@ -49,7 +49,7 @@ export class BackupController {
    * POST /api/v1/backup/create
    */
   @Post('create')
-  @RequirePermissions('settings:write')
+  @RequirePermissions('settings:update')
   async createBackup(@Body() body: { type?: BackupType }) {
     const type = body.type || 'local';
 
@@ -138,7 +138,7 @@ export class BackupController {
       dest: path.resolve(process.cwd(), 'backups', 'tmp'),
     }),
   )
-  @RequirePermissions('settings:write')
+  @RequirePermissions('settings:update')
   async restoreBackup(
     @UploadedFile() file: MulterFile,
     @Body() body: { type?: BackupType },
