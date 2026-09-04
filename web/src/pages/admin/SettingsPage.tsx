@@ -462,6 +462,8 @@ export function SettingsPage() {
   )
 
   const showSupportTab = canResetPasswords
+  const canReadSettings = can('settings:read')
+  const showBackupTab = canReadSettings || canSaveSettings
   const pageClass = isSaas ? 'space-y-4 lg:space-y-5' : 'space-y-3 sm:space-y-4'
   const sectionCardClass = isSaas
     ? 'scroll-mt-4 va-settings-section overflow-hidden'
@@ -488,7 +490,7 @@ export function SettingsPage() {
         }
       />
 
-      {showSupportTab && (
+      {(showSupportTab || showBackupTab) && (
         <div
           className={`va-tabstrip max-w-xl ${isSaas ? 'va-tabstrip--inline va-tabstrip--compact' : ''}`}
           role="tablist"
@@ -503,24 +505,28 @@ export function SettingsPage() {
           >
             Parámetros del taller
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={panel === 'support'}
-            className={`va-tab ${panel === 'support' ? 'va-tab-active' : 'va-tab-inactive'}`}
-            onClick={() => setPanel('support')}
-          >
-            Soporte — contraseñas
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={panel === 'backup'}
-            className={`va-tab ${panel === 'backup' ? 'va-tab-active' : 'va-tab-inactive'}`}
-            onClick={() => setPanel('backup')}
-          >
-            Backup & Restore
-          </button>
+          {showSupportTab && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panel === 'support'}
+              className={`va-tab ${panel === 'support' ? 'va-tab-active' : 'va-tab-inactive'}`}
+              onClick={() => setPanel('support')}
+            >
+              Soporte — contraseñas
+            </button>
+          )}
+          {showBackupTab && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panel === 'backup'}
+              className={`va-tab ${panel === 'backup' ? 'va-tab-active' : 'va-tab-inactive'}`}
+              onClick={() => setPanel('backup')}
+            >
+              Backup & Restore
+            </button>
+          )}
         </div>
       )}
 
@@ -822,7 +828,7 @@ export function SettingsPage() {
         </section>
       )}
 
-      {showSupportTab && panel === 'backup' && (
+      {showBackupTab && panel === 'backup' && (
         <section className={supportCardClass}>
           <BackupPanel canWrite={canSaveSettings} />
         </section>
